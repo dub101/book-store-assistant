@@ -1,0 +1,24 @@
+from book_store_assistant.sources.models import SourceBookRecord
+
+
+def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | None:
+    items = payload.get("items") or []
+    if not items:
+        return None
+
+    volume_info = items[0].get("volumeInfo", {})
+
+    authors = volume_info.get("authors") or []
+    image_links = volume_info.get("imageLinks") or {}
+
+    return SourceBookRecord(
+        source_name="google_books",
+        isbn=isbn,
+        title=volume_info.get("title"),
+        subtitle=volume_info.get("subtitle"),
+        author=", ".join(authors) if authors else None,
+        editorial=volume_info.get("publisher"),
+        synopsis=volume_info.get("description"),
+        cover_url=image_links.get("thumbnail"),
+        language=volume_info.get("language"),
+    )
