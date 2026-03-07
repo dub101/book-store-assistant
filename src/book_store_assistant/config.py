@@ -6,3 +6,5 @@ from pydantic import BaseModel
 class AppConfig(BaseModel):
     input_dir: Path = Path("data/input")
     output_dir: Path = Path("data/output")
+    google_books_api_base_url: str = "https://www.googleapis.com/books/v1/volumes"
+    request_timeout_seconds: float = 10.0
