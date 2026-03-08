@@ -20,3 +20,4 @@ def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
     assert "Invalid rows: 1" in result.stdout
     assert "Fetched records: 0" in result.stdout
     assert "Resolved records: 0" in result.stdout
+    assert "Unresolved records: 0" in result.stdout
