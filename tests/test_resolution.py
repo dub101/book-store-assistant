@@ -2,7 +2,7 @@ from book_store_assistant.resolution.books import resolve_book_record
 from book_store_assistant.sources.models import SourceBookRecord
 
 
-def test_resolve_book_record_returns_none_when_required_fields_are_missing() -> None:
+def test_resolve_book_record_returns_errors_when_required_fields_are_missing() -> None:
     source_record = SourceBookRecord(
         source_name="google_books",
         isbn="9780306406157",
@@ -11,7 +11,11 @@ def test_resolve_book_record_returns_none_when_required_fields_are_missing() -> 
         editorial="Example Editorial",
     )
 
-    assert resolve_book_record(source_record) is None
+    result = resolve_book_record(source_record)
+
+    assert result.record is None
+    assert "Synopsis is missing." in result.errors
+    assert "Subject is missing." in result.errors
 
 
 def test_resolve_book_record_builds_book_record_when_required_fields_exist() -> None:
@@ -25,8 +29,9 @@ def test_resolve_book_record_builds_book_record_when_required_fields_exist() -> 
         subject="Narrativa",
     )
 
-    record = resolve_book_record(source_record)
+    result = resolve_book_record(source_record)
 
-    assert record is not None
-    assert record.title == "Example Title"
-    assert record.subject == "Narrativa"
+    assert result.record is not None
+    assert result.record.title == "Example Title"
+    assert result.record.subject == "Narrativa"
+    assert result.errors == []
