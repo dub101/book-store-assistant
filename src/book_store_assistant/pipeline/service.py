@@ -3,15 +3,16 @@ from pathlib import Path
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
 from book_store_assistant.resolution.service import resolve_all
+from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.google_books import GoogleBooksSource
 from book_store_assistant.sources.service import fetch_all
 
 
-def process_isbn_file(input_path: Path) -> ProcessResult:
+def process_isbn_file(input_path: Path, source: MetadataSource | None = None) -> ProcessResult:
     """Read ISBNs, fetch metadata, and resolve source records."""
     input_result = read_isbn_inputs(input_path)
-    source = GoogleBooksSource()
-    fetch_results = fetch_all(source, input_result.valid_inputs)
+    active_source = source or GoogleBooksSource()
+    fetch_results = fetch_all(active_source, input_result.valid_inputs)
     resolution_results = resolve_all(fetch_results)
 
     return ProcessResult(
