@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import httpx
+
 from book_store_assistant.config import AppConfig
 from book_store_assistant.sources.google_books import GoogleBooksSource
 
@@ -35,8 +37,21 @@ def test_google_books_source_fetches_and_parses_response(mock_get: Mock) -> None
 
     source = GoogleBooksSource()
 
-    record = source.fetch("9780306406157")
+    result = source.fetch("9780306406157")
 
-    assert record is not None
-    assert record.title == "Example Title"
+    assert result.record is not None
+    assert result.record.title == "Example Title"
+    assert result.errors == []
     mock_get.assert_called_once()
+
+
+@patch("book_store_assistant.sources.google_books.httpx.get")
+def test_google_books_source_returns_error_on_http_failure(mock_get: Mock) -> None:
+    mock_get.side_effect = httpx.HTTPError("boom")
+
+    source = GoogleBooksSource()
+
+    result = source.fetch("9780306406157")
+
+    assert result.record is None
+    assert result.errors == ["boom"]
