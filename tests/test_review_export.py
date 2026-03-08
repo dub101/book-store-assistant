@@ -15,12 +15,13 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
         source_name="google_books",
         isbn="9780306406157",
         title="Example Title",
+        language="en",
     )
     results = [
         ResolutionResult(
             record=None,
             source_record=source_record,
-            errors=["Synopsis is missing.", "Subject is missing."],
+            errors=["Synopsis is missing.", "Synopsis is not in Spanish and requires review."],
         ),
         ResolutionResult(
             record=BookRecord(
@@ -42,7 +43,9 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     sheet = workbook.active
 
     assert sheet.cell(row=1, column=1).value == "ISBN"
-    assert sheet.cell(row=1, column=4).value == "Errors"
+    assert sheet.cell(row=1, column=4).value == "Language"
+    assert sheet.cell(row=1, column=5).value == "Errors"
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert "Synopsis is missing." in sheet.cell(row=2, column=4).value
+    assert sheet.cell(row=2, column=4).value == "en"
+    assert "Synopsis is missing." in sheet.cell(row=2, column=5).value
     assert sheet.max_row == 2
