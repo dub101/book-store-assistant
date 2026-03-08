@@ -1,6 +1,6 @@
 # Book Store Assistant
 
-Python tool to transform a CSV of ISBNs into a Geslib-ready Excel file with completed book metadata.
+Python tool to transform a CSV of ISBNs into Geslib-ready Excel files with completed book metadata and a separate review file for unresolved rows.
 
 ## Current Status
 
@@ -9,19 +9,25 @@ Implemented:
 - CLI entry point
 - ISBN normalization and validation
 - CSV ingestion for ISBN files
-- Structured pipeline input result model
+- Structured pipeline result models
 - Google Books source integration and payload parser
-- Initial source and resolution models
-- Basic validation layer
-- Initial test suite
+- Batch fetch and batch resolution services
+- Subject loading from a reference file
+- Subject selection and subject resolution from source categories
+- Synopsis presence and formatting rules
+- Excel export for resolved records
+- Excel export for unresolved review rows
+- CLI support for export and review export
+- Test suite with coverage reporting
 
 Pending:
-- Real end-to-end metadata pipeline
+- Real subject catalog from the bookstore
+- Better subject matching beyond exact comparisons
+- Proper bilingual synopsis generation/translation
 - Multi-source retrieval strategy
-- Subject classification from the bookstore's internal list
-- Synopsis generation/translation rules
-- Excel export implementation
-- Review/reporting flow for incomplete or low-confidence rows
+- Confidence scoring and source precedence
+- Exact Geslib import template validation
+- Better CLI workflow and example input/output files
 
 ## Version 1 Scope
 
@@ -30,6 +36,7 @@ Input:
 
 Output:
 - Excel file ready for Geslib import
+- Excel review file for unresolved rows
 
 Target columns:
 - ISBN
@@ -58,23 +65,28 @@ Create the virtual environment:
 python -m venv .venv
 ```
 
-Install dependencies:
+Install dependencies
 ```bash
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Run tests:
+Run tests
 ```bash
 .venv/bin/pytest
 ```
+
 ## Current CLI
-The current CLI validates ISBN rows from a CSV file and reports valid and invalid counts.
+
+The current CLI reads ISBNs from a CSV file, fetches metadata, resolves valid records, and can export both resolved and unresolved rows.
+
 Example:
 ```bash
-.venv/bin/book-store-assistant data/input/isbns.csv
+.venv/bin/book-store-assistant data/input/isbns.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
+
 ## Project Structure
 - src/book_store_assistant/ application code
 - tests/ automated tests
 - data/input/ input CSV files
 - data/output/ generated output files
+- data/reference/subjects.txt internal subject catalog
