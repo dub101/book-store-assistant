@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class SourceBookRecord(BaseModel):
@@ -10,5 +10,6 @@ class SourceBookRecord(BaseModel):
     editorial: str | None = None
     synopsis: str | None = None
     subject: str | None = None
+    categories: list[str] = Field(default_factory=list)
     cover_url: HttpUrl | None = None
     language: str | None = None

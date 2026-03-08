@@ -10,6 +10,7 @@ def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | N
 
     authors = volume_info.get("authors") or []
     image_links = volume_info.get("imageLinks") or {}
+    categories = volume_info.get("categories") or []
 
     return SourceBookRecord(
         source_name="google_books",
@@ -19,6 +20,7 @@ def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | N
         author=", ".join(authors) if authors else None,
         editorial=volume_info.get("publisher"),
         synopsis=volume_info.get("description"),
+        categories=categories,
         cover_url=image_links.get("thumbnail"),
         language=volume_info.get("language"),
     )
