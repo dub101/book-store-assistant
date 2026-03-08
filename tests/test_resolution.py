@@ -35,6 +35,7 @@ def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_p
         editorial="Example Editorial",
         synopsis="Resumen del libro.",
         subject="Narrativa",
+        language="es",
     )
 
     result = resolve_book_record(source_record, subjects_path=subject_file)
@@ -42,6 +43,7 @@ def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_p
     assert result.record is not None
     assert result.record.title == "Example Title"
     assert result.record.subject == "Narrativa"
+    assert result.record.synopsis == "Resumen del libro."
     assert result.errors == []
 
 
@@ -56,6 +58,7 @@ def test_resolve_book_record_uses_matching_category_as_subject(tmp_path: Path) -
         author="Example Author",
         editorial="Example Editorial",
         synopsis="Resumen del libro.",
+        language="es",
         categories=["Poetry", "Historia"],
     )
 
