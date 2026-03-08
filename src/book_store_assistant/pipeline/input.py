@@ -3,9 +3,10 @@ from pathlib import Path
 
 from book_store_assistant.isbn import is_valid_isbn, normalize_isbn
 from book_store_assistant.pipeline.contracts import ISBNInput
+from book_store_assistant.pipeline.results import InputReadResult
 
 
-def read_isbn_inputs(input_path: Path) -> tuple[list[ISBNInput], list[str]]:
+def read_isbn_inputs(input_path: Path) -> InputReadResult:
     """Read ISBN values from a CSV file and split valid rows from invalid ones."""
     valid_inputs: list[ISBNInput] = []
     invalid_values: list[str] = []
@@ -22,4 +23,4 @@ def read_isbn_inputs(input_path: Path) -> tuple[list[ISBNInput], list[str]]:
             else:
                 invalid_values.append(row[0])
 
-    return valid_inputs, invalid_values
+    return InputReadResult(valid_inputs=valid_inputs, invalid_values=invalid_values)
