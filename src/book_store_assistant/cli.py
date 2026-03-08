@@ -3,13 +3,18 @@ from pathlib import Path
 import typer
 
 from book_store_assistant.pipeline.export import export_resolved_records
+from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
 
 app = typer.Typer(help="Book Store Assistant CLI.")
 
 
 @app.command()
-def main(input_path: Path, output: Path | None = None) -> None:
+def main(
+    input_path: Path,
+    output: Path | None = None,
+    review_output: Path | None = None,
+) -> None:
     """Read ISBNs from a CSV file and report pipeline counts."""
     result = process_isbn_file(input_path)
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
@@ -20,3 +25,7 @@ def main(input_path: Path, output: Path | None = None) -> None:
     if output is not None:
         export_resolved_records(result.resolution_results, output)
         typer.echo(f"Exported resolved records to {output}")
+
+    if review_output is not None:
+        export_unresolved_results(result.resolution_results, review_output)
+        typer.echo(f"Exported unresolved records to {review_output}")
