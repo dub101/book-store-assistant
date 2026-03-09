@@ -3,27 +3,16 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Alignment
 
+from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
 from book_store_assistant.models import BookRecord
-
-
-HEADERS = [
-    "ISBN",
-    "Title",
-    "Subtitle",
-    "Author",
-    "Editorial",
-    "Synopsis",
-    "Subject",
-    "CoverURL",
-]
 
 
 def export_books(records: list[BookRecord], output_path: Path) -> None:
     """Export book records to an Excel file."""
     workbook = openpyxl.Workbook()
     sheet = workbook.active
-    sheet.title = "Books"
-    sheet.append(HEADERS)
+    sheet.title = BOOKS_SHEET_NAME
+    sheet.append(BOOKS_HEADERS)
 
     for record in records:
         sheet.append(

@@ -3,6 +3,7 @@ from pathlib import Path
 import openpyxl
 
 from book_store_assistant.export.excel import export_books
+from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
 from book_store_assistant.models import BookRecord
 
 
@@ -26,9 +27,8 @@ def test_export_books_writes_expected_columns_and_row(tmp_path: Path) -> None:
     workbook = openpyxl.load_workbook(output_file)
     sheet = workbook.active
 
-    assert sheet.title == "Books"
-    assert sheet.cell(row=1, column=1).value == "ISBN"
-    assert sheet.cell(row=1, column=8).value == "CoverURL"
+    assert sheet.title == BOOKS_SHEET_NAME
+    assert [cell.value for cell in sheet[1]] == BOOKS_HEADERS
     assert sheet.cell(row=2, column=1).value == "9780306406157"
     assert sheet.cell(row=2, column=6).value == "Resumen del libro."
     assert sheet.cell(row=2, column=6).alignment.wrap_text is True
