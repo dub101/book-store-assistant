@@ -19,6 +19,11 @@ def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp
         title="Example Title",
         author="Example Author",
         editorial="Example Editorial",
+        field_sources={
+            "title": "google_books",
+            "author": "google_books",
+            "editorial": "google_books",
+        },
     )
 
     result = resolve_book_record(source_record, subjects_path=subject_file)
@@ -26,6 +31,8 @@ def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp
     assert result.record is None
     assert SYNOPSIS_MISSING_ERROR in result.errors
     assert SUBJECT_MISSING_ERROR in result.errors
+    assert "Review detail: no source supplied synopsis." in result.errors
+    assert "Review detail: no source supplied subject or usable categories." in result.errors
 
 
 def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_path: Path) -> None:
@@ -65,6 +72,7 @@ def test_resolve_book_record_uses_matching_category_as_subject(tmp_path: Path) -
         synopsis="Resumen del libro.",
         language="es",
         categories=["Poetry", "Historia"],
+        field_sources={"categories": "google_books"},
     )
 
     result = resolve_book_record(source_record, subjects_path=subject_file)
@@ -86,10 +94,19 @@ def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Pat
         synopsis="Book description.",
         subject="Narrativa",
         language="en",
+        field_sources={
+            "title": "google_books",
+            "author": "google_books",
+            "editorial": "google_books",
+            "synopsis": "google_books",
+            "subject": "google_books",
+            "language": "google_books",
+        },
     )
 
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
     assert SYNOPSIS_MISSING_ERROR not in result.errors
-    assert result.errors == [NON_SPANISH_SYNOPSIS_REVIEW_ERROR]
+    assert NON_SPANISH_SYNOPSIS_REVIEW_ERROR in result.errors
+    assert "Review detail: synopsis came from google_books with language 'en'." in result.errors

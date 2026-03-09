@@ -11,6 +11,7 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
                 source_name="google_books + open_library",
                 isbn="9780306406157",
                 title="Example Title",
+                field_sources={"title": "google_books"},
             ),
             errors=["google_books: Timeout"],
         )
@@ -28,4 +29,8 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
         "Editorial is missing.",
         "Synopsis is missing.",
         "Subject is missing.",
+        "Review detail: no source supplied author.",
+        "Review detail: no source supplied editorial.",
+        "Review detail: no source supplied synopsis.",
+        "Review detail: no source supplied subject or usable categories.",
     ]
