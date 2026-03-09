@@ -7,6 +7,12 @@ def test_select_subject_returns_matching_allowed_subject() -> None:
     assert selected == "Narrativa"
 
 
+def test_select_subject_ignores_extra_whitespace_and_hyphens() -> None:
+    selected = select_subject("ciencia-ficcion", ["Ciencia ficcion", "Historia"])
+
+    assert selected == "Ciencia ficcion"
+
+
 def test_select_subject_returns_none_when_candidate_is_not_allowed() -> None:
     selected = select_subject("Poesia", ["Narrativa", "Historia"])
 
