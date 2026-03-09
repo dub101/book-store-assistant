@@ -59,7 +59,7 @@ def test_fallback_metadata_source_returns_successful_result() -> None:
 
     assert result.record is not None
     assert result.record.source_name == "found_source"
-    assert result.errors == []
+    assert result.errors == ["missing_source: No Google Books match found."]
 
 
 def test_fallback_metadata_source_accumulates_errors_when_all_sources_fail() -> None:
@@ -175,3 +175,25 @@ def test_fallback_metadata_source_does_not_override_existing_values() -> None:
     assert result.record.synopsis == "Sinopsis primaria."
     assert result.record.subject == "Historia"
     assert result.record.language == "es"
+
+
+def test_fallback_metadata_source_preserves_errors_when_merge_succeeds() -> None:
+    source = FallbackMetadataSource(
+        [
+            MissingSource("Timeout"),
+            StaticRecordSource(
+                "open_library",
+                SourceBookRecord(
+                    source_name="open_library",
+                    isbn="9780306406157",
+                    title="Recovered Title",
+                ),
+            ),
+        ]
+    )
+
+    result = source.fetch("9780306406157")
+
+    assert result.record is not None
+    assert result.record.title == "Recovered Title"
+    assert result.errors == ["missing_source: Timeout"]
