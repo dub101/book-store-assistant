@@ -2,6 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
+from book_store_assistant.export.review_schema import REVIEW_HEADERS, REVIEW_SHEET_NAME
 from book_store_assistant.models import BookRecord
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
@@ -61,11 +62,8 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     workbook = openpyxl.load_workbook(output_file)
     sheet = workbook.active
 
-    assert sheet.title == "Review"
-    assert sheet.cell(row=1, column=1).value == "ISBN"
-    assert sheet.cell(row=1, column=12).value == "FieldSources"
-    assert sheet.cell(row=1, column=13).value == "ReasonCodes"
-    assert sheet.cell(row=1, column=14).value == "ReviewDetails"
+    assert sheet.title == REVIEW_SHEET_NAME
+    assert [cell.value for cell in sheet[1]] == REVIEW_HEADERS
     assert sheet.cell(row=2, column=1).value == "9780306406157"
     assert sheet.cell(row=2, column=11).value == "Book description."
     assert "categories=google_books + open_library" in sheet.cell(row=2, column=12).value
