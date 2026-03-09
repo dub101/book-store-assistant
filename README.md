@@ -28,7 +28,6 @@ Implemented:
 Pending:
 - Real subject catalog from the bookstore
 - More robust subject heuristics beyond conservative embedded matching
-- Exact Geslib import template validation
 - Confidence scoring and source precedence policy
 - Better CLI workflow and example input/output files
 
@@ -49,6 +48,7 @@ Resolved workbook columns:
 - Editorial
 - Synopsis
 - Subject
+- SubjectCode
 - CoverURL
 
 Review workbook columns:
@@ -60,6 +60,8 @@ Review workbook columns:
 - Source
 - Language
 - Subject
+- SubjectCode
+- SubjectType
 - Categories
 - CoverURL
 - Synopsis
@@ -74,16 +76,18 @@ Review workbook columns:
 - Synopsis must be in Spanish
 - If the available synopsis is non-Spanish, the row is sent to review instead of generating translated or bilingual text
 - Subject must be selected from the bookstore's internal list
+- Resolved export includes both the subject description and the internal subject code
 - Cover image is provided as a URL
 - Metadata should remain factual; the tool should not invent book data
 
 ## Subject Catalog Format
 
-The reference subject file lives at `data/reference/subjects.txt`.
+The reference subject file lives at `data/reference/subjects.tsv`.
 
 Supported formats:
 - Plain canonical subject: `Narrativa`
 - Canonical subject with aliases: `Historia | Historical | Historia universal`
+- Tabular catalog with `Subject`, `Description`, and `Subject_Type` columns
 
 Rules:
 - The first value is the canonical bookstore subject used in exports
@@ -93,6 +97,7 @@ Rules:
 Current pipeline note:
 - The ISBN import pipeline currently resolves subjects only against book subject types (`L0`)
 - Non-book subject types such as `P0` are preserved in the catalog for future use, but are excluded from subject resolution in the current workflow
+- Resolved export keeps `Subject` as the human-readable description and adds `SubjectCode` for Geslib mapping
 
 Example:
 ```text
@@ -100,6 +105,14 @@ Example:
 Narrativa | Ficcion | Fiction | Novel
 Historia | Historical | Historia universal
 Infantil | Juvenile | Juvenile Fiction
+```
+
+Tabular example:
+```text
+Subject	Description	Subject_Type
+13	FICCION	L0
+1402	HISTORIA	L0
+22	PELUCHES Y TITERES	P0
 ```
 
 ## Development
@@ -136,9 +149,25 @@ CLI summary behavior:
 - prints unresolved source counts
 - prints unresolved reason-code counts
 
+## Geslib Import Workflow
+
+Geslib import is currently treated as a column-mapping workflow rather than a fixed Excel template contract.
+
+Recommended mapping for the resolved workbook:
+- Map `ISBN` to the ISBN field in Geslib
+- Map `Title`, `Subtitle`, `Author`, `Editorial`, and `Synopsis` to their corresponding metadata fields
+- Map `Subject` when the Geslib importer expects the human-readable subject description
+- Map `SubjectCode` when the Geslib importer expects the internal bookstore subject code
+- Keep both `Subject` and `SubjectCode` in the export so the operator can choose the correct Geslib target during import
+
+Current operator note:
+- `Subject` is the bookstore subject description from the structured catalog
+- `SubjectCode` is the internal code from the same catalog row
+- `SubjectType` appears only in the review workbook for diagnosis and catalog verification
+
 ## Project Structure
 - `src/book_store_assistant/` application code
 - `tests/` automated tests
 - `data/input/` input CSV files
 - `data/output/` generated output files
-- `data/reference/subjects.txt` internal subject catalog
+- `data/reference/subjects.tsv` internal subject catalog
