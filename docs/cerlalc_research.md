@@ -66,3 +66,29 @@ Perform a focused technical verification of Cerlalc search and record lookup beh
 - defer Cerlalc and evaluate other Spanish-first sources
 
 The goal of the spike is not to ship an adapter immediately. The goal is to answer whether Cerlalc can be integrated safely and maintainably within the current ports-and-adapters architecture.
+
+## Planned Probe
+
+The first probe should stay manual and low-risk.
+
+Target:
+- test lookup behavior for a single ISBN from a real batch
+
+Desired outputs:
+- final response URL
+- HTTP status
+- whether the ISBN appears in the returned page
+- whether the page looks like a search result or a record page
+- whether useful fields appear to be present:
+  - title
+  - author
+  - editorial
+  - language
+  - synopsis
+  - subject clues
+
+Success condition:
+- there is a repeatable ISBN-driven lookup path that returns stable, parseable pages
+
+Failure condition:
+- lookup depends on brittle navigation, session-heavy flows, or inconsistent pages

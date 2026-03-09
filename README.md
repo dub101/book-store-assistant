@@ -191,6 +191,13 @@ Why this matters:
 - the main blockers were missing synopsis and weak Spanish-language coverage
 - Cerlalc is the most plausible next source to improve those outcomes
 
+Planned probe workflow:
+```bash
+python scripts/probe_cerlalc.py 9786070728792
+```
+
+The probe is intended to test whether Cerlalc exposes a stable ISBN lookup surface before any production adapter is added.
+
 ## Next Steps
 
 1. Improve operator feedback during long runs.
