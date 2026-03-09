@@ -87,5 +87,5 @@ def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Pat
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
-    assert "Synopsis is missing." in result.errors
-    assert NON_SPANISH_SYNOPSIS_REVIEW_ERROR in result.errors
+    assert "Synopsis is missing." not in result.errors
+    assert result.errors == [NON_SPANISH_SYNOPSIS_REVIEW_ERROR]

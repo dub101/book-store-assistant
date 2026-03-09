@@ -28,7 +28,7 @@ def resolve_book_record(
         errors.append("Author is missing.")
     if not source_record.editorial:
         errors.append("Editorial is missing.")
-    if not resolved_synopsis:
+    if not resolved_synopsis and synopsis_review_error is None:
         errors.append("Synopsis is missing.")
     if synopsis_review_error:
         errors.append(synopsis_review_error)
