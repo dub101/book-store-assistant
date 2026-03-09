@@ -19,7 +19,8 @@ HEADERS = [
     "CoverURL",
     "Synopsis",
     "FieldSources",
-    "Errors",
+    "ReasonCodes",
+    "ReviewDetails",
 ]
 
 COLUMN_WIDTHS = {
@@ -35,7 +36,8 @@ COLUMN_WIDTHS = {
     "J": 36,
     "K": 60,
     "L": 40,
-    "M": 40,
+    "M": 28,
+    "N": 60,
 }
 
 
@@ -71,7 +73,8 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
                 str(source_record.cover_url) if source_record is not None and source_record.cover_url else None,
                 source_record.synopsis if source_record is not None else None,
                 _format_field_sources(source_record.field_sources) if source_record is not None else None,
-                "; ".join(result.errors),
+                ", ".join(result.reason_codes),
+                "; ".join(result.review_details),
             ]
         )
 
@@ -81,7 +84,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
     for column, width in COLUMN_WIDTHS.items():
         sheet.column_dimensions[column].width = width
 
-    for row in sheet.iter_rows(min_row=2, min_col=11, max_col=13):
+    for row in sheet.iter_rows(min_row=2, min_col=11, max_col=14):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 

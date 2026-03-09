@@ -1,8 +1,9 @@
 from pathlib import Path
 
 from book_store_assistant.resolution.books import (
-    SUBJECT_MISSING_ERROR,
-    SYNOPSIS_MISSING_ERROR,
+    NON_SPANISH_SYNOPSIS_CODE,
+    SUBJECT_MISSING_CODE,
+    SYNOPSIS_MISSING_CODE,
     resolve_book_record,
 )
 from book_store_assistant.resolution.synopsis_resolution import NON_SPANISH_SYNOPSIS_REVIEW_ERROR
@@ -29,10 +30,13 @@ def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
-    assert SYNOPSIS_MISSING_ERROR in result.errors
-    assert SUBJECT_MISSING_ERROR in result.errors
-    assert "Review detail: no source supplied synopsis." in result.errors
-    assert "Review detail: no source supplied subject or usable categories." in result.errors
+    assert result.reason_codes == [SYNOPSIS_MISSING_CODE, SUBJECT_MISSING_CODE]
+    assert result.review_details == [
+        "No source supplied synopsis.",
+        "No source supplied subject or usable categories.",
+    ]
+    assert "Synopsis is missing." in result.errors
+    assert "Subject is missing." in result.errors
 
 
 def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_path: Path) -> None:
@@ -57,6 +61,8 @@ def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_p
     assert result.record.subject == "Narrativa"
     assert result.record.synopsis == "Resumen del libro."
     assert result.errors == []
+    assert result.reason_codes == []
+    assert result.review_details == []
 
 
 def test_resolve_book_record_uses_matching_category_as_subject(tmp_path: Path) -> None:
@@ -107,6 +113,6 @@ def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Pat
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
-    assert SYNOPSIS_MISSING_ERROR not in result.errors
+    assert result.reason_codes == [NON_SPANISH_SYNOPSIS_CODE]
+    assert result.review_details == ["Synopsis came from google_books with language 'en'."]
     assert NON_SPANISH_SYNOPSIS_REVIEW_ERROR in result.errors
-    assert "Review detail: synopsis came from google_books with language 'en'." in result.errors

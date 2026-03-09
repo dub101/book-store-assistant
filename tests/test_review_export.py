@@ -33,7 +33,12 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
         ResolutionResult(
             record=None,
             source_record=source_record,
-            errors=["Synopsis is missing.", "Synopsis is not in Spanish and requires review."],
+            errors=[
+                "Synopsis is missing.",
+                "Synopsis came from google_books with language 'en'.",
+            ],
+            reason_codes=["MISSING_SYNOPSIS"],
+            review_details=["Synopsis came from google_books with language 'en'."],
         ),
         ResolutionResult(
             record=BookRecord(
@@ -46,6 +51,8 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
             ),
             source_record=source_record,
             errors=[],
+            reason_codes=[],
+            review_details=[],
         ),
     ]
 
@@ -56,26 +63,18 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
 
     assert sheet.title == "Review"
     assert sheet.cell(row=1, column=1).value == "ISBN"
-    assert sheet.cell(row=1, column=8).value == "Subject"
-    assert sheet.cell(row=1, column=9).value == "Categories"
-    assert sheet.cell(row=1, column=11).value == "Synopsis"
     assert sheet.cell(row=1, column=12).value == "FieldSources"
-    assert sheet.cell(row=1, column=13).value == "Errors"
+    assert sheet.cell(row=1, column=13).value == "ReasonCodes"
+    assert sheet.cell(row=1, column=14).value == "ReviewDetails"
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=8).value == "Fiction"
-    assert sheet.cell(row=2, column=9).value == "Fiction, Literature"
-    assert sheet.cell(row=2, column=10).value == "https://example.com/cover.jpg"
     assert sheet.cell(row=2, column=11).value == "Book description."
     assert "categories=google_books + open_library" in sheet.cell(row=2, column=12).value
-    assert "editorial=open_library" in sheet.cell(row=2, column=12).value
-    assert "title=google_books" in sheet.cell(row=2, column=12).value
-    assert "Synopsis is missing." in sheet.cell(row=2, column=13).value
+    assert sheet.cell(row=2, column=13).value == "MISSING_SYNOPSIS"
+    assert "Synopsis came from google_books with language 'en'." in sheet.cell(row=2, column=14).value
     assert sheet.cell(row=2, column=11).alignment.wrap_text is True
-    assert sheet.cell(row=2, column=11).alignment.vertical == "top"
     assert sheet.cell(row=2, column=12).alignment.wrap_text is True
-    assert sheet.cell(row=2, column=12).alignment.vertical == "top"
     assert sheet.cell(row=2, column=13).alignment.wrap_text is True
-    assert sheet.cell(row=2, column=13).alignment.vertical == "top"
+    assert sheet.cell(row=2, column=14).alignment.wrap_text is True
     assert sheet.freeze_panes == "A2"
-    assert sheet.auto_filter.ref == "A1:M2"
+    assert sheet.auto_filter.ref == "A1:N2"
     assert sheet.max_row == 2

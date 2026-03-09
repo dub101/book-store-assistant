@@ -1,4 +1,4 @@
-from book_store_assistant.resolution.service import resolve_all
+from book_store_assistant.resolution.service import FETCH_ERROR_CODE, resolve_all
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -23,14 +23,17 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
     assert results[0].record is None
     assert results[0].source_record is not None
     assert results[0].source_record.source_name == "google_books + open_library"
-    assert results[0].errors == [
+    assert results[0].reason_codes == [
+        FETCH_ERROR_CODE,
+        "MISSING_AUTHOR",
+        "MISSING_EDITORIAL",
+        "MISSING_SYNOPSIS",
+        "MISSING_SUBJECT",
+    ]
+    assert results[0].review_details == [
         "google_books: Timeout",
-        "Author is missing.",
-        "Editorial is missing.",
-        "Synopsis is missing.",
-        "Subject is missing.",
-        "Review detail: no source supplied author.",
-        "Review detail: no source supplied editorial.",
-        "Review detail: no source supplied synopsis.",
-        "Review detail: no source supplied subject or usable categories.",
+        "No source supplied author.",
+        "No source supplied editorial.",
+        "No source supplied synopsis.",
+        "No source supplied subject or usable categories.",
     ]

@@ -4,16 +4,19 @@ from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
 
-def _merge_errors(*error_lists: list[str]) -> list[str]:
+FETCH_ERROR_CODE = "FETCH_ERROR"
+
+
+def _merge_unique(*values: list[str]) -> list[str]:
     merged: list[str] = []
     seen: set[str] = set()
 
-    for errors in error_lists:
-        for error in errors:
-            if error in seen:
+    for items in values:
+        for item in items:
+            if item in seen:
                 continue
-            seen.add(error)
-            merged.append(error)
+            seen.add(item)
+            merged.append(item)
 
     return merged
 
@@ -31,6 +34,8 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
                         isbn=fetch_result.isbn,
                     ),
                     errors=fetch_result.errors,
+                    reason_codes=[FETCH_ERROR_CODE] if fetch_result.errors else [],
+                    review_details=fetch_result.errors,
                 )
             )
             continue
@@ -38,11 +43,21 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
         resolved_result = resolve_book_record(fetch_result.record)
 
         if resolved_result.record is None and fetch_result.errors:
+            merged_reason_codes = _merge_unique(
+                [FETCH_ERROR_CODE],
+                resolved_result.reason_codes,
+            )
+            merged_review_details = _merge_unique(
+                fetch_result.errors,
+                resolved_result.review_details,
+            )
             resolution_results.append(
                 ResolutionResult(
                     record=None,
                     source_record=resolved_result.source_record,
-                    errors=_merge_errors(fetch_result.errors, resolved_result.errors),
+                    errors=_merge_unique(fetch_result.errors, resolved_result.errors),
+                    reason_codes=merged_reason_codes,
+                    review_details=merged_review_details,
                 )
             )
             continue

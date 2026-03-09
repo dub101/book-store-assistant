@@ -51,11 +51,15 @@ def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_
             record=None,
             source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
             errors=["Subject is missing."],
+            reason_codes=["MISSING_SUBJECT"],
+            review_details=["No source supplied subject or usable categories."],
         ),
         ResolutionResult(
             record=None,
             source_record=SourceBookRecord(source_name="fetch_error", isbn="9780306406158"),
             errors=["google_books: No Google Books match found."],
+            reason_codes=["FETCH_ERROR"],
+            review_details=["google_books: No Google Books match found."],
         ),
     ]
 
@@ -67,5 +71,5 @@ def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_
     assert "- fetch_error: 1" in result.stdout
     assert "- google_books: 1" in result.stdout
     assert "Unresolved reasons:" in result.stdout
-    assert "- Subject is missing.: 1" in result.stdout
-    assert "- google_books: No Google Books match found.: 1" in result.stdout
+    assert "- FETCH_ERROR: 1" in result.stdout
+    assert "- MISSING_SUBJECT: 1" in result.stdout

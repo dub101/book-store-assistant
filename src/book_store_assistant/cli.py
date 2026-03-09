@@ -40,10 +40,10 @@ def main(
             for unresolved_result in unresolved_results
             if unresolved_result.source_record is not None
         )
-        error_counts = Counter(
-            error
+        reason_counts = Counter(
+            reason_code
             for unresolved_result in unresolved_results
-            for error in unresolved_result.errors
+            for reason_code in unresolved_result.reason_codes
         )
 
         if source_counts:
@@ -52,8 +52,8 @@ def main(
                 typer.echo(f"- {source_name}: {count}")
 
         typer.echo("Unresolved reasons:")
-        for error, count in sorted(error_counts.items()):
-            typer.echo(f"- {error}: {count}")
+        for reason_code, count in sorted(reason_counts.items()):
+            typer.echo(f"- {reason_code}: {count}")
 
     if output is not None:
         export_resolved_records(result.resolution_results, output)
