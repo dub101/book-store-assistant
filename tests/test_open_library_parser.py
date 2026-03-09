@@ -13,6 +13,13 @@ def test_parse_open_library_payload_returns_source_record() -> None:
             "publishers": [
                 {"name": "Example Editorial"},
             ],
+            "subjects": [
+                {"name": "Fiction"},
+                {"name": "Literature"},
+            ],
+            "description": {
+                "value": "Resumen del libro.",
+            },
             "cover": {
                 "medium": "https://example.com/cover.jpg",
             },
@@ -28,6 +35,8 @@ def test_parse_open_library_payload_returns_source_record() -> None:
     assert record.subtitle == "Example Subtitle"
     assert record.author == "Author One, Author Two"
     assert record.editorial == "Example Editorial"
+    assert record.synopsis == "Resumen del libro."
+    assert record.categories == ["Fiction", "Literature"]
     assert str(record.cover_url) == "https://example.com/cover.jpg"
 
 
@@ -37,3 +46,17 @@ def test_parse_open_library_payload_returns_none_when_isbn_is_missing() -> None:
     record = parse_open_library_payload(payload, "9780306406157")
 
     assert record is None
+
+
+def test_parse_open_library_payload_supports_string_description() -> None:
+    payload = {
+        "ISBN:9780306406157": {
+            "title": "Example Title",
+            "description": "Resumen breve.",
+        }
+    }
+
+    record = parse_open_library_payload(payload, "9780306406157")
+
+    assert record is not None
+    assert record.synopsis == "Resumen breve."
