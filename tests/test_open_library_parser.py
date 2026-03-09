@@ -17,6 +17,9 @@ def test_parse_open_library_payload_returns_source_record() -> None:
                 {"name": "Fiction"},
                 {"name": "Literature"},
             ],
+            "languages": [
+                {"key": "/languages/spa"},
+            ],
             "description": {
                 "value": "Resumen del libro.",
             },
@@ -37,6 +40,7 @@ def test_parse_open_library_payload_returns_source_record() -> None:
     assert record.editorial == "Example Editorial"
     assert record.synopsis == "Resumen del libro."
     assert record.categories == ["Fiction", "Literature"]
+    assert record.language == "spa"
     assert str(record.cover_url) == "https://example.com/cover.jpg"
 
 
@@ -60,3 +64,17 @@ def test_parse_open_library_payload_supports_string_description() -> None:
 
     assert record is not None
     assert record.synopsis == "Resumen breve."
+
+
+def test_parse_open_library_payload_returns_none_when_language_key_is_missing() -> None:
+    payload = {
+        "ISBN:9780306406157": {
+            "title": "Example Title",
+            "languages": [{}],
+        }
+    }
+
+    record = parse_open_library_payload(payload, "9780306406157")
+
+    assert record is not None
+    assert record.language is None

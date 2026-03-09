@@ -15,6 +15,19 @@ def _extract_description(data: dict) -> str | None:
     return None
 
 
+def _extract_language(data: dict) -> str | None:
+    languages = data.get("languages") or []
+    if not languages:
+        return None
+
+    first_language = languages[0]
+    key = first_language.get("key")
+    if not isinstance(key, str):
+        return None
+
+    return key.rsplit("/", maxsplit=1)[-1]
+
+
 def parse_open_library_payload(payload: dict, isbn: str) -> SourceBookRecord | None:
     data = payload.get(f"ISBN:{isbn}")
     if not data:
@@ -41,4 +54,5 @@ def parse_open_library_payload(payload: dict, isbn: str) -> SourceBookRecord | N
         synopsis=_extract_description(data),
         categories=subject_names,
         cover_url=cover.get("large") or cover.get("medium") or cover.get("small"),
+        language=_extract_language(data),
     )
