@@ -7,6 +7,7 @@ from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
+from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.results import FetchResult
 
 app = typer.Typer(help="Book Store Assistant CLI.")
@@ -20,6 +21,22 @@ def _summarize_fetch_result(result: FetchResult) -> str:
     if result.errors:
         return f"{result.isbn}: fetch failed"
     return f"{result.isbn}: no metadata found"
+
+
+def _summarize_resolution_result(result: ResolutionResult) -> str:
+    if result.record is not None:
+        return f"{result.record.isbn}: resolved"
+
+    if result.source_record is not None:
+        isbn = result.source_record.isbn
+    else:
+        isbn = "unknown-isbn"
+
+    if result.reason_codes:
+        reason_codes = ", ".join(result.reason_codes)
+        return f"{isbn}: review ({reason_codes})"
+
+    return f"{isbn}: review"
 
 
 @app.command()
@@ -51,6 +68,9 @@ def main(
             )
     else:
         result = process_isbn_file(input_path)
+
+    for resolution_result in result.resolution_results:
+        typer.echo(_summarize_resolution_result(resolution_result), err=True)
 
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
     unresolved_results = [item for item in result.resolution_results if item.record is None]
