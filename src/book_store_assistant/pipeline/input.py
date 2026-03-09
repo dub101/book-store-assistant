@@ -6,12 +6,16 @@ from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.pipeline.results import InputReadResult
 
 
+def _normalize_raw_value(value: str) -> str:
+    return value.lstrip("\ufeff")
+
+
 def _is_header_row(value: str) -> bool:
-    return value.strip().casefold() == "isbn"
+    return _normalize_raw_value(value).strip().casefold() == "isbn"
 
 
 def _is_blank_value(value: str) -> bool:
-    return not value.strip()
+    return not _normalize_raw_value(value).strip()
 
 
 def read_isbn_inputs(input_path: Path) -> InputReadResult:
@@ -25,7 +29,7 @@ def read_isbn_inputs(input_path: Path) -> InputReadResult:
             if not row:
                 continue
 
-            raw_value = row[0]
+            raw_value = _normalize_raw_value(row[0])
             if _is_blank_value(raw_value):
                 continue
 
