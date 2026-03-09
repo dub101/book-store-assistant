@@ -23,13 +23,15 @@ Implemented:
 - Excel export for resolved records
 - Excel export for unresolved review rows
 - CLI support for export and review export
+- CLI fetch progress and per-ISBN fetch outcome logs
 - Test suite with coverage reporting
 
 Pending:
-- Real subject catalog from the bookstore
+- Real subject catalog tuning from bookstore feedback
 - More robust subject heuristics beyond conservative embedded matching
 - Confidence scoring and source precedence policy
 - Better CLI workflow and example input/output files
+- Spanish-first source expansion research, starting with Cerlalc feasibility
 
 ## Version 1 Scope
 
@@ -71,7 +73,7 @@ Review workbook columns:
 
 ## Rules
 
-- ISBN, Title, Author, Editorial, Synopsis, and Subject are mandatory for resolved output
+- ISBN, Title, Author, Editorial, Synopsis, Subject, and SubjectCode are mandatory for resolved output
 - Subtitle is included only when relevant
 - Synopsis must be in Spanish
 - If the available synopsis is non-Spanish, the row is sent to review instead of generating translated or bilingual text
@@ -148,6 +150,8 @@ CLI summary behavior:
 - prints fetched, resolved, and unresolved counts
 - prints unresolved source counts
 - prints unresolved reason-code counts
+- shows fetch progress during long runs
+- logs per-ISBN fetch outcomes during consultation
 
 ## Geslib Import Workflow
 
@@ -165,9 +169,29 @@ Current operator note:
 - `SubjectCode` is the internal code from the same catalog row
 - `SubjectType` appears only in the review workbook for diagnosis and catalog verification
 
+## Source Expansion Research
+
+The next source investigation is Cerlalc because it is directly aligned with Spanish and Latin American book metadata.
+
+Current research goal:
+- determine whether Cerlalc exposes a stable public search or record endpoint
+- determine whether it can be integrated as a source without brittle scraping
+- identify which fields are realistically available for enrichment:
+  - title
+  - author
+  - editorial
+  - synopsis
+  - language
+  - subject clues
+
+Why this matters:
+- recent real-batch testing showed low resolved yield
+- the main blockers were missing synopsis and weak Spanish-language coverage
+- Cerlalc is the most plausible next source to improve those outcomes
+
 ## Project Structure
 - `src/book_store_assistant/` application code
 - `tests/` automated tests
-- `data/input/` input CSV files
+- `data/input/` local input CSV files kept out of git except `.gitkeep`
 - `data/output/` generated output files
 - `data/reference/subjects.tsv` internal subject catalog
