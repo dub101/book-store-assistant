@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from book_store_assistant.export.excel import export_books
 from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
@@ -37,3 +38,23 @@ def test_export_books_writes_expected_columns_and_row(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=9).value == "https://example.com/cover.jpg"
     assert sheet.freeze_panes == "A2"
     assert sheet.auto_filter.ref == "A1:I2"
+
+
+def test_export_books_rejects_rows_without_subject_code(tmp_path: Path) -> None:
+    output_file = tmp_path / "books.xlsx"
+    records = [
+        BookRecord(
+            isbn="9780306406157",
+            title="Example Title",
+            author="Example Author",
+            editorial="Example Editorial",
+            synopsis="Resumen del libro.",
+            subject="UNKNOWN SUBJECT",
+        )
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match="Books row field 'SubjectCode' is required.",
+    ):
+        export_books(records, output_file)

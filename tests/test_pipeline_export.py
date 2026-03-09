@@ -24,7 +24,7 @@ def test_export_resolved_records_writes_only_resolved_rows(tmp_path: Path) -> No
                 author="Example Author",
                 editorial="Example Editorial",
                 synopsis="Resumen del libro.",
-                subject="Narrativa",
+                subject="FICCION",
             ),
             source_record=source_record,
             errors=[],

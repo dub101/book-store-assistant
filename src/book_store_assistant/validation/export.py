@@ -7,6 +7,20 @@ from book_store_assistant.export.schema import (
     REVIEW_SHEET_NAME,
 )
 
+BOOKS_REQUIRED_HEADERS = (
+    "ISBN",
+    "Title",
+    "Author",
+    "Editorial",
+    "Synopsis",
+    "Subject",
+    "SubjectCode",
+)
+
+
+def _is_blank(value: str | None) -> bool:
+    return value is None or not value.strip()
+
 
 def validate_books_sheet(sheet: Worksheet) -> list[str]:
     errors: list[str] = []
@@ -45,12 +59,19 @@ def validate_review_sheet(sheet: Worksheet) -> list[str]:
 
 
 def validate_books_row(row: list[str | None]) -> list[str]:
-    if len(row) == len(BOOKS_HEADERS):
-        return []
+    if len(row) != len(BOOKS_HEADERS):
+        return [
+            f"Books row must have {len(BOOKS_HEADERS)} columns, got {len(row)}."
+        ]
 
-    return [
-        f"Books row must have {len(BOOKS_HEADERS)} columns, got {len(row)}."
-    ]
+    errors: list[str] = []
+
+    for header in BOOKS_REQUIRED_HEADERS:
+        value = row[BOOKS_HEADERS.index(header)]
+        if _is_blank(value):
+            errors.append(f"Books row field '{header}' is required.")
+
+    return errors
 
 
 def validate_review_row(row: list[str | None]) -> list[str]:

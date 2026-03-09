@@ -66,8 +66,20 @@ def test_validate_review_sheet_reports_contract_mismatches() -> None:
     assert "Review sheet freeze panes must be 'A2', got 'B2'." in errors
 
 
-def test_validate_books_row_accepts_expected_length() -> None:
-    errors = validate_books_row(["value"] * len(BOOKS_HEADERS))
+def test_validate_books_row_accepts_expected_length_and_required_fields() -> None:
+    errors = validate_books_row(
+        [
+            "9780306406157",
+            "Example Title",
+            None,
+            "Example Author",
+            "Example Editorial",
+            "Resumen del libro.",
+            "FICCION",
+            "13",
+            "https://example.com/cover.jpg",
+        ]
+    )
 
     assert errors == []
 
@@ -78,6 +90,24 @@ def test_validate_books_row_reports_wrong_length() -> None:
     assert errors == [
         f"Books row must have {len(BOOKS_HEADERS)} columns, got 1."
     ]
+
+
+def test_validate_books_row_reports_missing_required_fields() -> None:
+    errors = validate_books_row(
+        [
+            "9780306406157",
+            "Example Title",
+            None,
+            "Example Author",
+            "Example Editorial",
+            "Resumen del libro.",
+            "FICCION",
+            None,
+            "https://example.com/cover.jpg",
+        ]
+    )
+
+    assert errors == ["Books row field 'SubjectCode' is required."]
 
 
 def test_validate_review_row_accepts_expected_length() -> None:

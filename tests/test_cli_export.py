@@ -34,7 +34,7 @@ def test_cli_export_writes_resolved_records(mock_process_isbn_file, tmp_path: Pa
                     author="Example Author",
                     editorial="Example Editorial",
                     synopsis="Resumen del libro.",
-                    subject="Narrativa",
+                    subject="FICCION",
                 ),
                 source_record=None,
                 errors=[],
