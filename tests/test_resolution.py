@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from book_store_assistant.resolution.books import resolve_book_record
+from book_store_assistant.resolution.books import (
+    SUBJECT_MISSING_ERROR,
+    SYNOPSIS_MISSING_ERROR,
+    resolve_book_record,
+)
 from book_store_assistant.resolution.synopsis_resolution import NON_SPANISH_SYNOPSIS_REVIEW_ERROR
 from book_store_assistant.sources.models import SourceBookRecord
 
@@ -20,8 +24,8 @@ def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
-    assert "Synopsis is missing." in result.errors
-    assert "Subject is missing." in result.errors
+    assert SYNOPSIS_MISSING_ERROR in result.errors
+    assert SUBJECT_MISSING_ERROR in result.errors
 
 
 def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_path: Path) -> None:
@@ -87,5 +91,5 @@ def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Pat
     result = resolve_book_record(source_record, subjects_path=subject_file)
 
     assert result.record is None
-    assert "Synopsis is missing." not in result.errors
+    assert SYNOPSIS_MISSING_ERROR not in result.errors
     assert result.errors == [NON_SPANISH_SYNOPSIS_REVIEW_ERROR]

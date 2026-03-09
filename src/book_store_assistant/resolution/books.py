@@ -11,6 +11,13 @@ from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.subject_mapping import get_subjects
 
 
+TITLE_MISSING_ERROR = "Title is missing."
+AUTHOR_MISSING_ERROR = "Author is missing."
+EDITORIAL_MISSING_ERROR = "Editorial is missing."
+SYNOPSIS_MISSING_ERROR = "Synopsis is missing."
+SUBJECT_MISSING_ERROR = "Subject is missing."
+
+
 def resolve_book_record(
     source_record: SourceBookRecord,
     subjects_path: Path | None = None,
@@ -23,17 +30,17 @@ def resolve_book_record(
     synopsis_review_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
 
     if not source_record.title:
-        errors.append("Title is missing.")
+        errors.append(TITLE_MISSING_ERROR)
     if not source_record.author:
-        errors.append("Author is missing.")
+        errors.append(AUTHOR_MISSING_ERROR)
     if not source_record.editorial:
-        errors.append("Editorial is missing.")
+        errors.append(EDITORIAL_MISSING_ERROR)
     if not resolved_synopsis and synopsis_review_error is None:
-        errors.append("Synopsis is missing.")
+        errors.append(SYNOPSIS_MISSING_ERROR)
     if synopsis_review_error:
         errors.append(synopsis_review_error)
     if not resolved_subject:
-        errors.append("Subject is missing.")
+        errors.append(SUBJECT_MISSING_ERROR)
 
     if errors:
         return ResolutionResult(record=None, source_record=source_record, errors=errors)
