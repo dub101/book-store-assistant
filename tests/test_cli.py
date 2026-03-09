@@ -3,6 +3,9 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from book_store_assistant.cli import app
+from book_store_assistant.resolution.results import ResolutionResult
+from book_store_assistant.sources.models import SourceBookRecord
+from book_store_assistant.sources.results import FetchResult
 
 runner = CliRunner()
 
@@ -21,3 +24,43 @@ def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
     assert "Fetched records: 0" in result.stdout
     assert "Resolved records: 0" in result.stdout
     assert "Unresolved records: 0" in result.stdout
+
+
+@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.resolve_all")
+def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_all, tmp_path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n9780306406158\n", encoding="utf-8")
+
+    mock_fetch_all.return_value = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
+            errors=[],
+        ),
+        FetchResult(
+            isbn="9780306406158",
+            record=SourceBookRecord(source_name="google_books", isbn="9780306406158"),
+            errors=[],
+        ),
+    ]
+    mock_resolve_all.return_value = [
+        ResolutionResult(
+            record=None,
+            source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
+            errors=["Synopsis is missing.", "Subject is missing."],
+        ),
+        ResolutionResult(
+            record=None,
+            source_record=SourceBookRecord(source_name="google_books", isbn="9780306406158"),
+            errors=["Synopsis is missing."],
+        ),
+    ]
+
+    result = runner.invoke(app, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "Unresolved records: 2" in result.stdout
+    assert "Unresolved reasons:" in result.stdout
+    assert "- Subject is missing.: 1" in result.stdout
+    assert "- Synopsis is missing.: 2" in result.stdout

@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 import typer
@@ -18,13 +19,25 @@ def main(
     """Read ISBNs from a CSV file and report pipeline counts."""
     result = process_isbn_file(input_path)
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
-    unresolved_count = sum(1 for item in result.resolution_results if item.record is None)
+    unresolved_results = [item for item in result.resolution_results if item.record is None]
+    unresolved_count = len(unresolved_results)
 
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
     typer.echo(f"Invalid rows: {len(result.input_result.invalid_values)}")
     typer.echo(f"Fetched records: {sum(1 for item in result.fetch_results if item.record is not None)}")
     typer.echo(f"Resolved records: {resolved_count}")
     typer.echo(f"Unresolved records: {unresolved_count}")
+
+    if unresolved_results:
+        error_counts = Counter(
+            error
+            for unresolved_result in unresolved_results
+            for error in unresolved_result.errors
+        )
+
+        typer.echo("Unresolved reasons:")
+        for error, count in sorted(error_counts.items()):
+            typer.echo(f"- {error}: {count}")
 
     if output is not None:
         export_resolved_records(result.resolution_results, output)
