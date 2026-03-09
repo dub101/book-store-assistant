@@ -9,6 +9,7 @@ from book_store_assistant.export.schema import (
 )
 from book_store_assistant.export.workbook import apply_sheet_basics
 from book_store_assistant.resolution.results import ResolutionResult
+from book_store_assistant.validation.export import validate_review_sheet
 
 
 def _format_field_sources(field_sources: dict[str, str]) -> str | None:
@@ -66,5 +67,10 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
         column_widths=REVIEW_COLUMN_WIDTHS,
         wrap_columns=(11, 14),
     )
+
+    validation_errors = validate_review_sheet(sheet)
+    if validation_errors:
+        joined_errors = "; ".join(validation_errors)
+        raise ValueError(f"Invalid review export sheet: {joined_errors}")
 
     workbook.save(output_path)

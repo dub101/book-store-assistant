@@ -1,6 +1,11 @@
 from openpyxl.worksheet.worksheet import Worksheet
 
-from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
+from book_store_assistant.export.schema import (
+    BOOKS_HEADERS,
+    BOOKS_SHEET_NAME,
+    REVIEW_HEADERS,
+    REVIEW_SHEET_NAME,
+)
 
 
 def validate_books_sheet(sheet: Worksheet) -> list[str]:
@@ -19,5 +24,25 @@ def validate_books_sheet(sheet: Worksheet) -> list[str]:
 
     if sheet.freeze_panes != "A2":
         errors.append(f"Books sheet freeze panes must be 'A2', got '{sheet.freeze_panes}'.")
+
+    return errors
+
+
+def validate_review_sheet(sheet: Worksheet) -> list[str]:
+    errors: list[str] = []
+
+    if sheet.title != REVIEW_SHEET_NAME:
+        errors.append(
+            f"Review sheet title must be '{REVIEW_SHEET_NAME}', got '{sheet.title}'."
+        )
+
+    headers = [cell.value for cell in sheet[1]]
+    if headers != REVIEW_HEADERS:
+        errors.append(
+            f"Review sheet headers must be {REVIEW_HEADERS}, got {headers}."
+        )
+
+    if sheet.freeze_panes != "A2":
+        errors.append(f"Review sheet freeze panes must be 'A2', got '{sheet.freeze_panes}'.")
 
     return errors
