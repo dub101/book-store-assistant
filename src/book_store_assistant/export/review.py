@@ -5,7 +5,7 @@ import openpyxl
 from book_store_assistant.resolution.results import ResolutionResult
 
 
-HEADERS = ["ISBN", "Title", "Author", "Editorial", "Source", "Language", "Categories", "Errors"]
+HEADERS = ["ISBN", "Title", "Subtitle", "Author", "Editorial", "Source", "Language", "Categories", "Errors"]
 
 
 def export_review_rows(results: list[ResolutionResult], output_path: Path) -> None:
@@ -22,6 +22,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
             [
                 source_record.isbn if source_record is not None else None,
                 source_record.title if source_record is not None else None,
+                source_record.subtitle if source_record is not None else None,
                 source_record.author if source_record is not None else None,
                 source_record.editorial if source_record is not None else None,
                 source_record.source_name if source_record is not None else None,

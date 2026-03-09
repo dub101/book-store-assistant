@@ -15,6 +15,7 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
         source_name="google_books",
         isbn="9780306406157",
         title="Example Title",
+        subtitle="Example Subtitle",
         author="Example Author",
         editorial="Example Editorial",
         language="en",
@@ -46,13 +47,15 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     sheet = workbook.active
 
     assert sheet.cell(row=1, column=1).value == "ISBN"
-    assert sheet.cell(row=1, column=3).value == "Author"
-    assert sheet.cell(row=1, column=4).value == "Editorial"
-    assert sheet.cell(row=1, column=7).value == "Categories"
-    assert sheet.cell(row=1, column=8).value == "Errors"
+    assert sheet.cell(row=1, column=3).value == "Subtitle"
+    assert sheet.cell(row=1, column=4).value == "Author"
+    assert sheet.cell(row=1, column=5).value == "Editorial"
+    assert sheet.cell(row=1, column=8).value == "Categories"
+    assert sheet.cell(row=1, column=9).value == "Errors"
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=3).value == "Example Author"
-    assert sheet.cell(row=2, column=4).value == "Example Editorial"
-    assert sheet.cell(row=2, column=7).value == "Fiction, Literature"
-    assert "Synopsis is missing." in sheet.cell(row=2, column=8).value
+    assert sheet.cell(row=2, column=3).value == "Example Subtitle"
+    assert sheet.cell(row=2, column=4).value == "Example Author"
+    assert sheet.cell(row=2, column=5).value == "Example Editorial"
+    assert sheet.cell(row=2, column=8).value == "Fiction, Literature"
+    assert "Synopsis is missing." in sheet.cell(row=2, column=9).value
     assert sheet.max_row == 2
