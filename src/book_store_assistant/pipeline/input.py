@@ -6,12 +6,15 @@ from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.pipeline.results import InputReadResult
 
 
+HEADER_VALUES = {"isbn", "isbn13"}
+
+
 def _normalize_raw_value(value: str) -> str:
     return value.lstrip("\ufeff")
 
 
 def _is_header_row(value: str) -> bool:
-    return _normalize_raw_value(value).strip().casefold() == "isbn"
+    return _normalize_raw_value(value).strip().casefold() in HEADER_VALUES
 
 
 def _is_blank_value(value: str) -> bool:
