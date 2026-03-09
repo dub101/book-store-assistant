@@ -90,6 +90,10 @@ Rules:
 - Additional `|`-separated values are accepted aliases for matching
 - Blank lines and `#` comments are ignored
 
+Current pipeline note:
+- The ISBN import pipeline currently resolves subjects only against book subject types (`L0`)
+- Non-book subject types such as `P0` are preserved in the catalog for future use, but are excluded from subject resolution in the current workflow
+
 Example:
 ```text
 # canonical | aliases
