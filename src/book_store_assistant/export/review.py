@@ -21,6 +21,21 @@ HEADERS = [
     "Errors",
 ]
 
+COLUMN_WIDTHS = {
+    "A": 18,
+    "B": 32,
+    "C": 28,
+    "D": 24,
+    "E": 24,
+    "F": 16,
+    "G": 12,
+    "H": 18,
+    "I": 28,
+    "J": 36,
+    "K": 60,
+    "L": 40,
+}
+
 
 def export_review_rows(results: list[ResolutionResult], output_path: Path) -> None:
     workbook = openpyxl.Workbook()
@@ -52,6 +67,9 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
 
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
+
+    for column, width in COLUMN_WIDTHS.items():
+        sheet.column_dimensions[column].width = width
 
     for row in sheet.iter_rows(min_row=2, min_col=11, max_col=12):
         for cell in row:
