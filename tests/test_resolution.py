@@ -91,6 +91,34 @@ def test_resolve_book_record_uses_matching_category_as_subject(tmp_path: Path) -
     assert result.record.subject == "Historia"
 
 
+def test_resolve_book_record_ignores_non_book_subject_types(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.tsv"
+    subject_file.write_text(
+        "Subject\tDescription\tSubject_Type\n"
+        "22\tPELUCHES Y TITERES\tP0\n"
+        "13\tFICCION\tL0\n",
+        encoding="utf-8",
+    )
+
+    source_record = SourceBookRecord(
+        source_name="google_books",
+        isbn="9780306406157",
+        title="Example Title",
+        author="Example Author",
+        editorial="Example Editorial",
+        synopsis="Resumen del libro.",
+        language="es",
+        categories=["Peluches y titeres"],
+        field_sources={"categories": "google_books"},
+    )
+
+    result = resolve_book_record(source_record, subjects_path=subject_file)
+
+    assert result.record is None
+    assert result.reason_codes == [SUBJECT_MISSING_CODE]
+    assert "Subject is missing." in result.errors
+
+
 def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Path) -> None:
     subject_file = tmp_path / "subjects.txt"
     subject_file.write_text("Narrativa\nHistoria\n", encoding="utf-8")
