@@ -6,6 +6,8 @@ from book_store_assistant.sources.results import FetchResult
 
 
 class MissingSource:
+    source_name = "missing_source"
+
     def __init__(self, error: str) -> None:
         self.error = error
 
@@ -14,6 +16,8 @@ class MissingSource:
 
 
 class FoundSource:
+    source_name = "found_source"
+
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(
             isbn=isbn,
@@ -58,6 +62,6 @@ def test_fallback_metadata_source_accumulates_errors_when_all_sources_fail() -> 
 
     assert result.record is None
     assert result.errors == [
-        "No Google Books match found.",
-        "No Open Library match found.",
+        "missing_source: No Google Books match found.",
+        "missing_source: No Open Library match found.",
     ]

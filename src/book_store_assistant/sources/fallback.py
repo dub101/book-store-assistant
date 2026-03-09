@@ -17,6 +17,7 @@ class FallbackMetadataSource:
             if result.record is not None:
                 return result
 
-            errors.extend(result.errors)
+            source_name = getattr(source, "source_name", source.__class__.__name__)
+            errors.extend(f"{source_name}: {error}" for error in result.errors)
 
         return FetchResult(isbn=isbn, record=None, errors=errors)
