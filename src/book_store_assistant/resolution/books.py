@@ -157,6 +157,12 @@ def resolve_book_record(
             review_details=review_details,
         )
 
+    assert source_record.title is not None
+    assert source_record.author is not None
+    assert source_record.editorial is not None
+    assert resolved_synopsis is not None
+    assert resolved_subject is not None
+
     record = BookRecord(
         isbn=source_record.isbn,
         title=source_record.title,

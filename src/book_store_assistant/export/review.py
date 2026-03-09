@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import openpyxl
-from openpyxl.styles import Alignment
 
 from book_store_assistant.export.schema import (
     REVIEW_COLUMN_WIDTHS,
     REVIEW_HEADERS,
     REVIEW_SHEET_NAME,
 )
+from book_store_assistant.export.workbook import apply_sheet_basics
 from book_store_assistant.resolution.results import ResolutionResult
 
 
@@ -60,14 +60,11 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
             ]
         )
 
-    sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = sheet.dimensions
-
-    for column, width in REVIEW_COLUMN_WIDTHS.items():
-        sheet.column_dimensions[column].width = width
-
-    for row in sheet.iter_rows(min_row=2, min_col=11, max_col=14):
-        for cell in row:
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+    apply_sheet_basics(
+        sheet,
+        freeze_panes="A2",
+        column_widths=REVIEW_COLUMN_WIDTHS,
+        wrap_columns=(11, 14),
+    )
 
     workbook.save(output_path)

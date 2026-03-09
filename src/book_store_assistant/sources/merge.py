@@ -82,28 +82,23 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
     for record in records[1:]:
         record_field_sources = _seed_field_sources(record)
 
-        merged_values: dict[str, object] = {
-            "source_name": _merge_source_names(merged.source_name, record.source_name),
-            "isbn": merged.isbn,
-            "categories": _merge_string_lists(merged.categories, record.categories),
-            "cover_url": merged.cover_url or record.cover_url,
-        }
-
-        for field_name in SCALAR_FIELDS:
-            merged_values[field_name] = _merge_scalar_field(
-                merged,
-                record,
-                field_sources,
-                field_name,
-            )
+        source_name = _merge_source_names(merged.source_name, record.source_name)
+        categories = _merge_string_lists(merged.categories, record.categories)
+        cover_url = merged.cover_url or record.cover_url
+        title = _merge_scalar_field(merged, record, field_sources, "title")
+        subtitle = _merge_scalar_field(merged, record, field_sources, "subtitle")
+        author = _merge_scalar_field(merged, record, field_sources, "author")
+        editorial = _merge_scalar_field(merged, record, field_sources, "editorial")
+        synopsis = _merge_scalar_field(merged, record, field_sources, "synopsis")
+        subject = _merge_scalar_field(merged, record, field_sources, "subject")
+        language = _merge_scalar_field(merged, record, field_sources, "language")
 
         if merged.cover_url is None and record.cover_url is not None:
             field_sources["cover_url"] = record.source_name
         elif merged.cover_url is not None and "cover_url" not in field_sources:
             field_sources["cover_url"] = merged.source_name
 
-        merged_categories = merged_values["categories"]
-        if isinstance(merged_categories, list) and merged_categories:
+        if categories:
             merged_category_source = field_sources.get("categories")
             record_category_source = record_field_sources.get("categories")
 
@@ -118,7 +113,17 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
                 field_sources["categories"] = merged_category_source
 
         merged = SourceBookRecord(
-            **merged_values,
+            source_name=source_name,
+            isbn=merged.isbn,
+            title=title,
+            subtitle=subtitle,
+            author=author,
+            editorial=editorial,
+            synopsis=synopsis,
+            subject=subject,
+            categories=categories,
+            cover_url=cover_url,
+            language=language,
             field_sources=field_sources,
         )
 

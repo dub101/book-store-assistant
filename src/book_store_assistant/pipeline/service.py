@@ -19,7 +19,10 @@ def build_default_source() -> MetadataSource:
     )
 
 
-def process_isbn_file(input_path: Path, source: MetadataSource | None = None) -> ProcessResult:
+def process_isbn_file(
+    input_path: Path,
+    source: MetadataSource | None = None,
+) -> ProcessResult:
     """Read ISBNs, fetch metadata, and resolve source records."""
     input_result = read_isbn_inputs(input_path)
     active_source = source or build_default_source()

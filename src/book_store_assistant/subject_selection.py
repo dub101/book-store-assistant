@@ -1,4 +1,5 @@
 import unicodedata
+from typing import cast
 
 
 def _strip_accents(value: str) -> str:
@@ -17,11 +18,11 @@ def _normalize_subject_rows(
     if not allowed_subjects:
         return []
 
-    first_item = allowed_subjects[0]
-    if isinstance(first_item, str):
-        return [[subject] for subject in allowed_subjects]
+    if all(isinstance(item, str) for item in allowed_subjects):
+        flat_subjects = cast(list[str], allowed_subjects)
+        return [[subject] for subject in flat_subjects]
 
-    return allowed_subjects
+    return cast(list[list[str]], allowed_subjects)
 
 
 def _contains_normalized_phrase(candidate: str, value: str) -> bool:

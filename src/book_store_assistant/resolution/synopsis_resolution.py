@@ -18,6 +18,7 @@ def resolve_synopsis(synopsis: str | None, language: str | None) -> str | None:
     if language is not None and not is_spanish_language(language):
         return None
 
+    assert synopsis is not None
     return synopsis.strip()
 
 
