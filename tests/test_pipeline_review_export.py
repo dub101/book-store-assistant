@@ -38,3 +38,26 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
+
+
+def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: Path) -> None:
+    output_file = tmp_path / "review.xlsx"
+    results = [
+        ResolutionResult(
+            record=None,
+            source_record=SourceBookRecord(
+                source_name="fetch_error",
+                isbn="9780306406157",
+            ),
+            errors=["google_books: No Google Books match found."],
+        )
+    ]
+
+    export_unresolved_results(results, output_file)
+
+    workbook = openpyxl.load_workbook(output_file)
+    sheet = workbook.active
+
+    assert sheet.max_row == 2
+    assert sheet.cell(row=2, column=1).value == "9780306406157"
+    assert sheet.cell(row=2, column=3).value == "fetch_error"
