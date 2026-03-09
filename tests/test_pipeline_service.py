@@ -14,8 +14,9 @@ def test_build_default_source_returns_fallback_metadata_source() -> None:
     source = build_default_source()
 
     assert isinstance(source, FallbackMetadataSource)
-    assert len(source.sources) == 1
+    assert len(source.sources) == 2
     assert source.sources[0].source_name == "google_books"
+    assert source.sources[1].source_name == "open_library"
 
 
 def test_process_isbn_file_uses_injected_source(tmp_path: Path) -> None:
