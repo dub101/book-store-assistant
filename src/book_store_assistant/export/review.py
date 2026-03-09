@@ -48,4 +48,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
             ]
         )
 
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
     workbook.save(output_path)

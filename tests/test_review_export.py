@@ -60,4 +60,6 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=10).value == "https://example.com/cover.jpg"
     assert sheet.cell(row=2, column=11).value == "Book description."
     assert "Synopsis is missing." in sheet.cell(row=2, column=12).value
+    assert sheet.freeze_panes == "A2"
+    assert sheet.auto_filter.ref == "A1:L2"
     assert sheet.max_row == 2
