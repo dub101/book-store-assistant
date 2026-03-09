@@ -12,6 +12,16 @@ from book_store_assistant.sources.results import FetchResult
 app = typer.Typer(help="Book Store Assistant CLI.")
 
 
+def _summarize_fetch_result(result: FetchResult) -> str:
+    if result.record is not None and result.errors:
+        return f"{result.isbn}: metadata fetched with source errors"
+    if result.record is not None:
+        return f"{result.isbn}: metadata fetched"
+    if result.errors:
+        return f"{result.isbn}: fetch failed"
+    return f"{result.isbn}: no metadata found"
+
+
 @app.command()
 def main(
     input_path: Path,
@@ -32,6 +42,7 @@ def main(
 
             def on_fetch_complete(index: int, total: int, result: FetchResult) -> None:
                 progress.update(1)
+                typer.echo(_summarize_fetch_result(result), err=True)
 
             result = process_isbn_file(
                 input_path,
