@@ -37,4 +37,7 @@ def export_books(records: list[BookRecord], output_path: Path) -> None:
             ]
         )
 
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
     workbook.save(output_path)
