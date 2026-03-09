@@ -37,6 +37,25 @@ Current observations:
 - A clearly documented public API has not yet been confirmed.
 - Adapter work should wait until the search and record surface is verified as stable enough.
 
+## Probe Findings
+
+The manual probe established the following:
+- the plain WordPress search path using `?s=<isbn>` is not useful for metadata lookup
+- those pages resolve to generic site search pages and can return `search-no-results`
+- a dedicated catalog page exists and uses a custom `rilvi` template plus the `cerlalc-plugin-2018` plugin
+- stable-looking `rilvi/...` record pages exist and appear to expose bibliographic fields
+- a clean public ISBN lookup endpoint was not confirmed from the catalog page surface
+
+Observed likely-available fields from record pages:
+- title
+- ISBN
+- editorial
+- language
+- subject or materia clues
+
+Observed likely gap:
+- synopsis does not appear to be a strong or reliable field on the record pages we inspected
+
 ## Desired Metadata
 
 Highest-value fields for the current pipeline:
@@ -59,13 +78,23 @@ Do not proceed directly to production integration if:
 - anti-bot measures or session-heavy flows are required
 - field availability is too thin to improve current yield meaningfully
 
+## Decision
+
+Current decision: defer `CerlalcSource` for now.
+
+Reasoning:
+- Cerlalc may still be valuable as a secondary enrichment source later
+- it does not currently present a confirmed clean ISBN lookup surface
+- it is unlikely to address the primary current blocker, which is missing Spanish synopsis
+- the next source search should prioritize synopsis coverage first, with Cerlalc kept as a secondary candidate
+
 ## Next Step
 
-Perform a focused technical verification of Cerlalc search and record lookup behavior by ISBN, then decide whether to:
-- add a `CerlalcSource` adapter
-- defer Cerlalc and evaluate other Spanish-first sources
+The Cerlalc spike is complete.
 
-The goal of the spike is not to ship an adapter immediately. The goal is to answer whether Cerlalc can be integrated safely and maintainably within the current ports-and-adapters architecture.
+Next action:
+- evaluate another Spanish-first metadata source with stronger chances of providing usable synopsis text
+- keep Cerlalc on the backlog as a possible secondary enrichment source for bibliographic fields
 
 ## Planned Probe
 
@@ -92,3 +121,7 @@ Success condition:
 
 Failure condition:
 - lookup depends on brittle navigation, session-heavy flows, or inconsistent pages
+
+Outcome:
+- failure for the simple public search path
+- inconclusive but not strong enough for immediate adapter work on the dedicated catalog path

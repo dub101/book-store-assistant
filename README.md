@@ -31,7 +31,7 @@ Pending:
 - More robust subject heuristics beyond conservative embedded matching
 - Confidence scoring and source precedence policy
 - Better CLI workflow and example input/output files
-- Spanish-first source expansion research, starting with Cerlalc feasibility
+- Spanish-first source expansion research, prioritizing sources with stronger synopsis coverage
 
 ## Version 1 Scope
 
@@ -171,32 +171,28 @@ Current operator note:
 
 ## Source Expansion Research
 
-The next source investigation is Cerlalc because it is directly aligned with Spanish and Latin American book metadata.
+The Cerlalc feasibility spike has been completed.
 
 See `docs/cerlalc_research.md` for the working feasibility note.
 
-Current research goal:
-- determine whether Cerlalc exposes a stable public search or record endpoint
-- determine whether it can be integrated as a source without brittle scraping
-- identify which fields are realistically available for enrichment:
-  - title
-  - author
-  - editorial
-  - synopsis
-  - language
-  - subject clues
+Current conclusion:
+- Cerlalc is relevant as a Spanish and Latin American bibliographic source
+- the obvious public search path is not suitable for ISBN lookup
+- stable-looking `rilvi` record pages exist, but a clean public lookup endpoint was not confirmed
+- Cerlalc may still be useful later for title, editorial, language, and subject clues
+- Cerlalc is not currently the best next source because it is unlikely to materially improve synopsis coverage
 
 Why this matters:
 - recent real-batch testing showed low resolved yield
 - the main blockers were missing synopsis and weak Spanish-language coverage
-- Cerlalc is the most plausible next source to improve those outcomes
+- the next source should be selected primarily on its ability to improve Spanish synopsis availability
 
 Planned probe workflow:
 ```bash
 python scripts/probe_cerlalc.py 9786070728792
 ```
 
-The probe is intended to test whether Cerlalc exposes a stable ISBN lookup surface before any production adapter is added.
+The probe established that Cerlalc should be treated as a deferred source candidate rather than the immediate next adapter.
 
 ## Next Steps
 
@@ -205,16 +201,16 @@ The probe is intended to test whether Cerlalc exposes a stable ISBN lookup surfa
    - add clearer per-ISBN final status such as `resolved` or `review`
 
 2. Run a focused Cerlalc feasibility spike.
-   - verify whether lookup by ISBN is stable
-   - determine whether integration would use a public endpoint or brittle scraping
-   - confirm which metadata fields are realistically available
+   - completed
+   - result: defer adapter work for now
 
-3. Add a `CerlalcSource` adapter only if the lookup surface is stable.
-   - start conservatively
-   - prioritize title, editorial, language, synopsis, and subject clues
+3. Identify the next Spanish-first source.
+   - prioritize reliable ISBN lookup
+   - prioritize Spanish synopsis availability
+   - treat Cerlalc as a secondary metadata candidate, not the primary next source
 
 4. Re-run end-to-end acceptance testing on real ISBN batches.
-   - compare resolved rate before and after the new source
+   - compare resolved rate before and after the next source addition
    - inspect review rows to see whether synopsis coverage improves
 
 ## Project Structure
