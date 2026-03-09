@@ -37,6 +37,24 @@ def test_resolve_subject_matches_alias_to_canonical_subject() -> None:
     assert subject == "Narrativa"
 
 
+def test_resolve_subject_splits_ampersand_categories() -> None:
+    subject = resolve_subject(
+        ["Fiction & Literature"],
+        [["Narrativa", "Fiction"], ["Literatura", "Literature"]],
+    )
+
+    assert subject == "Narrativa"
+
+
+def test_resolve_subject_matches_embedded_alias_in_larger_phrase() -> None:
+    subject = resolve_subject(
+        ["Historia argentina"],
+        [["Narrativa", "Fiction"], ["Historia", "Historical"]],
+    )
+
+    assert subject == "Historia"
+
+
 def test_resolve_subject_returns_none_when_no_candidate_matches() -> None:
     subject = resolve_subject(
         ["Poetry", "Drama"],

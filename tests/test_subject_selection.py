@@ -19,6 +19,24 @@ def test_select_subject_ignores_accents() -> None:
     assert selected == "Poesia"
 
 
+def test_select_subject_matches_embedded_alias_with_word_boundaries() -> None:
+    selected = select_subject(
+        "Juvenile Fiction",
+        [["Narrativa", "Fiction"], ["Historia", "Historical"]],
+    )
+
+    assert selected == "Narrativa"
+
+
+def test_select_subject_does_not_match_partial_words() -> None:
+    selected = select_subject(
+        "Historias breves",
+        [["Historia"], ["Narrativa"]],
+    )
+
+    assert selected is None
+
+
 def test_select_subject_returns_none_when_candidate_is_not_allowed() -> None:
     selected = select_subject("Ensayo", ["Narrativa", "Historia"])
 

@@ -4,7 +4,7 @@ from book_store_assistant.subject_selection import select_subject
 def _expand_candidates(candidate: str) -> list[str]:
     expanded = [candidate]
 
-    for separator in ("/", ",", ";", ">"):
+    for separator in ("/", ",", ";", ">", "&"):
         parts: list[str] = []
         for item in expanded:
             parts.extend(item.split(separator))
