@@ -13,3 +13,4 @@ class SourceBookRecord(BaseModel):
     categories: list[str] = Field(default_factory=list)
     cover_url: HttpUrl | None = None
     language: str | None = None
+    field_sources: dict[str, str] = Field(default_factory=dict)

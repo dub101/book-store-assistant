@@ -39,6 +39,15 @@ def test_merge_source_records_fills_missing_fields_from_later_records() -> None:
     assert merged.subject == "Novela"
     assert merged.language == "es"
     assert merged.categories == ["Fiction", "Drama"]
+    assert merged.field_sources == {
+        "title": "google_books",
+        "author": "google_books",
+        "editorial": "open_library",
+        "synopsis": "open_library",
+        "subject": "open_library",
+        "language": "open_library",
+        "categories": "google_books + open_library",
+    }
 
 
 def test_merge_source_records_does_not_override_existing_values() -> None:
@@ -73,6 +82,14 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
     assert merged.synopsis == "Sinopsis primaria."
     assert merged.subject == "Historia"
     assert merged.language == "es"
+    assert merged.field_sources == {
+        "title": "google_books",
+        "author": "google_books",
+        "editorial": "google_books",
+        "synopsis": "google_books",
+        "subject": "google_books",
+        "language": "google_books",
+    }
 
 
 def test_merge_source_records_deduplicates_source_names_and_categories() -> None:
@@ -93,3 +110,6 @@ def test_merge_source_records_deduplicates_source_names_and_categories() -> None
 
     assert merged.source_name == "google_books + open_library"
     assert merged.categories == ["Fiction", "Drama", "Poetry"]
+    assert merged.field_sources == {
+        "categories": "google_books + open_library",
+    }

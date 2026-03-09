@@ -18,6 +18,7 @@ HEADERS = [
     "Categories",
     "CoverURL",
     "Synopsis",
+    "FieldSources",
     "Errors",
 ]
 
@@ -34,7 +35,15 @@ COLUMN_WIDTHS = {
     "J": 36,
     "K": 60,
     "L": 40,
+    "M": 40,
 }
+
+
+def _format_field_sources(field_sources: dict[str, str]) -> str | None:
+    if not field_sources:
+        return None
+
+    return "; ".join(f"{field}={source}" for field, source in sorted(field_sources.items()))
 
 
 def export_review_rows(results: list[ResolutionResult], output_path: Path) -> None:
@@ -61,6 +70,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
                 ", ".join(source_record.categories) if source_record is not None else None,
                 str(source_record.cover_url) if source_record is not None and source_record.cover_url else None,
                 source_record.synopsis if source_record is not None else None,
+                _format_field_sources(source_record.field_sources) if source_record is not None else None,
                 "; ".join(result.errors),
             ]
         )
@@ -71,7 +81,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
     for column, width in COLUMN_WIDTHS.items():
         sheet.column_dimensions[column].width = width
 
-    for row in sheet.iter_rows(min_row=2, min_col=11, max_col=12):
+    for row in sheet.iter_rows(min_row=2, min_col=11, max_col=13):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
 
