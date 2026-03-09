@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from book_store_assistant.pipeline.service import build_default_source, process_isbn_file
+from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.results import FetchResult
 
@@ -8,6 +9,14 @@ from book_store_assistant.sources.results import FetchResult
 class DummySource:
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(isbn=isbn, record=None, errors=["No match"])
+
+
+def test_build_default_sources_returns_sources_in_precedence_order() -> None:
+    sources = build_default_sources()
+
+    assert len(sources) == 2
+    assert sources[0].source_name == "google_books"
+    assert sources[1].source_name == "open_library"
 
 
 def test_build_default_source_returns_fallback_metadata_source() -> None:

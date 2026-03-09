@@ -4,9 +4,8 @@ from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
+from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
-from book_store_assistant.sources.google_books import GoogleBooksSource
-from book_store_assistant.sources.open_library import OpenLibrarySource
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
     FetchStartCallback,
@@ -15,12 +14,7 @@ from book_store_assistant.sources.service import (
 
 
 def build_default_source() -> MetadataSource:
-    return FallbackMetadataSource(
-        [
-            GoogleBooksSource(),
-            OpenLibrarySource(),
-        ]
-    )
+    return FallbackMetadataSource(build_default_sources())
 
 
 def process_isbn_file(
