@@ -173,6 +173,8 @@ Current operator note:
 
 The next source investigation is Cerlalc because it is directly aligned with Spanish and Latin American book metadata.
 
+See `docs/cerlalc_research.md` for the working feasibility note.
+
 Current research goal:
 - determine whether Cerlalc exposes a stable public search or record endpoint
 - determine whether it can be integrated as a source without brittle scraping
@@ -188,6 +190,25 @@ Why this matters:
 - recent real-batch testing showed low resolved yield
 - the main blockers were missing synopsis and weak Spanish-language coverage
 - Cerlalc is the most plausible next source to improve those outcomes
+
+## Next Steps
+
+1. Improve operator feedback during long runs.
+   - keep the progress bar
+   - add clearer per-ISBN final status such as `resolved` or `review`
+
+2. Run a focused Cerlalc feasibility spike.
+   - verify whether lookup by ISBN is stable
+   - determine whether integration would use a public endpoint or brittle scraping
+   - confirm which metadata fields are realistically available
+
+3. Add a `CerlalcSource` adapter only if the lookup surface is stable.
+   - start conservatively
+   - prioritize title, editorial, language, synopsis, and subject clues
+
+4. Re-run end-to-end acceptance testing on real ISBN batches.
+   - compare resolved rate before and after the new source
+   - inspect review rows to see whether synopsis coverage improves
 
 ## Project Structure
 - `src/book_store_assistant/` application code
