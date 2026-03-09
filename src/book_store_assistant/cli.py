@@ -29,11 +29,21 @@ def main(
     typer.echo(f"Unresolved records: {unresolved_count}")
 
     if unresolved_results:
+        source_counts = Counter(
+            unresolved_result.source_record.source_name
+            for unresolved_result in unresolved_results
+            if unresolved_result.source_record is not None
+        )
         error_counts = Counter(
             error
             for unresolved_result in unresolved_results
             for error in unresolved_result.errors
         )
+
+        if source_counts:
+            typer.echo("Unresolved sources:")
+            for source_name, count in sorted(source_counts.items()):
+                typer.echo(f"- {source_name}: {count}")
 
         typer.echo("Unresolved reasons:")
         for error, count in sorted(error_counts.items()):

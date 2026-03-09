@@ -40,7 +40,7 @@ def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_
         ),
         FetchResult(
             isbn="9780306406158",
-            record=SourceBookRecord(source_name="google_books", isbn="9780306406158"),
+            record=SourceBookRecord(source_name="fetch_error", isbn="9780306406158"),
             errors=[],
         ),
     ]
@@ -48,12 +48,12 @@ def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_
         ResolutionResult(
             record=None,
             source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
-            errors=["Synopsis is missing.", "Subject is missing."],
+            errors=["Subject is missing."],
         ),
         ResolutionResult(
             record=None,
-            source_record=SourceBookRecord(source_name="google_books", isbn="9780306406158"),
-            errors=["Synopsis is missing."],
+            source_record=SourceBookRecord(source_name="fetch_error", isbn="9780306406158"),
+            errors=["google_books: No Google Books match found."],
         ),
     ]
 
@@ -61,6 +61,9 @@ def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_
 
     assert result.exit_code == 0
     assert "Unresolved records: 2" in result.stdout
+    assert "Unresolved sources:" in result.stdout
+    assert "- fetch_error: 1" in result.stdout
+    assert "- google_books: 1" in result.stdout
     assert "Unresolved reasons:" in result.stdout
     assert "- Subject is missing.: 1" in result.stdout
-    assert "- Synopsis is missing.: 2" in result.stdout
+    assert "- google_books: No Google Books match found.: 1" in result.stdout
