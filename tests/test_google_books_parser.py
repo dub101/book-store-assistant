@@ -11,7 +11,7 @@ def test_parse_google_books_payload_returns_source_record() -> None:
                     "authors": ["Author One", "Author Two"],
                     "publisher": "Example Editorial",
                     "description": "Resumen del libro.",
-                    "language": "es",
+                    "language": "spa",
                     "categories": ["Fiction", "Literary Collections"],
                     "imageLinks": {
                         "thumbnail": "https://example.com/cover.jpg",
@@ -27,5 +27,24 @@ def test_parse_google_books_payload_returns_source_record() -> None:
     assert record.source_name == "google_books"
     assert record.isbn == "9780306406157"
     assert record.author == "Author One, Author Two"
+    assert record.language == "es"
     assert record.categories == ["Fiction", "Literary Collections"]
     assert str(record.cover_url) == "https://example.com/cover.jpg"
+
+
+def test_parse_google_books_payload_keeps_unknown_language_codes() -> None:
+    payload = {
+        "items": [
+            {
+                "volumeInfo": {
+                    "title": "Example Title",
+                    "language": "fre",
+                }
+            }
+        ]
+    }
+
+    record = parse_google_books_payload(payload, "9780306406157")
+
+    assert record is not None
+    assert record.language == "fre"
