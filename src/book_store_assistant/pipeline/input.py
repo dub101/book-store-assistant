@@ -6,6 +6,10 @@ from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.pipeline.results import InputReadResult
 
 
+def _is_header_row(value: str) -> bool:
+    return value.strip().casefold() == "isbn"
+
+
 def read_isbn_inputs(input_path: Path) -> InputReadResult:
     """Read ISBN values from a CSV file and split valid rows from invalid ones."""
     valid_inputs: list[ISBNInput] = []
@@ -17,10 +21,14 @@ def read_isbn_inputs(input_path: Path) -> InputReadResult:
             if not row:
                 continue
 
-            normalized_isbn = normalize_isbn(row[0])
+            raw_value = row[0]
+            if _is_header_row(raw_value):
+                continue
+
+            normalized_isbn = normalize_isbn(raw_value)
             if is_valid_isbn(normalized_isbn):
                 valid_inputs.append(ISBNInput(isbn=normalized_isbn))
             else:
-                invalid_values.append(row[0])
+                invalid_values.append(raw_value)
 
     return InputReadResult(valid_inputs=valid_inputs, invalid_values=invalid_values)
