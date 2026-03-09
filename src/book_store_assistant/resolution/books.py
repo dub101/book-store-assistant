@@ -9,7 +9,7 @@ from book_store_assistant.resolution.synopsis_resolution import (
     resolve_synopsis,
 )
 from book_store_assistant.sources.models import SourceBookRecord
-from book_store_assistant.subject_mapping import get_subjects
+from book_store_assistant.subject_mapping import get_subject_rows
 
 
 TITLE_MISSING_ERROR = "Title is missing."
@@ -63,9 +63,9 @@ def resolve_book_record(
     reason_codes: list[str] = []
     review_details: list[str] = []
     errors: list[str] = []
-    allowed_subjects = get_subjects(subjects_path) if subjects_path is not None else get_subjects()
+    allowed_subject_rows = get_subject_rows(subjects_path) if subjects_path is not None else get_subject_rows()
 
-    resolved_subject = source_record.subject or resolve_subject(source_record.categories, allowed_subjects)
+    resolved_subject = source_record.subject or resolve_subject(source_record.categories, allowed_subject_rows)
     resolved_synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
     synopsis_review_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
 

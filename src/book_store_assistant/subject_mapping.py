@@ -1,9 +1,13 @@
 from pathlib import Path
 
-from book_store_assistant.subject_loader import load_subjects
+from book_store_assistant.subject_loader import load_subject_rows, load_subjects
 
 
 DEFAULT_SUBJECTS_PATH = Path("data/reference/subjects.txt")
+
+
+def get_subject_rows(path: Path = DEFAULT_SUBJECTS_PATH) -> list[list[str]]:
+    return load_subject_rows(path)
 
 
 def get_subjects(path: Path = DEFAULT_SUBJECTS_PATH) -> list[str]:

@@ -13,10 +13,10 @@ def _expand_candidates(candidate: str) -> list[str]:
     return [item.strip() for item in expanded if item.strip()]
 
 
-def resolve_subject(candidates: list[str], allowed_subjects: list[str]) -> str | None:
+def resolve_subject(candidates: list[str], allowed_subject_rows: list[list[str]]) -> str | None:
     for candidate in candidates:
         for expanded_candidate in _expand_candidates(candidate):
-            subject = select_subject(expanded_candidate, allowed_subjects)
+            subject = select_subject(expanded_candidate, allowed_subject_rows)
             if subject is not None:
                 return subject
 
