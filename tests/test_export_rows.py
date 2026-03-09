@@ -12,7 +12,7 @@ def test_build_books_row_returns_expected_values() -> None:
         author="Example Author",
         editorial="Example Editorial",
         synopsis="Resumen del libro.",
-        subject="Narrativa",
+        subject="FICCION",
         cover_url="https://example.com/cover.jpg",
     )
 
@@ -25,7 +25,8 @@ def test_build_books_row_returns_expected_values() -> None:
         "Example Author",
         "Example Editorial",
         "Resumen del libro.",
-        "Narrativa",
+        "FICCION",
+        "13",
         "https://example.com/cover.jpg",
     ]
 

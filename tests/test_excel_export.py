@@ -17,7 +17,7 @@ def test_export_books_writes_expected_columns_and_row(tmp_path: Path) -> None:
             author="Example Author",
             editorial="Example Editorial",
             synopsis="Resumen del libro.",
-            subject="Narrativa",
+            subject="FICCION",
             cover_url="https://example.com/cover.jpg",
         )
     ]
@@ -33,6 +33,7 @@ def test_export_books_writes_expected_columns_and_row(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=6).value == "Resumen del libro."
     assert sheet.cell(row=2, column=6).alignment.wrap_text is True
     assert sheet.cell(row=2, column=6).alignment.vertical == "top"
-    assert sheet.cell(row=2, column=8).value == "https://example.com/cover.jpg"
+    assert sheet.cell(row=2, column=8).value == "13"
+    assert sheet.cell(row=2, column=9).value == "https://example.com/cover.jpg"
     assert sheet.freeze_panes == "A2"
-    assert sheet.auto_filter.ref == "A1:H2"
+    assert sheet.auto_filter.ref == "A1:I2"

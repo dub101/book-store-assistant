@@ -11,6 +11,8 @@ def _format_field_sources(field_sources: dict[str, str]) -> str | None:
 
 
 def build_books_row(record: BookRecord) -> list[str | None]:
+    subject_entry = find_subject_entry_by_description(record.subject)
+
     return [
         record.isbn,
         record.title,
@@ -19,6 +21,7 @@ def build_books_row(record: BookRecord) -> list[str | None]:
         record.editorial,
         record.synopsis,
         record.subject,
+        subject_entry.subject if subject_entry is not None else None,
         str(record.cover_url) if record.cover_url else None,
     ]
 

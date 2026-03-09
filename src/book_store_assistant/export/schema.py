@@ -8,6 +8,7 @@ BOOKS_HEADERS = [
     "Editorial",
     "Synopsis",
     "Subject",
+    "SubjectCode",
     "CoverURL",
 ]
 
