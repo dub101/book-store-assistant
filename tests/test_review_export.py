@@ -20,7 +20,7 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
         author="Example Author",
         editorial="Example Editorial",
         synopsis="Book description.",
-        subject="Fiction",
+        subject="FICCION",
         language="en",
         categories=["Fiction", "Literature"],
         cover_url="https://example.com/cover.jpg",
@@ -65,17 +65,20 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.title == REVIEW_SHEET_NAME
     assert [cell.value for cell in sheet[1]] == REVIEW_HEADERS
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=11).value == "Book description."
-    assert "categories=google_books + open_library" in sheet.cell(row=2, column=12).value
-    assert sheet.cell(row=2, column=13).value == "MISSING_SYNOPSIS"
+    assert sheet.cell(row=2, column=8).value == "FICCION"
+    assert sheet.cell(row=2, column=9).value == "13"
+    assert sheet.cell(row=2, column=10).value == "L0"
+    assert sheet.cell(row=2, column=13).value == "Book description."
+    assert "categories=google_books + open_library" in sheet.cell(row=2, column=14).value
+    assert sheet.cell(row=2, column=15).value == "MISSING_SYNOPSIS"
     assert (
         "Synopsis came from google_books with language 'en'."
-        in sheet.cell(row=2, column=14).value
+        in sheet.cell(row=2, column=16).value
     )
-    assert sheet.cell(row=2, column=11).alignment.wrap_text is True
-    assert sheet.cell(row=2, column=12).alignment.wrap_text is True
     assert sheet.cell(row=2, column=13).alignment.wrap_text is True
     assert sheet.cell(row=2, column=14).alignment.wrap_text is True
+    assert sheet.cell(row=2, column=15).alignment.wrap_text is True
+    assert sheet.cell(row=2, column=16).alignment.wrap_text is True
     assert sheet.freeze_panes == "A2"
-    assert sheet.auto_filter.ref == "A1:N2"
+    assert sheet.auto_filter.ref == "A1:P2"
     assert sheet.max_row == 2

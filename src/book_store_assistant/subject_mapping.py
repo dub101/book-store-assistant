@@ -35,6 +35,19 @@ def get_subject_entries(
     )
 
 
+def find_subject_entry_by_description(
+    description: str,
+    path: Path = DEFAULT_SUBJECTS_PATH,
+    allowed_subject_types: frozenset[str] | None = BOOK_SUBJECT_TYPES,
+) -> SubjectEntry | None:
+    normalized_description = description.strip().casefold()
+    for entry in get_subject_entries(path, allowed_subject_types):
+        if entry.description.strip().casefold() == normalized_description:
+            return entry
+
+    return None
+
+
 def get_subject_rows(
     path: Path = DEFAULT_SUBJECTS_PATH,
     allowed_subject_types: frozenset[str] | None = BOOK_SUBJECT_TYPES,
