@@ -2,7 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
-from book_store_assistant.export.review_schema import REVIEW_HEADERS, REVIEW_SHEET_NAME
+from book_store_assistant.export.schema import REVIEW_HEADERS, REVIEW_SHEET_NAME
 from book_store_assistant.models import BookRecord
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord

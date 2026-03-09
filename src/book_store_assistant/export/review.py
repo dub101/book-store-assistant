@@ -3,7 +3,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Alignment
 
-from book_store_assistant.export.review_schema import (
+from book_store_assistant.export.schema import (
     REVIEW_COLUMN_WIDTHS,
     REVIEW_HEADERS,
     REVIEW_SHEET_NAME,
