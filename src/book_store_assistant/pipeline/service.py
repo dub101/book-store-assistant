@@ -7,7 +7,11 @@ from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.google_books import GoogleBooksSource
 from book_store_assistant.sources.open_library import OpenLibrarySource
-from book_store_assistant.sources.service import fetch_all
+from book_store_assistant.sources.service import (
+    FetchCompleteCallback,
+    FetchStartCallback,
+    fetch_all,
+)
 
 
 def build_default_source() -> MetadataSource:
@@ -22,11 +26,18 @@ def build_default_source() -> MetadataSource:
 def process_isbn_file(
     input_path: Path,
     source: MetadataSource | None = None,
+    on_fetch_start: FetchStartCallback | None = None,
+    on_fetch_complete: FetchCompleteCallback | None = None,
 ) -> ProcessResult:
     """Read ISBNs, fetch metadata, and resolve source records."""
     input_result = read_isbn_inputs(input_path)
     active_source = source or build_default_source()
-    fetch_results = fetch_all(active_source, input_result.valid_inputs)
+    fetch_results = fetch_all(
+        active_source,
+        input_result.valid_inputs,
+        on_fetch_start=on_fetch_start,
+        on_fetch_complete=on_fetch_complete,
+    )
     resolution_results = resolve_all(fetch_results)
 
     return ProcessResult(

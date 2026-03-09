@@ -4,8 +4,10 @@ from pathlib import Path
 import typer
 
 from book_store_assistant.pipeline.export import export_resolved_records
+from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
+from book_store_assistant.sources.results import FetchResult
 
 app = typer.Typer(help="Book Store Assistant CLI.")
 
@@ -17,7 +19,28 @@ def main(
     review_output: Path | None = None,
 ) -> None:
     """Read ISBNs from a CSV file and report pipeline counts."""
-    result = process_isbn_file(input_path)
+    input_preview = read_isbn_inputs(input_path)
+
+    if input_preview.valid_inputs:
+        with typer.progressbar(
+            length=len(input_preview.valid_inputs),
+            label="Consulting ISBNs",
+        ) as progress:
+
+            def on_fetch_start(index: int, total: int, isbn: str) -> None:
+                typer.echo(f"Consulting ISBN {index}/{total}: {isbn}", err=True)
+
+            def on_fetch_complete(index: int, total: int, result: FetchResult) -> None:
+                progress.update(1)
+
+            result = process_isbn_file(
+                input_path,
+                on_fetch_start=on_fetch_start,
+                on_fetch_complete=on_fetch_complete,
+            )
+    else:
+        result = process_isbn_file(input_path)
+
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
     unresolved_results = [item for item in result.resolution_results if item.record is None]
     unresolved_count = len(unresolved_results)
