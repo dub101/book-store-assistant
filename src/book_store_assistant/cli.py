@@ -21,6 +21,7 @@ def main(
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
     unresolved_results = [item for item in result.resolution_results if item.record is None]
     unresolved_count = len(unresolved_results)
+    fetched_count = sum(1 for item in result.fetch_results if item.record is not None)
 
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
     typer.echo(f"Invalid rows: {len(result.input_result.invalid_values)}")
@@ -30,7 +31,7 @@ def main(
         for invalid_value in result.input_result.invalid_values:
             typer.echo(f"- {invalid_value}")
 
-    typer.echo(f"Fetched records: {sum(1 for item in result.fetch_results if item.record is not None)}")
+    typer.echo(f"Fetched records: {fetched_count}")
     typer.echo(f"Resolved records: {resolved_count}")
     typer.echo(f"Unresolved records: {unresolved_count}")
 

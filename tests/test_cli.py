@@ -30,7 +30,11 @@ def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
 
 @patch("book_store_assistant.pipeline.service.fetch_all")
 @patch("book_store_assistant.pipeline.service.resolve_all")
-def test_cli_main_reports_unresolved_reason_counts(mock_resolve_all, mock_fetch_all, tmp_path) -> None:
+def test_cli_main_reports_unresolved_reason_counts(
+    mock_resolve_all,
+    mock_fetch_all,
+    tmp_path,
+) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n9780306406158\n", encoding="utf-8")
 

@@ -5,7 +5,6 @@ from book_store_assistant.isbn import is_valid_isbn, normalize_isbn
 from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.pipeline.results import InputReadResult
 
-
 HEADER_VALUES = {"isbn", "isbn13"}
 
 

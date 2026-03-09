@@ -29,6 +29,18 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
             continue
 
         source_record = result.source_record
+        cover_url = (
+            str(source_record.cover_url)
+            if source_record is not None and source_record.cover_url
+            else None
+        )
+        field_sources = (
+            _format_field_sources(source_record.field_sources)
+            if source_record is not None
+            else None
+        )
+        categories = ", ".join(source_record.categories) if source_record is not None else None
+
         sheet.append(
             [
                 source_record.isbn if source_record is not None else None,
@@ -39,10 +51,10 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
                 source_record.source_name if source_record is not None else None,
                 source_record.language if source_record is not None else None,
                 source_record.subject if source_record is not None else None,
-                ", ".join(source_record.categories) if source_record is not None else None,
-                str(source_record.cover_url) if source_record is not None and source_record.cover_url else None,
+                categories,
+                cover_url,
                 source_record.synopsis if source_record is not None else None,
-                _format_field_sources(source_record.field_sources) if source_record is not None else None,
+                field_sources,
                 ", ".join(result.reason_codes),
                 "; ".join(result.review_details),
             ]

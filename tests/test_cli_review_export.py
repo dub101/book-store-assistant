@@ -12,7 +12,6 @@ from book_store_assistant.pipeline.results import InputReadResult
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
 
-
 runner = CliRunner()
 
 

@@ -4,13 +4,11 @@ from book_store_assistant.models import BookRecord
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.subject_resolution import resolve_subject
 from book_store_assistant.resolution.synopsis_resolution import (
-    NON_SPANISH_SYNOPSIS_REVIEW_ERROR,
     get_synopsis_review_error,
     resolve_synopsis,
 )
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.subject_mapping import get_subject_rows
-
 
 TITLE_MISSING_ERROR = "Title is missing."
 AUTHOR_MISSING_ERROR = "Author is missing."
@@ -56,6 +54,19 @@ def _build_subject_review_detail(source_record: SourceBookRecord) -> str:
     return "No source supplied subject or usable categories."
 
 
+def _add_issue(
+    reason_codes: list[str],
+    errors: list[str],
+    review_details: list[str],
+    reason_code: str,
+    error: str,
+    detail: str,
+) -> None:
+    reason_codes.append(reason_code)
+    errors.append(error)
+    review_details.append(detail)
+
+
 def resolve_book_record(
     source_record: SourceBookRecord,
     subjects_path: Path | None = None,
@@ -63,41 +74,79 @@ def resolve_book_record(
     reason_codes: list[str] = []
     review_details: list[str] = []
     errors: list[str] = []
-    allowed_subject_rows = get_subject_rows(subjects_path) if subjects_path is not None else get_subject_rows()
+    allowed_subject_rows = (
+        get_subject_rows(subjects_path) if subjects_path is not None else get_subject_rows()
+    )
 
-    resolved_subject = source_record.subject or resolve_subject(source_record.categories, allowed_subject_rows)
+    resolved_subject = source_record.subject or resolve_subject(
+        source_record.categories,
+        allowed_subject_rows,
+    )
     resolved_synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
-    synopsis_review_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
+    synopsis_review_error = get_synopsis_review_error(
+        source_record.synopsis,
+        source_record.language,
+    )
 
     if not source_record.title:
-        reason_codes.append(TITLE_MISSING_CODE)
-        errors.append(TITLE_MISSING_ERROR)
-        review_details.append(_build_missing_field_detail(source_record, "title"))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            TITLE_MISSING_CODE,
+            TITLE_MISSING_ERROR,
+            _build_missing_field_detail(source_record, "title"),
+        )
 
     if not source_record.author:
-        reason_codes.append(AUTHOR_MISSING_CODE)
-        errors.append(AUTHOR_MISSING_ERROR)
-        review_details.append(_build_missing_field_detail(source_record, "author"))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            AUTHOR_MISSING_CODE,
+            AUTHOR_MISSING_ERROR,
+            _build_missing_field_detail(source_record, "author"),
+        )
 
     if not source_record.editorial:
-        reason_codes.append(EDITORIAL_MISSING_CODE)
-        errors.append(EDITORIAL_MISSING_ERROR)
-        review_details.append(_build_missing_field_detail(source_record, "editorial"))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            EDITORIAL_MISSING_CODE,
+            EDITORIAL_MISSING_ERROR,
+            _build_missing_field_detail(source_record, "editorial"),
+        )
 
     if not resolved_synopsis and synopsis_review_error is None:
-        reason_codes.append(SYNOPSIS_MISSING_CODE)
-        errors.append(SYNOPSIS_MISSING_ERROR)
-        review_details.append(_build_missing_field_detail(source_record, "synopsis"))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            SYNOPSIS_MISSING_CODE,
+            SYNOPSIS_MISSING_ERROR,
+            _build_missing_field_detail(source_record, "synopsis"),
+        )
 
     if synopsis_review_error:
-        reason_codes.append(NON_SPANISH_SYNOPSIS_CODE)
-        errors.append(synopsis_review_error)
-        review_details.append(_build_synopsis_review_detail(source_record))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            NON_SPANISH_SYNOPSIS_CODE,
+            synopsis_review_error,
+            _build_synopsis_review_detail(source_record),
+        )
 
     if not resolved_subject:
-        reason_codes.append(SUBJECT_MISSING_CODE)
-        errors.append(SUBJECT_MISSING_ERROR)
-        review_details.append(_build_subject_review_detail(source_record))
+        _add_issue(
+            reason_codes,
+            errors,
+            review_details,
+            SUBJECT_MISSING_CODE,
+            SUBJECT_MISSING_ERROR,
+            _build_subject_review_detail(source_record),
+        )
 
     if errors:
         return ResolutionResult(

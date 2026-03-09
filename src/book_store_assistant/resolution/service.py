@@ -3,7 +3,6 @@ from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
-
 FETCH_ERROR_CODE = "FETCH_ERROR"
 
 

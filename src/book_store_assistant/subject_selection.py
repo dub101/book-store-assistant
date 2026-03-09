@@ -11,7 +11,9 @@ def _normalize_subject_text(value: str) -> str:
     return " ".join(normalized.strip().casefold().replace("-", " ").split())
 
 
-def _normalize_subject_rows(allowed_subjects: list[str] | list[list[str]]) -> list[list[str]]:
+def _normalize_subject_rows(
+    allowed_subjects: list[str] | list[list[str]],
+) -> list[list[str]]:
     if not allowed_subjects:
         return []
 
@@ -36,7 +38,10 @@ def _contains_normalized_phrase(candidate: str, value: str) -> bool:
     return False
 
 
-def select_subject(candidate: str | None, allowed_subjects: list[str] | list[list[str]]) -> str | None:
+def select_subject(
+    candidate: str | None,
+    allowed_subjects: list[str] | list[list[str]],
+) -> str | None:
     if candidate is None:
         return None
 

@@ -10,7 +10,9 @@ from book_store_assistant.resolution.synopsis_resolution import NON_SPANISH_SYNO
 from book_store_assistant.sources.models import SourceBookRecord
 
 
-def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp_path: Path) -> None:
+def test_resolve_book_record_returns_errors_when_required_fields_are_missing(
+    tmp_path: Path,
+) -> None:
     subject_file = tmp_path / "subjects.txt"
     subject_file.write_text("Narrativa\nHistoria\n", encoding="utf-8")
 
@@ -39,7 +41,9 @@ def test_resolve_book_record_returns_errors_when_required_fields_are_missing(tmp
     assert "Subject is missing." in result.errors
 
 
-def test_resolve_book_record_builds_book_record_when_required_fields_exist(tmp_path: Path) -> None:
+def test_resolve_book_record_builds_book_record_when_required_fields_exist(
+    tmp_path: Path,
+) -> None:
     subject_file = tmp_path / "subjects.txt"
     subject_file.write_text("Narrativa\nHistoria\n", encoding="utf-8")
 

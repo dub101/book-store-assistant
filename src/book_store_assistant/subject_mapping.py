@@ -2,7 +2,6 @@ from pathlib import Path
 
 from book_store_assistant.subject_loader import load_subject_rows, load_subjects
 
-
 DEFAULT_SUBJECTS_PATH = Path("data/reference/subjects.txt")
 
 

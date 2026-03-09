@@ -68,7 +68,10 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=11).value == "Book description."
     assert "categories=google_books + open_library" in sheet.cell(row=2, column=12).value
     assert sheet.cell(row=2, column=13).value == "MISSING_SYNOPSIS"
-    assert "Synopsis came from google_books with language 'en'." in sheet.cell(row=2, column=14).value
+    assert (
+        "Synopsis came from google_books with language 'en'."
+        in sheet.cell(row=2, column=14).value
+    )
     assert sheet.cell(row=2, column=11).alignment.wrap_text is True
     assert sheet.cell(row=2, column=12).alignment.wrap_text is True
     assert sheet.cell(row=2, column=13).alignment.wrap_text is True

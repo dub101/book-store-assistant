@@ -1,6 +1,5 @@
 from book_store_assistant.sources.models import SourceBookRecord
 
-
 SCALAR_FIELDS = [
     "title",
     "subtitle",
@@ -91,7 +90,12 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         }
 
         for field_name in SCALAR_FIELDS:
-            merged_values[field_name] = _merge_scalar_field(merged, record, field_sources, field_name)
+            merged_values[field_name] = _merge_scalar_field(
+                merged,
+                record,
+                field_sources,
+                field_name,
+            )
 
         if merged.cover_url is None and record.cover_url is not None:
             field_sources["cover_url"] = record.source_name

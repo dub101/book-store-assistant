@@ -1,6 +1,5 @@
 from book_store_assistant.synopsis import has_synopsis
 
-
 NON_SPANISH_SYNOPSIS_REVIEW_ERROR = "Synopsis is not in Spanish and requires review."
 SPANISH_LANGUAGE_CODES = {"es", "spa"}
 

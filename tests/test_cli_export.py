@@ -6,11 +6,10 @@ from typer.testing import CliRunner
 
 from book_store_assistant.cli import app
 from book_store_assistant.models import BookRecord
+from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.pipeline.process_results import ProcessResult
 from book_store_assistant.pipeline.results import InputReadResult
-from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.resolution.results import ResolutionResult
-
 
 runner = CliRunner()
 
