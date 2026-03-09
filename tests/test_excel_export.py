@@ -26,9 +26,13 @@ def test_export_books_writes_expected_columns_and_row(tmp_path: Path) -> None:
     workbook = openpyxl.load_workbook(output_file)
     sheet = workbook.active
 
+    assert sheet.title == "Books"
     assert sheet.cell(row=1, column=1).value == "ISBN"
     assert sheet.cell(row=1, column=8).value == "CoverURL"
     assert sheet.cell(row=2, column=1).value == "9780306406157"
+    assert sheet.cell(row=2, column=6).value == "Resumen del libro."
+    assert sheet.cell(row=2, column=6).alignment.wrap_text is True
+    assert sheet.cell(row=2, column=6).alignment.vertical == "top"
     assert sheet.cell(row=2, column=8).value == "https://example.com/cover.jpg"
     assert sheet.freeze_panes == "A2"
     assert sheet.auto_filter.ref == "A1:H2"
