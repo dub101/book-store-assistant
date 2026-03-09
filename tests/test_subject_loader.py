@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from book_store_assistant.subject_loader import load_subject_rows, load_subjects
+from book_store_assistant.subject_loader import (
+    load_subject_entries,
+    load_subject_rows,
+    load_subjects,
+)
+from book_store_assistant.subjects import SubjectEntry
 
 
 def test_load_subjects_reads_non_empty_lines(tmp_path: Path) -> None:
@@ -27,3 +32,36 @@ def test_load_subject_rows_supports_aliases_and_comments(tmp_path: Path) -> None
         ["Narrativa", "Ficcion", "Novel"],
         ["Historia", "Historical"],
     ]
+
+
+def test_load_subject_entries_supports_tabular_catalog(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.tsv"
+    subject_file.write_text(
+        "Subject\tDescription\tSubject_Type\n"
+        "13\tFICCION\tL0\n"
+        "1402\tHISTORIA\tL0\n",
+        encoding="utf-8",
+    )
+
+    entries = load_subject_entries(subject_file)
+
+    assert entries == [
+        SubjectEntry(subject="13", description="FICCION", subject_type="L0"),
+        SubjectEntry(subject="1402", description="HISTORIA", subject_type="L0"),
+    ]
+
+
+def test_load_subject_rows_from_tabular_catalog_uses_description(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.tsv"
+    subject_file.write_text(
+        "Subject\tDescription\tSubject_Type\n"
+        "13\tFICCION\tL0\n"
+        "1402\tHISTORIA\tL0\n",
+        encoding="utf-8",
+    )
+
+    rows = load_subject_rows(subject_file)
+    subjects = load_subjects(subject_file)
+
+    assert rows == [["FICCION"], ["HISTORIA"]]
+    assert subjects == ["FICCION", "HISTORIA"]
