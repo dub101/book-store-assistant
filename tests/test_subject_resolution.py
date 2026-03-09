@@ -19,6 +19,15 @@ def test_resolve_subject_extracts_match_from_compound_category() -> None:
     assert subject == "Narrativa"
 
 
+def test_resolve_subject_extracts_match_from_hierarchical_category() -> None:
+    subject = resolve_subject(
+        ["Literatura > Narrativa", "Biografia; Historia"],
+        ["Narrativa", "Historia"],
+    )
+
+    assert subject == "Narrativa"
+
+
 def test_resolve_subject_returns_none_when_no_candidate_matches() -> None:
     subject = resolve_subject(
         ["Poetry", "Drama"],
