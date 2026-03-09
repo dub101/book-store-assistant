@@ -13,7 +13,13 @@ def test_select_subject_ignores_extra_whitespace_and_hyphens() -> None:
     assert selected == "Ciencia ficcion"
 
 
+def test_select_subject_ignores_accents() -> None:
+    selected = select_subject("Poesía", ["Poesia", "Historia"])
+
+    assert selected == "Poesia"
+
+
 def test_select_subject_returns_none_when_candidate_is_not_allowed() -> None:
-    selected = select_subject("Poesia", ["Narrativa", "Historia"])
+    selected = select_subject("Ensayo", ["Narrativa", "Historia"])
 
     assert selected is None
