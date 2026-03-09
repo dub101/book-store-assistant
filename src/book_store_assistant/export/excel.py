@@ -2,6 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
+from book_store_assistant.export.rows import build_books_row
 from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
 from book_store_assistant.export.workbook import apply_sheet_basics
 from book_store_assistant.models import BookRecord
@@ -16,18 +17,7 @@ def export_books(records: list[BookRecord], output_path: Path) -> None:
     sheet.append(BOOKS_HEADERS)
 
     for record in records:
-        sheet.append(
-            [
-                record.isbn,
-                record.title,
-                record.subtitle,
-                record.author,
-                record.editorial,
-                record.synopsis,
-                record.subject,
-                str(record.cover_url) if record.cover_url else None,
-            ]
-        )
+        sheet.append(build_books_row(record))
 
     apply_sheet_basics(
         sheet,
