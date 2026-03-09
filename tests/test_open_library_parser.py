@@ -40,7 +40,7 @@ def test_parse_open_library_payload_returns_source_record() -> None:
     assert record.editorial == "Example Editorial"
     assert record.synopsis == "Resumen del libro."
     assert record.categories == ["Fiction", "Literature"]
-    assert record.language == "spa"
+    assert record.language == "es"
     assert str(record.cover_url) == "https://example.com/cover.jpg"
 
 
@@ -78,3 +78,17 @@ def test_parse_open_library_payload_returns_none_when_language_key_is_missing() 
 
     assert record is not None
     assert record.language is None
+
+
+def test_parse_open_library_payload_keeps_unknown_language_codes() -> None:
+    payload = {
+        "ISBN:9780306406157": {
+            "title": "Example Title",
+            "languages": [{"key": "/languages/fre"}],
+        }
+    }
+
+    record = parse_open_library_payload(payload, "9780306406157")
+
+    assert record is not None
+    assert record.language == "fre"
