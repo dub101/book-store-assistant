@@ -61,3 +61,4 @@ def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: P
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
     assert sheet.cell(row=2, column=6).value == "fetch_error"
+    assert sheet.cell(row=2, column=10).value is None

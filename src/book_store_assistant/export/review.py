@@ -15,6 +15,7 @@ HEADERS = [
     "Language",
     "Categories",
     "CoverURL",
+    "Synopsis",
     "Errors",
 ]
 
@@ -40,6 +41,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
                 source_record.language if source_record is not None else None,
                 ", ".join(source_record.categories) if source_record is not None else None,
                 str(source_record.cover_url) if source_record is not None and source_record.cover_url else None,
+                source_record.synopsis if source_record is not None else None,
                 "; ".join(result.errors),
             ]
         )
