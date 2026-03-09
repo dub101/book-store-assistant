@@ -10,6 +10,10 @@ def _is_header_row(value: str) -> bool:
     return value.strip().casefold() == "isbn"
 
 
+def _is_blank_value(value: str) -> bool:
+    return not value.strip()
+
+
 def read_isbn_inputs(input_path: Path) -> InputReadResult:
     """Read ISBN values from a CSV file and split valid rows from invalid ones."""
     valid_inputs: list[ISBNInput] = []
@@ -22,6 +26,9 @@ def read_isbn_inputs(input_path: Path) -> InputReadResult:
                 continue
 
             raw_value = row[0]
+            if _is_blank_value(raw_value):
+                continue
+
             if _is_header_row(raw_value):
                 continue
 
