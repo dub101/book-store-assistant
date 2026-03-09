@@ -8,11 +8,14 @@ from book_store_assistant.sources.results import FetchResult
 class MissingSource:
     source_name = "missing_source"
 
-    def __init__(self, error: str) -> None:
-        self.error = error
+    def __init__(self, errors: list[str] | str) -> None:
+        if isinstance(errors, str):
+            self.errors = [errors]
+        else:
+            self.errors = errors
 
     def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(isbn=isbn, record=None, errors=[self.error])
+        return FetchResult(isbn=isbn, record=None, errors=self.errors)
 
 
 class FoundSource:
@@ -65,3 +68,17 @@ def test_fallback_metadata_source_accumulates_errors_when_all_sources_fail() -> 
         "missing_source: No Google Books match found.",
         "missing_source: No Open Library match found.",
     ]
+
+
+def test_fallback_metadata_source_deduplicates_prefixed_errors() -> None:
+    source = FallbackMetadataSource(
+        [
+            MissingSource(["Timeout", "Timeout"]),
+            MissingSource(["Timeout"]),
+        ]
+    )
+
+    result = source.fetch("9780306406157")
+
+    assert result.record is None
+    assert result.errors == ["missing_source: Timeout"]

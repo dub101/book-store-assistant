@@ -11,6 +11,7 @@ class FallbackMetadataSource:
 
     def fetch(self, isbn: str) -> FetchResult:
         errors: list[str] = []
+        seen_errors: set[str] = set()
 
         for source in self.sources:
             result = source.fetch(isbn)
@@ -18,6 +19,10 @@ class FallbackMetadataSource:
                 return result
 
             source_name = getattr(source, "source_name", source.__class__.__name__)
-            errors.extend(f"{source_name}: {error}" for error in result.errors)
+            for error in result.errors:
+                prefixed_error = f"{source_name}: {error}"
+                if prefixed_error not in seen_errors:
+                    seen_errors.add(prefixed_error)
+                    errors.append(prefixed_error)
 
         return FetchResult(isbn=isbn, record=None, errors=errors)
