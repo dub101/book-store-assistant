@@ -7,7 +7,9 @@ from book_store_assistant.export.schema import (
     REVIEW_SHEET_NAME,
 )
 from book_store_assistant.validation.export import (
+    validate_books_row,
     validate_books_sheet,
+    validate_review_row,
     validate_review_sheet,
 )
 
@@ -62,3 +64,31 @@ def test_validate_review_sheet_reports_contract_mismatches() -> None:
     assert f"Review sheet title must be '{REVIEW_SHEET_NAME}', got 'Sheet1'." in errors
     assert f"Review sheet headers must be {REVIEW_HEADERS}, got ['ISBN', 'Title']." in errors
     assert "Review sheet freeze panes must be 'A2', got 'B2'." in errors
+
+
+def test_validate_books_row_accepts_expected_length() -> None:
+    errors = validate_books_row(["value"] * len(BOOKS_HEADERS))
+
+    assert errors == []
+
+
+def test_validate_books_row_reports_wrong_length() -> None:
+    errors = validate_books_row(["value"])
+
+    assert errors == [
+        f"Books row must have {len(BOOKS_HEADERS)} columns, got 1."
+    ]
+
+
+def test_validate_review_row_accepts_expected_length() -> None:
+    errors = validate_review_row(["value"] * len(REVIEW_HEADERS))
+
+    assert errors == []
+
+
+def test_validate_review_row_reports_wrong_length() -> None:
+    errors = validate_review_row(["value"])
+
+    assert errors == [
+        f"Review row must have {len(REVIEW_HEADERS)} columns, got 1."
+    ]

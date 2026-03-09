@@ -6,7 +6,10 @@ from book_store_assistant.export.rows import build_books_row
 from book_store_assistant.export.schema import BOOKS_HEADERS, BOOKS_SHEET_NAME
 from book_store_assistant.export.workbook import apply_sheet_basics
 from book_store_assistant.models import BookRecord
-from book_store_assistant.validation.export import validate_books_sheet
+from book_store_assistant.validation.export import (
+    validate_books_row,
+    validate_books_sheet,
+)
 
 
 def export_books(records: list[BookRecord], output_path: Path) -> None:
@@ -17,7 +20,13 @@ def export_books(records: list[BookRecord], output_path: Path) -> None:
     sheet.append(BOOKS_HEADERS)
 
     for record in records:
-        sheet.append(build_books_row(record))
+        row = build_books_row(record)
+        row_errors = validate_books_row(row)
+        if row_errors:
+            joined_errors = "; ".join(row_errors)
+            raise ValueError(f"Invalid books export row: {joined_errors}")
+
+        sheet.append(row)
 
     apply_sheet_basics(
         sheet,

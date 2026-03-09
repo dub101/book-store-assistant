@@ -10,7 +10,10 @@ from book_store_assistant.export.schema import (
 )
 from book_store_assistant.export.workbook import apply_sheet_basics
 from book_store_assistant.resolution.results import ResolutionResult
-from book_store_assistant.validation.export import validate_review_sheet
+from book_store_assistant.validation.export import (
+    validate_review_row,
+    validate_review_sheet,
+)
 
 
 def export_review_rows(results: list[ResolutionResult], output_path: Path) -> None:
@@ -23,7 +26,13 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
         if result.record is not None:
             continue
 
-        sheet.append(build_review_row(result))
+        row = build_review_row(result)
+        row_errors = validate_review_row(row)
+        if row_errors:
+            joined_errors = "; ".join(row_errors)
+            raise ValueError(f"Invalid review export row: {joined_errors}")
+
+        sheet.append(row)
 
     apply_sheet_basics(
         sheet,
