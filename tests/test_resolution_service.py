@@ -15,7 +15,7 @@ def test_resolve_all_handles_fetch_errors_and_resolved_records() -> None:
                 author="Example Author",
                 editorial="Example Editorial",
                 synopsis="Resumen del libro.",
-                subject="Narrativa",
+                subject="FICCION",
             ),
             errors=[],
         ),

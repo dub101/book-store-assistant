@@ -8,7 +8,10 @@ from book_store_assistant.resolution.synopsis_resolution import (
     resolve_synopsis,
 )
 from book_store_assistant.sources.models import SourceBookRecord
-from book_store_assistant.subject_mapping import get_subject_rows
+from book_store_assistant.subject_mapping import (
+    find_subject_entry_by_description,
+    get_subject_rows,
+)
 
 TITLE_MISSING_ERROR = "Title is missing."
 AUTHOR_MISSING_ERROR = "Author is missing."
@@ -42,14 +45,23 @@ def _build_synopsis_review_detail(source_record: SourceBookRecord) -> str:
     return "Synopsis requires manual language verification."
 
 
-def _build_subject_review_detail(source_record: SourceBookRecord) -> str:
+def _build_subject_review_detail(
+    source_record: SourceBookRecord,
+    resolved_subject: str | None,
+) -> str:
     subject_source = source_record.field_sources.get("subject")
     if subject_source:
         return f"Subject from {subject_source} did not resolve to an allowed bookstore subject."
 
+    if source_record.subject:
+        return f"Subject '{source_record.subject}' did not resolve to an allowed bookstore subject."
+
     category_source = source_record.field_sources.get("categories")
     if category_source and source_record.categories:
         return f"Categories from {category_source} did not resolve to an allowed bookstore subject."
+
+    if resolved_subject:
+        return f"Subject '{resolved_subject}' did not resolve to an allowed bookstore subject."
 
     return "No source supplied subject or usable categories."
 
@@ -81,6 +93,13 @@ def resolve_book_record(
     resolved_subject = source_record.subject or resolve_subject(
         source_record.categories,
         allowed_subject_rows,
+    )
+    subject_entry = (
+        find_subject_entry_by_description(resolved_subject, path=subjects_path)
+        if resolved_subject is not None and subjects_path is not None
+        else find_subject_entry_by_description(resolved_subject)
+        if resolved_subject is not None
+        else None
     )
     resolved_synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
     synopsis_review_error = get_synopsis_review_error(
@@ -138,14 +157,14 @@ def resolve_book_record(
             _build_synopsis_review_detail(source_record),
         )
 
-    if not resolved_subject:
+    if subject_entry is None:
         _add_issue(
             reason_codes,
             errors,
             review_details,
             SUBJECT_MISSING_CODE,
             SUBJECT_MISSING_ERROR,
-            _build_subject_review_detail(source_record),
+            _build_subject_review_detail(source_record, resolved_subject),
         )
 
     if errors:
