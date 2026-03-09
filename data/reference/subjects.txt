@@ -1,1 +1,6 @@
-Narrativa
+# canonical | aliases
+Narrativa | Ficcion | Fiction | Novel
+Historia | Historical | Historia universal
+Infantil | Juvenile | Juvenile Fiction
+Poesia | Poetry
+Ciencia ficcion | Sci-Fi | Science Fiction
