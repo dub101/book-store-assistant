@@ -1,18 +1,5 @@
+from book_store_assistant.sources.language_codes import normalize_language_code
 from book_store_assistant.sources.models import SourceBookRecord
-
-
-LANGUAGE_CODE_MAP = {
-    "spa": "es",
-    "eng": "en",
-}
-
-
-def _normalize_language(language: str | None) -> str | None:
-    if language is None:
-        return None
-
-    normalized = language.strip().lower()
-    return LANGUAGE_CODE_MAP.get(normalized, normalized or None)
 
 
 def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | None:
@@ -36,5 +23,5 @@ def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | N
         synopsis=volume_info.get("description"),
         categories=categories,
         cover_url=image_links.get("thumbnail"),
-        language=_normalize_language(volume_info.get("language")),
+        language=normalize_language_code(volume_info.get("language")),
     )

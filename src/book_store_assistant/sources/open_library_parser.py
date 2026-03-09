@@ -1,10 +1,5 @@
+from book_store_assistant.sources.language_codes import normalize_language_code
 from book_store_assistant.sources.models import SourceBookRecord
-
-
-LANGUAGE_CODE_MAP = {
-    "spa": "es",
-    "eng": "en",
-}
 
 
 def _extract_description(data: dict) -> str | None:
@@ -31,8 +26,8 @@ def _extract_language(data: dict) -> str | None:
     if not isinstance(key, str):
         return None
 
-    raw_code = key.rsplit("/", maxsplit=1)[-1].strip().lower()
-    return LANGUAGE_CODE_MAP.get(raw_code, raw_code or None)
+    raw_code = key.rsplit("/", maxsplit=1)[-1]
+    return normalize_language_code(raw_code)
 
 
 def parse_open_library_payload(payload: dict, isbn: str) -> SourceBookRecord | None:
