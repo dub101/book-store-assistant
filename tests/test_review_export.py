@@ -18,6 +18,7 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
         author="Example Author",
         editorial="Example Editorial",
         language="en",
+        categories=["Fiction", "Literature"],
     )
     results = [
         ResolutionResult(
@@ -47,11 +48,11 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.cell(row=1, column=1).value == "ISBN"
     assert sheet.cell(row=1, column=3).value == "Author"
     assert sheet.cell(row=1, column=4).value == "Editorial"
-    assert sheet.cell(row=1, column=6).value == "Language"
-    assert sheet.cell(row=1, column=7).value == "Errors"
+    assert sheet.cell(row=1, column=7).value == "Categories"
+    assert sheet.cell(row=1, column=8).value == "Errors"
     assert sheet.cell(row=2, column=1).value == "9780306406157"
     assert sheet.cell(row=2, column=3).value == "Example Author"
     assert sheet.cell(row=2, column=4).value == "Example Editorial"
-    assert sheet.cell(row=2, column=6).value == "en"
-    assert "Synopsis is missing." in sheet.cell(row=2, column=7).value
+    assert sheet.cell(row=2, column=7).value == "Fiction, Literature"
+    assert "Synopsis is missing." in sheet.cell(row=2, column=8).value
     assert sheet.max_row == 2
