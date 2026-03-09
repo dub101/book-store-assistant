@@ -10,6 +10,15 @@ def test_resolve_subject_returns_first_allowed_match() -> None:
     assert subject == "Narrativa"
 
 
+def test_resolve_subject_extracts_match_from_compound_category() -> None:
+    subject = resolve_subject(
+        ["Fiction / Narrativa", "Historia, Ensayo"],
+        ["Narrativa", "Historia"],
+    )
+
+    assert subject == "Narrativa"
+
+
 def test_resolve_subject_returns_none_when_no_candidate_matches() -> None:
     subject = resolve_subject(
         ["Poetry", "Drama"],
