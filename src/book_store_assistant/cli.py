@@ -14,6 +14,10 @@ from book_store_assistant.sources.results import FetchResult
 app = typer.Typer(help="Book Store Assistant CLI.")
 
 
+def _mode_output_path(path: Path, mode: ExecutionMode) -> Path:
+    return path.with_name(f"{path.stem}.{mode.value}{path.suffix}")
+
+
 def _summarize_fetch_result(result: FetchResult) -> str:
     if result.record is not None and result.errors:
         return f"{result.isbn}: metadata fetched with source errors"
@@ -115,9 +119,11 @@ def main(
             typer.echo(f"- {reason_code}: {count}")
 
     if output is not None:
-        export_resolved_records(result.resolution_results, output)
-        typer.echo(f"Exported resolved records to {output}")
+        resolved_output = _mode_output_path(output, mode)
+        export_resolved_records(result.resolution_results, resolved_output)
+        typer.echo(f"Exported resolved records to {resolved_output}")
 
     if review_output is not None:
-        export_unresolved_results(result.resolution_results, review_output)
-        typer.echo(f"Exported unresolved records to {review_output}")
+        resolved_review_output = _mode_output_path(review_output, mode)
+        export_unresolved_results(result.resolution_results, resolved_review_output)
+        typer.echo(f"Exported unresolved records to {resolved_review_output}")
