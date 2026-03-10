@@ -92,6 +92,14 @@ def _summarize_enrichment_result(result: EnrichmentResult) -> str:
     return f"{result.isbn}: enrichment not applied"
 
 
+def _count_source_issue_codes(fetch_results: list[FetchResult]) -> Counter[str]:
+    return Counter(
+        issue_code
+        for fetch_result in fetch_results
+        for issue_code in fetch_result.issue_codes
+    )
+
+
 @app.command()
 def main(
     input_path: Path,
@@ -146,6 +154,23 @@ def main(
             typer.echo(f"- {invalid_value}")
 
     typer.echo(f"Fetched records: {fetched_count}")
+    issue_code_counts = _count_source_issue_codes(result.fetch_results)
+    if issue_code_counts:
+        typer.echo("Source issue codes:")
+        for issue_code, count in sorted(issue_code_counts.items()):
+            typer.echo(f"- {issue_code}: {count}")
+
+        google_rate_limited_count = issue_code_counts.get(
+            "GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED",
+            0,
+        )
+        if google_rate_limited_count:
+            typer.secho(
+                "Warning: Google Books rate limiting was detected. "
+                "Rules-only results may be degraded until upstream access recovers.",
+                fg=typer.colors.YELLOW,
+            )
+
     if mode is ExecutionMode.AI_ENRICHED:
         enrichment_applied_count = sum(1 for item in result.enrichment_results if item.applied)
         evidence_count = sum(1 for item in result.enrichment_results if item.evidence)

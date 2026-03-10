@@ -101,6 +101,57 @@ def test_cli_main_reports_unresolved_reason_counts(
     assert "- MISSING_SUBJECT: 1" in result.stdout
 
 
+@patch("book_store_assistant.cli.process_isbn_file")
+def test_cli_main_reports_source_issue_code_counts_and_rate_limit_warning(
+    mock_process_isbn_file,
+    tmp_path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n9780306406158\n", encoding="utf-8")
+
+    mock_process_isbn_file.return_value = ProcessResult(
+        input_result=InputReadResult(
+            valid_inputs=[
+                ISBNInput(isbn="9780306406157"),
+                ISBNInput(isbn="9780306406158"),
+            ],
+            invalid_values=[],
+        ),
+        fetch_results=[
+            FetchResult(
+                isbn="9780306406157",
+                record=None,
+                errors=["google_books: 429 Too Many Requests"],
+                issue_codes=[
+                    "GOOGLE_BOOKS:GOOGLE_BOOKS_HTTP_429",
+                    "GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED",
+                    "OPEN_LIBRARY:OPEN_LIBRARY_NO_MATCH",
+                ],
+            ),
+            FetchResult(
+                isbn="9780306406158",
+                record=None,
+                errors=["google_books: 429 Too Many Requests"],
+                issue_codes=[
+                    "GOOGLE_BOOKS:GOOGLE_BOOKS_HTTP_429",
+                    "GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED",
+                ],
+            ),
+        ],
+        enrichment_results=[],
+        resolution_results=[],
+    )
+
+    result = runner.invoke(app, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "Source issue codes:" in result.stdout
+    assert "- GOOGLE_BOOKS:GOOGLE_BOOKS_HTTP_429: 2" in result.stdout
+    assert "- GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED: 2" in result.stdout
+    assert "- OPEN_LIBRARY:OPEN_LIBRARY_NO_MATCH: 1" in result.stdout
+    assert "Warning: Google Books rate limiting was detected." in result.stdout
+
+
 @patch("book_store_assistant.pipeline.service.resolve_all")
 @patch("book_store_assistant.pipeline.service.fetch_all")
 def test_cli_main_reports_final_resolution_statuses(
