@@ -72,8 +72,10 @@ def test_enrich_fetch_results_collects_existing_synopsis_evidence_in_ai_mode() -
     assert len(enrichment_results[0].evidence) == 1
     assert enrichment_results[0].evidence[0].source_name == "open_library"
     assert enrichment_results[0].evidence[0].evidence_type == SOURCE_SYNOPSIS_EVIDENCE
+    assert enrichment_results[0].evidence[0].evidence_origin == "direct_source_record"
     assert enrichment_results[0].evidence[0].text == "Descripcion del libro."
     assert enrichment_results[0].evidence[0].language == "es"
+    assert enrichment_results[0].evidence[0].extraction_method == "source_synopsis_field"
     assert enrichment_results[0].evidence[0].quality_flags == [
         "trusted_source_synopsis",
         "spanish_language",
@@ -223,6 +225,18 @@ def test_enrich_fetch_results_marks_insufficient_evidence_when_no_synopsis_exist
             source_name="google_books",
             applied=False,
             skipped_reason="insufficient_evidence",
+            evidence=[
+                {
+                    "source_name": "google_books",
+                    "evidence_type": "source_title",
+                    "evidence_origin": "direct_source_record",
+                    "text": "Example Title",
+                    "source_url": None,
+                    "language": None,
+                    "extraction_method": "source_title_field",
+                    "quality_flags": ["trusted_source_bibliographic_field", "title"],
+                }
+            ],
         )
     ]
 

@@ -1,5 +1,6 @@
 from book_store_assistant.resolution.books import resolve_book_record
 from book_store_assistant.resolution.results import ResolutionResult
+from book_store_assistant.sources.issues import format_issue_detail
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -33,8 +34,15 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
                         isbn=fetch_result.isbn,
                     ),
                     errors=fetch_result.errors,
+                    source_issue_codes=fetch_result.issue_codes,
                     reason_codes=[FETCH_ERROR_CODE] if fetch_result.errors else [],
-                    review_details=fetch_result.errors,
+                    review_details=[
+                        *[
+                            format_issue_detail(issue_code)
+                            for issue_code in fetch_result.issue_codes
+                        ],
+                        *fetch_result.errors,
+                    ],
                 )
             )
             continue
@@ -47,6 +55,7 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
                 resolved_result.reason_codes,
             )
             merged_review_details = _merge_unique(
+                [format_issue_detail(issue_code) for issue_code in fetch_result.issue_codes],
                 fetch_result.errors,
                 resolved_result.review_details,
             )
@@ -55,6 +64,7 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
                     record=None,
                     source_record=resolved_result.source_record,
                     errors=_merge_unique(fetch_result.errors, resolved_result.errors),
+                    source_issue_codes=fetch_result.issue_codes,
                     reason_codes=merged_reason_codes,
                     review_details=merged_review_details,
                 )

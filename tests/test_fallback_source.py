@@ -60,6 +60,7 @@ def test_fallback_metadata_source_returns_successful_result() -> None:
     assert result.record is not None
     assert result.record.source_name == "found_source"
     assert result.errors == ["missing_source: No Google Books match found."]
+    assert result.issue_codes == []
 
 
 def test_fallback_metadata_source_accumulates_errors_when_all_sources_fail() -> None:
@@ -77,6 +78,7 @@ def test_fallback_metadata_source_accumulates_errors_when_all_sources_fail() -> 
         "missing_source: No Google Books match found.",
         "missing_source: No Open Library match found.",
     ]
+    assert result.issue_codes == []
 
 
 def test_fallback_metadata_source_deduplicates_prefixed_errors() -> None:
@@ -91,6 +93,7 @@ def test_fallback_metadata_source_deduplicates_prefixed_errors() -> None:
 
     assert result.record is None
     assert result.errors == ["missing_source: Timeout"]
+    assert result.issue_codes == []
 
 
 def test_fallback_metadata_source_merges_missing_fields_from_later_sources() -> None:
@@ -197,3 +200,4 @@ def test_fallback_metadata_source_preserves_errors_when_merge_succeeds() -> None
     assert result.record is not None
     assert result.record.title == "Recovered Title"
     assert result.errors == ["missing_source: Timeout"]
+    assert result.issue_codes == []

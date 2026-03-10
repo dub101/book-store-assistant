@@ -7,3 +7,4 @@ class FetchResult(BaseModel):
     isbn: str
     record: SourceBookRecord | None
     errors: list[str]
+    issue_codes: list[str] = []

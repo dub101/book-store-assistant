@@ -39,6 +39,7 @@ def test_open_library_source_fetches_and_parses_response(mock_get: Mock) -> None
     assert result.record.title == "Example Title"
     assert result.record.source_name == "open_library"
     assert result.errors == []
+    assert result.issue_codes == []
     mock_get.assert_called_once()
 
 
@@ -52,3 +53,4 @@ def test_open_library_source_returns_error_on_http_failure(mock_get: Mock) -> No
 
     assert result.record is None
     assert result.errors == ["boom"]
+    assert result.issue_codes == ["OPEN_LIBRARY_FETCH_ERROR"]

@@ -107,18 +107,50 @@ def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
             source_name="google_books",
             applied=False,
             skipped_reason="no_enrichment_available",
-            evidence=[
-                {
-                    "source_name": "google_books",
-                    "evidence_type": "source_synopsis",
+                evidence=[
+                    {
+                        "source_name": "google_books",
+                        "evidence_type": "source_synopsis",
+                    "evidence_origin": "direct_source_record",
                     "text": "Resumen del libro.",
                     "source_url": None,
                     "language": None,
-                    "quality_flags": ["trusted_source_synopsis", "unknown_language"],
-                }
-            ],
-        )
-    ]
+                        "extraction_method": "source_synopsis_field",
+                        "quality_flags": ["trusted_source_synopsis", "unknown_language"],
+                    },
+                    {
+                        "source_name": "google_books",
+                        "evidence_type": "source_title",
+                        "evidence_origin": "direct_source_record",
+                        "text": "Example Title",
+                        "source_url": None,
+                        "language": None,
+                        "extraction_method": "source_title_field",
+                        "quality_flags": ["trusted_source_bibliographic_field", "title"],
+                    },
+                    {
+                        "source_name": "google_books",
+                        "evidence_type": "source_author",
+                        "evidence_origin": "direct_source_record",
+                        "text": "Example Author",
+                        "source_url": None,
+                        "language": None,
+                        "extraction_method": "source_author_field",
+                        "quality_flags": ["trusted_source_bibliographic_field", "author"],
+                    },
+                    {
+                        "source_name": "google_books",
+                        "evidence_type": "source_editorial",
+                        "evidence_origin": "direct_source_record",
+                        "text": "Example Editorial",
+                        "source_url": None,
+                        "language": None,
+                        "extraction_method": "source_editorial_field",
+                        "quality_flags": ["trusted_source_bibliographic_field", "editorial"],
+                    },
+                ],
+            )
+        ]
 
 
 class DummyNonSpanishSynopsisSource:
@@ -142,6 +174,23 @@ class DummyNonSpanishSynopsisSource:
         )
 
 
+class DummyResolvableWithoutAiSource:
+    def fetch(self, isbn: str) -> FetchResult:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn=isbn,
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+                synopsis="Resumen del libro.",
+                subject="FICCION",
+            ),
+            errors=[],
+        )
+
+
 def test_process_isbn_file_applies_generator_in_ai_mode(tmp_path: Path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
@@ -159,3 +208,23 @@ def test_process_isbn_file_applies_generator_in_ai_mode(tmp_path: Path) -> None:
     )
     assert result.fetch_results[0].record.language == "es"
     assert result.resolution_results[0].record is not None
+
+
+def test_process_isbn_file_preserves_rules_only_resolution_when_ai_does_not_apply(
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(
+        input_file,
+        source=DummyResolvableWithoutAiSource(),
+        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        enricher=StubEnricher(),
+    )
+
+    assert result.fetch_results[0].record is not None
+    assert result.fetch_results[0].record.synopsis == "Resumen del libro."
+    assert result.resolution_results[0].record is not None
+    assert result.resolution_results[0].record.synopsis == "Resumen del libro."
+    assert result.enrichment_results[0].skipped_reason == "no_enrichment_available"

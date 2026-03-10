@@ -1,6 +1,7 @@
 import json
 import re
 from html import unescape
+from urllib.parse import urlparse
 
 import httpx
 
@@ -29,9 +30,30 @@ BODY_DESCRIPTION_PATTERNS = (
     ),
 )
 
+SCRIPT_CONTENT_PATTERN = re.compile(
+    r"<script[^>]*>(.*?)</script>",
+    re.IGNORECASE | re.DOTALL,
+)
+
 DESCRIPTION_TEXT_KEYS = {"description", "disambiguatingDescription"}
 BOOKISH_TYPES = {"book", "product", "creativework", "bookseries"}
 MIN_DESCRIPTION_LENGTH = 40
+
+GOOGLE_BOOKS_EMBEDDED_PATTERNS = (
+    re.compile(r'"description"\s*:\s*"((?:\\.|[^"\\])*)"', re.DOTALL),
+    re.compile(
+        r'"description"\s*:\s*\{\s*"simpleText"\s*:\s*"((?:\\.|[^"\\])*)"',
+        re.DOTALL,
+    ),
+)
+
+OPEN_LIBRARY_EMBEDDED_PATTERNS = (
+    re.compile(r'"description"\s*:\s*"((?:\\.|[^"\\])*)"', re.DOTALL),
+    re.compile(
+        r'"description"\s*:\s*\{\s*"value"\s*:\s*"((?:\\.|[^"\\])*)"',
+        re.DOTALL,
+    ),
+)
 
 
 def _clean_text(text: str) -> str:
@@ -56,6 +78,18 @@ def _append_candidate(
 
     seen.add(key)
     candidates.append((kind, cleaned))
+
+
+def _decode_quoted_json_string(value: str) -> str | None:
+    try:
+        decoded = json.loads(f'"{value}"')
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(decoded, str):
+        return None
+
+    return decoded
 
 
 def _looks_like_bookish_payload(data: dict) -> bool:
@@ -104,7 +138,74 @@ def _collect_json_ld_descriptions(
             _collect_json_ld_descriptions(value, candidates, seen, parent_is_bookish=is_bookish)
 
 
-def extract_description_candidates_from_html(html: str) -> list[tuple[str, str]]:
+def _detect_source_host(source_url: str | None) -> str | None:
+    if source_url is None:
+        return None
+
+    hostname = urlparse(source_url).hostname
+    if hostname is None:
+        return None
+
+    normalized_host = hostname.casefold()
+    if "google." in normalized_host:
+        return "google_books"
+    if normalized_host.endswith("openlibrary.org"):
+        return "open_library"
+
+    return None
+
+
+def _collect_embedded_script_descriptions(
+    html: str,
+    kind: str,
+    patterns: tuple[re.Pattern[str], ...],
+    candidates: list[tuple[str, str]],
+    seen: set[str],
+) -> None:
+    for script_match in SCRIPT_CONTENT_PATTERN.finditer(html):
+        script_content = script_match.group(1)
+
+        for pattern in patterns:
+            for match in pattern.finditer(script_content):
+                decoded = _decode_quoted_json_string(match.group(1))
+                if decoded is None:
+                    continue
+
+                _append_candidate(candidates, seen, kind, decoded)
+
+
+def _collect_source_specific_candidates(
+    html: str,
+    source_url: str | None,
+    candidates: list[tuple[str, str]],
+    seen: set[str],
+) -> None:
+    source_host = _detect_source_host(source_url)
+
+    if source_host == "google_books":
+        _collect_embedded_script_descriptions(
+            html,
+            "google_books_embedded_data",
+            GOOGLE_BOOKS_EMBEDDED_PATTERNS,
+            candidates,
+            seen,
+        )
+        return
+
+    if source_host == "open_library":
+        _collect_embedded_script_descriptions(
+            html,
+            "open_library_embedded_data",
+            OPEN_LIBRARY_EMBEDDED_PATTERNS,
+            candidates,
+            seen,
+        )
+
+
+def extract_description_candidates_from_html(
+    html: str,
+    source_url: str | None = None,
+) -> list[tuple[str, str]]:
     candidates: list[tuple[str, str]] = []
     seen: set[str] = set()
 
@@ -131,11 +232,13 @@ def extract_description_candidates_from_html(html: str) -> list[tuple[str, str]]
         for match in pattern.finditer(html):
             _append_candidate(candidates, seen, "body_description", match.group("content"))
 
+    _collect_source_specific_candidates(html, source_url, candidates, seen)
+
     return candidates
 
 
-def extract_description_from_html(html: str) -> str | None:
-    candidates = extract_description_candidates_from_html(html)
+def extract_description_from_html(html: str, source_url: str | None = None) -> str | None:
+    candidates = extract_description_candidates_from_html(html, source_url=source_url)
     if not candidates:
         return None
 

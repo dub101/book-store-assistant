@@ -10,5 +10,6 @@ class ResolutionResult(BaseModel):
     source_record: SourceBookRecord | None
     enrichment_result: EnrichmentResult | None = None
     errors: list[str]
+    source_issue_codes: list[str] = Field(default_factory=list)
     reason_codes: list[str] = Field(default_factory=list)
     review_details: list[str] = Field(default_factory=list)

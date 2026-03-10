@@ -79,6 +79,7 @@ Review workbook columns:
 - FieldSources
 - EnrichmentStatus
 - EvidenceCount
+- EvidenceOrigins
 - GeneratedSynopsisFlags
 - ReasonCodes
 - ReviewDetails
@@ -187,6 +188,22 @@ export OPENAI_MODEL="gpt-4o-mini"
 
 If you prefer a shell helper, define one in `~/.bashrc` that exports the project-specific values and runs the repo CLI.
 
+Recommended helper:
+```bash
+bsa() {
+  cd "$HOME/Documents/projects/pet_projects/book-store-assistant" || return
+  OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
+  OPENAI_MODEL="gpt-4o-mini" \
+  ./.venv/bin/python -m book_store_assistant.cli "$@"
+}
+```
+
+Important:
+- the app reads process environment only
+- values stored in `.env` are ignored unless you export them into the shell yourself
+- running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
+- using the `bsa` helper avoids that mismatch
+
 ## Current CLI
 
 The current CLI reads ISBNs from a CSV file, fetches metadata, resolves valid records, and can export both resolved and unresolved rows.
@@ -199,6 +216,11 @@ Example:
 AI-enriched example:
 ```bash
 .venv/bin/book-store-assistant data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+Shell-helper example:
+```bash
+bsa data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 Module form:
@@ -247,6 +269,7 @@ Current operator note:
 - `EnrichmentStatus` appears only in the review workbook for AI-enrichment diagnosis
 - `EvidenceCount` shows how many evidence blocks were collected for that unresolved row
 - `GeneratedSynopsisFlags` shows validation failures when a generated synopsis was rejected
+- `EvidenceOrigins` shows whether evidence came from direct source metadata, structured provider page data, or scraped provider page text
 
 ## Source Expansion Research
 

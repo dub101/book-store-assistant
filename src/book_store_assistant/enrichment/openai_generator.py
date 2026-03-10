@@ -1,9 +1,30 @@
 import json
+import re
 
 import httpx
 
 from book_store_assistant.enrichment.base import SynopsisGenerator
 from book_store_assistant.enrichment.models import DescriptiveEvidence, GeneratedSynopsis
+
+JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
+
+GENERATED_SYNOPSIS_JSON_SCHEMA = {
+    "name": "generated_synopsis",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "text": {"type": "string"},
+            "language": {"type": "string"},
+            "evidence_indexes": {
+                "type": "array",
+                "items": {"type": "integer"},
+            },
+        },
+        "required": ["text", "language", "evidence_indexes"],
+    },
+    "strict": True,
+}
 
 
 def _build_messages(isbn: str, evidence: list[DescriptiveEvidence]) -> list[dict[str, object]]:
@@ -23,7 +44,10 @@ def _build_messages(isbn: str, evidence: list[DescriptiveEvidence]) -> list[dict
 
     system_prompt = (
         "You generate Spanish bookstore synopses strictly from supplied evidence. "
-        "Do not invent facts. Return JSON only with keys: text, language, evidence_indexes."
+        "Do not invent facts. "
+        "Return only valid JSON matching the required schema with keys text, language, "
+        "and evidence_indexes. "
+        "Use only evidence indexes that were actually provided."
     )
     user_prompt = "\n\n".join(
         [
@@ -76,10 +100,19 @@ def _extract_output_text(payload: dict) -> str | None:
 
 
 def _parse_generated_synopsis(text: str) -> GeneratedSynopsis | None:
+    normalized_text = text.strip()
+
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(normalized_text)
     except json.JSONDecodeError:
-        return None
+        match = JSON_OBJECT_PATTERN.search(normalized_text)
+        if match is None:
+            return None
+
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return None
 
     if not isinstance(parsed, dict):
         return None
@@ -101,6 +134,7 @@ def _parse_generated_synopsis(text: str) -> GeneratedSynopsis | None:
         text=synopsis_text,
         language=language,
         evidence_indexes=evidence_indexes,
+        raw_output_text=normalized_text,
     )
 
 
@@ -131,6 +165,14 @@ class OpenAISynopsisGenerator(SynopsisGenerator):
             json={
                 "model": self.model,
                 "input": _build_messages(isbn, evidence),
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": GENERATED_SYNOPSIS_JSON_SCHEMA["name"],
+                        "schema": GENERATED_SYNOPSIS_JSON_SCHEMA["schema"],
+                        "strict": GENERATED_SYNOPSIS_JSON_SCHEMA["strict"],
+                    }
+                },
             },
             timeout=self.timeout_seconds,
         )
@@ -140,4 +182,13 @@ class OpenAISynopsisGenerator(SynopsisGenerator):
         if output_text is None:
             return None
 
-        return _parse_generated_synopsis(output_text)
+        parsed = _parse_generated_synopsis(output_text)
+        if parsed is not None:
+            return parsed
+
+        return GeneratedSynopsis(
+            text="",
+            evidence_indexes=[],
+            validation_flags=["unparseable_generator_output"],
+            raw_output_text=output_text,
+        )

@@ -13,7 +13,9 @@ class FallbackMetadataSource:
 
     def fetch(self, isbn: str) -> FetchResult:
         errors: list[str] = []
+        issue_codes: list[str] = []
         seen_errors: set[str] = set()
+        seen_issue_codes: set[str] = set()
         successful_records: list[SourceBookRecord] = []
 
         for source in self.sources:
@@ -29,11 +31,18 @@ class FallbackMetadataSource:
                     seen_errors.add(prefixed_error)
                     errors.append(prefixed_error)
 
+            for issue_code in result.issue_codes:
+                prefixed_issue_code = f"{source_name.upper()}:{issue_code}"
+                if prefixed_issue_code not in seen_issue_codes:
+                    seen_issue_codes.add(prefixed_issue_code)
+                    issue_codes.append(prefixed_issue_code)
+
         if successful_records:
             return FetchResult(
                 isbn=isbn,
                 record=merge_source_records(successful_records),
                 errors=errors,
+                issue_codes=issue_codes,
             )
 
-        return FetchResult(isbn=isbn, record=None, errors=errors)
+        return FetchResult(isbn=isbn, record=None, errors=errors, issue_codes=issue_codes)

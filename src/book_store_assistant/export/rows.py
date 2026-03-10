@@ -10,6 +10,20 @@ def _format_field_sources(field_sources: dict[str, str]) -> str | None:
     return "; ".join(f"{field}={source}" for field, source in sorted(field_sources.items()))
 
 
+def _format_evidence_origins(enrichment_result) -> str | None:
+    if enrichment_result is None or not enrichment_result.evidence:
+        return None
+
+    origin_counts: dict[str, int] = {}
+    for evidence in enrichment_result.evidence:
+        origin_counts[evidence.evidence_origin] = origin_counts.get(evidence.evidence_origin, 0) + 1
+
+    return ", ".join(
+        f"{origin}={count}"
+        for origin, count in sorted(origin_counts.items())
+    )
+
+
 def build_books_row(record: BookRecord) -> list[str | None]:
     subject_entry = find_subject_entry_by_description(record.subject)
 
@@ -60,19 +74,32 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
     cover_url = str(source_record.cover_url) if source_record.cover_url else None
     categories = ", ".join(source_record.categories)
     field_sources = _format_field_sources(source_record.field_sources)
+    source_issue_codes = ", ".join(result.source_issue_codes) if result.source_issue_codes else None
     generated_synopsis_flags = (
         ", ".join(enrichment_result.generated_synopsis.validation_flags)
         if enrichment_result is not None and enrichment_result.generated_synopsis is not None
         else None
     )
+    generated_synopsis_text = (
+        enrichment_result.generated_synopsis.text
+        if enrichment_result is not None and enrichment_result.generated_synopsis is not None
+        else None
+    )
+    generated_synopsis_raw = (
+        enrichment_result.generated_synopsis.raw_output_text
+        if enrichment_result is not None and enrichment_result.generated_synopsis is not None
+        else None
+    )
     enrichment_status = None
     evidence_count = None
+    evidence_origins = None
     if enrichment_result is not None:
         if enrichment_result.applied:
             enrichment_status = "applied"
         else:
             enrichment_status = enrichment_result.skipped_reason or "not_applied"
         evidence_count = str(len(enrichment_result.evidence))
+        evidence_origins = _format_evidence_origins(enrichment_result)
 
     return [
         source_record.isbn,
@@ -89,9 +116,13 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
         cover_url,
         source_record.synopsis,
         field_sources,
+        source_issue_codes,
         enrichment_status,
         evidence_count,
+        evidence_origins,
         generated_synopsis_flags,
+        generated_synopsis_text,
+        generated_synopsis_raw,
         ", ".join(result.reason_codes),
         "; ".join(result.review_details),
     ]

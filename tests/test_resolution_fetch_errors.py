@@ -14,6 +14,7 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
                 field_sources={"title": "google_books"},
             ),
             errors=["google_books: Timeout"],
+            issue_codes=["GOOGLE_BOOKS:GOOGLE_BOOKS_TIMEOUT"],
         )
     ]
 
@@ -31,6 +32,7 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
         "MISSING_SUBJECT",
     ]
     assert results[0].review_details == [
+        "Source issue: GOOGLE_BOOKS:GOOGLE_BOOKS_TIMEOUT.",
         "google_books: Timeout",
         "No source supplied author.",
         "No source supplied editorial.",

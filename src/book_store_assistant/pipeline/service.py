@@ -36,6 +36,30 @@ def _attach_enrichment_results(
     return attached_results
 
 
+def _select_best_resolution_results(
+    baseline_results,
+    enriched_results,
+):
+    selected_results = []
+
+    for baseline_result, enriched_result in zip(
+        baseline_results,
+        enriched_results,
+        strict=True,
+    ):
+        if enriched_result.record is not None:
+            selected_results.append(enriched_result)
+            continue
+
+        if baseline_result.record is not None:
+            selected_results.append(baseline_result)
+            continue
+
+        selected_results.append(enriched_result)
+
+    return selected_results
+
+
 def build_default_source() -> MetadataSource:
     return FallbackMetadataSource(build_default_sources())
 
@@ -70,7 +94,16 @@ def process_isbn_file(
         generator=active_generator,
         page_fetcher=page_fetcher,
     )
-    resolution_results = resolve_all(enriched_fetch_results)
+    if active_mode is ExecutionMode.AI_ENRICHED:
+        baseline_resolution_results = resolve_all(fetch_results)
+        enriched_resolution_results = resolve_all(enriched_fetch_results)
+        resolution_results = _select_best_resolution_results(
+            baseline_resolution_results,
+            enriched_resolution_results,
+        )
+    else:
+        resolution_results = resolve_all(enriched_fetch_results)
+
     resolution_results = _attach_enrichment_results(
         resolution_results,
         enrichment_results,

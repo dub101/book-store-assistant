@@ -43,7 +43,8 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=15).value == "no_generator_configured"
+    assert sheet.cell(row=2, column=16).value == "no_generator_configured"
+    assert sheet.cell(row=2, column=18).value is None
 
 
 def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: Path) -> None:

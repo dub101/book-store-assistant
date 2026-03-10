@@ -76,6 +76,10 @@ def test_build_review_row_returns_expected_values() -> None:
         None,
         None,
         None,
+        None,
+        None,
+        None,
+        None,
         "MISSING_SYNOPSIS",
         "Synopsis came from google_books with language 'en'.",
     ]
