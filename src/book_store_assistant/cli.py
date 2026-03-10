@@ -163,3 +163,7 @@ def main(
         resolved_review_output = _mode_output_path(review_output, mode)
         export_unresolved_results(result.resolution_results, resolved_review_output)
         typer.echo(f"Exported unresolved records to {resolved_review_output}")
+
+
+if __name__ == "__main__":
+    app()

@@ -1,6 +1,7 @@
 # Book Store Assistant
 
-Python tool to transform a CSV of ISBNs into Geslib-ready Excel files with completed book metadata and a separate review file for unresolved rows.
+Python tool to transform a CSV of ISBNs into Geslib-ready Excel files with completed
+book metadata and a separate review file for unresolved rows.
 
 ## Current Status
 
@@ -24,14 +25,22 @@ Implemented:
 - Excel export for unresolved review rows
 - CLI support for export and review export
 - CLI fetch progress and per-ISBN fetch outcome logs
+- CLI final per-ISBN resolution status logs
+- Dual execution modes: `rules-only` and `ai-enriched`
+- AI enrichment contracts, validation, and provider wiring
+- OpenAI-backed synopsis generation adapter
+- Trusted descriptive evidence collection from source synopsis fields
+- Trusted page-description evidence extraction from source URLs
+- Review export diagnostics for enrichment outcomes
 - Test suite with coverage reporting
 
 Pending:
 - Real subject catalog tuning from bookstore feedback
 - More robust subject heuristics beyond conservative embedded matching
-- Confidence scoring and source precedence policy
-- Better CLI workflow and example input/output files
-- Spanish-first source expansion research, prioritizing sources with stronger synopsis coverage
+- Real end-to-end yield tuning on live ISBN batches
+- Broader descriptive evidence collection beyond current trusted source pages
+- Optional "normalize all synopsis" mode for consistent tone and length
+- Better CLI/docs examples and operator workflow polish
 
 ## Version 1 Scope
 
@@ -68,6 +77,9 @@ Review workbook columns:
 - CoverURL
 - Synopsis
 - FieldSources
+- EnrichmentStatus
+- EvidenceCount
+- GeneratedSynopsisFlags
 - ReasonCodes
 - ReviewDetails
 
@@ -76,7 +88,9 @@ Review workbook columns:
 - ISBN, Title, Author, Editorial, Synopsis, Subject, and SubjectCode are mandatory for resolved output
 - Subtitle is included only when relevant
 - Synopsis must be in Spanish
-- If the available synopsis is non-Spanish, the row is sent to review instead of generating translated or bilingual text
+- In `rules-only` mode, if the available synopsis is non-Spanish, the row is sent to review
+- In `ai-enriched` mode, the pipeline may generate a Spanish synopsis only from grounded descriptive evidence
+- If the AI pipeline does not have enough evidence, or the generated synopsis fails validation, the row stays in review
 - Subject must be selected from the bookstore's internal list
 - Resolved export includes both the subject description and the internal subject code
 - Cover image is provided as a URL
@@ -135,6 +149,44 @@ Run tests:
 .venv/bin/pytest
 ```
 
+Run lint and type checks:
+```bash
+.venv/bin/ruff check .
+.venv/bin/mypy
+```
+
+## Execution Modes
+
+The application supports two execution modes:
+
+- `rules-only`
+  - current deterministic pipeline
+  - no AI synopsis generation
+  - preserves the original behavior of the project
+
+- `ai-enriched`
+  - runs the same base pipeline
+  - collects descriptive evidence from trusted source fields and trusted source pages
+  - may generate a Spanish synopsis through the AI enrichment path when evidence is sufficient
+  - validates generated synopsis before allowing it into resolution
+
+Current priority is `fill-missing` behavior:
+- AI is used to fill missing or unusable synopsis fields when grounded evidence exists
+- future normalization of all synopsis text for consistent tone/length is possible, but not yet implemented
+
+## Environment Setup
+
+The app reads AI configuration from the process environment.
+It does not load `.env` files by itself.
+
+Minimum variables:
+```bash
+export OPENAI_API_KEY="sk-..."
+export OPENAI_MODEL="gpt-4o-mini"
+```
+
+If you prefer a shell helper, define one in `~/.bashrc` that exports the project-specific values and runs the repo CLI.
+
 ## Current CLI
 
 The current CLI reads ISBNs from a CSV file, fetches metadata, resolves valid records, and can export both resolved and unresolved rows.
@@ -144,14 +196,38 @@ Example:
 .venv/bin/book-store-assistant data/input/isbns.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
+AI-enriched example:
+```bash
+.venv/bin/book-store-assistant data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+Module form:
+```bash
+.venv/bin/python -m book_store_assistant.cli data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
 CLI summary behavior:
 - prints valid and invalid input counts
 - prints invalid raw input values
 - prints fetched, resolved, and unresolved counts
+- prints execution mode
 - prints unresolved source counts
 - prints unresolved reason-code counts
 - shows fetch progress during long runs
 - logs per-ISBN fetch outcomes during consultation
+- logs per-ISBN enrichment outcomes in `ai-enriched` mode
+- logs per-ISBN final resolution status
+
+Output naming behavior:
+- the CLI appends the execution mode to output filenames
+- `--output data/output/books.xlsx --mode rules-only` writes `data/output/books.rules-only.xlsx`
+- `--output data/output/books.xlsx --mode ai-enriched` writes `data/output/books.ai-enriched.xlsx`
+- the same applies to review files
+
+Current `ai-enriched` limitation:
+- AI generation only happens when the pipeline can gather grounded descriptive evidence
+- if no synopsis and no trusted source-page description are available, the row remains unresolved
+- the current bottleneck is still evidence coverage, not model availability
 
 ## Geslib Import Workflow
 
@@ -168,6 +244,9 @@ Current operator note:
 - `Subject` is the bookstore subject description from the structured catalog
 - `SubjectCode` is the internal code from the same catalog row
 - `SubjectType` appears only in the review workbook for diagnosis and catalog verification
+- `EnrichmentStatus` appears only in the review workbook for AI-enrichment diagnosis
+- `EvidenceCount` shows how many evidence blocks were collected for that unresolved row
+- `GeneratedSynopsisFlags` shows validation failures when a generated synopsis was rejected
 
 ## Source Expansion Research
 
@@ -194,24 +273,33 @@ python scripts/probe_cerlalc.py 9786070728792
 
 The probe established that Cerlalc should be treated as a deferred source candidate rather than the immediate next adapter.
 
+## AI Enrichment Flow
+
+Current AI-enriched flow:
+
+1. Fetch and merge source metadata.
+2. Collect trusted descriptive evidence from:
+   - source synopsis/description fields
+   - trusted source page descriptions from source URLs
+3. Decide whether evidence is sufficient.
+4. If configured, call the AI synopsis generator.
+5. Validate generated synopsis:
+   - must be Spanish
+   - must meet minimum length
+   - must reference supporting evidence
+6. If valid, inject generated synopsis before resolution.
+7. If invalid or unsupported, keep the row in review with diagnostics.
+
 ## Next Steps
 
-1. Improve operator feedback during long runs.
-   - keep the progress bar
-   - add clearer per-ISBN final status such as `resolved` or `review`
-
-2. Run a focused Cerlalc feasibility spike.
-   - completed
-   - result: defer adapter work for now
-
-3. Identify the next Spanish-first source.
-   - prioritize reliable ISBN lookup
-   - prioritize Spanish synopsis availability
-   - treat Cerlalc as a secondary metadata candidate, not the primary next source
-
-4. Re-run end-to-end acceptance testing on real ISBN batches.
-   - compare resolved rate before and after the next source addition
-   - inspect review rows to see whether synopsis coverage improves
+1. Re-run end-to-end acceptance testing on real ISBN batches with `ai-enriched`.
+2. Compare:
+   - evidence-bearing rows
+   - enrichment-applied rows
+   - resolved yield vs `rules-only`
+3. Expand trusted evidence collection for rows that still show `insufficient_evidence`.
+4. Improve review diagnostics and operator workflow based on real output.
+5. Revisit optional "normalize all synopsis" behavior later, after evidence coverage is strong enough.
 
 ## Project Structure
 - `src/book_store_assistant/` application code
