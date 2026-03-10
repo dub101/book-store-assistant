@@ -1,8 +1,11 @@
 from pathlib import Path
 
+from book_store_assistant.config import AppConfig, ExecutionMode
+from book_store_assistant.enrichment.models import EnrichmentResult
 from book_store_assistant.pipeline.service import build_default_source, process_isbn_file
 from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
+from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
 
@@ -38,3 +41,63 @@ def test_process_isbn_file_uses_injected_source(tmp_path: Path) -> None:
     assert result.input_result.invalid_values == ["invalid"]
     assert len(result.fetch_results) == 1
     assert result.fetch_results[0].errors == ["No match"]
+
+
+class StubEnricher:
+    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
+        return EnrichmentResult(
+            isbn=record.isbn,
+            source_name=record.source_name,
+            applied=False,
+            skipped_reason="no_enrichment_available",
+        )
+
+
+class DummyResolvedSource:
+    def fetch(self, isbn: str) -> FetchResult:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn=isbn,
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+                synopsis="Resumen del libro.",
+                subject="FICCION",
+            ),
+            errors=[],
+        )
+
+
+def test_process_isbn_file_defaults_to_rules_only_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(input_file, source=DummyResolvedSource())
+
+    assert result.enrichment_results == [
+        EnrichmentResult(isbn="9780306406157", skipped_reason="rules_only_mode")
+    ]
+    assert result.resolution_results[0].record is not None
+
+
+def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(
+        input_file,
+        source=DummyResolvedSource(),
+        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        enricher=StubEnricher(),
+    )
+
+    assert result.enrichment_results == [
+        EnrichmentResult(
+            isbn="9780306406157",
+            source_name="google_books",
+            applied=False,
+            skipped_reason="no_enrichment_available",
+        )
+    ]

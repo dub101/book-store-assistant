@@ -3,6 +3,7 @@ from pathlib import Path
 
 import typer
 
+from book_store_assistant.config import ExecutionMode
 from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.review_export import export_unresolved_results
@@ -44,6 +45,7 @@ def main(
     input_path: Path,
     output: Path | None = None,
     review_output: Path | None = None,
+    mode: ExecutionMode = ExecutionMode.RULES_ONLY,
 ) -> None:
     """Read ISBNs from a CSV file and report pipeline counts."""
     input_preview = read_isbn_inputs(input_path)
@@ -63,11 +65,12 @@ def main(
 
             result = process_isbn_file(
                 input_path,
+                mode=mode,
                 on_fetch_start=on_fetch_start,
                 on_fetch_complete=on_fetch_complete,
             )
     else:
-        result = process_isbn_file(input_path)
+        result = process_isbn_file(input_path, mode=mode)
 
     for resolution_result in result.resolution_results:
         typer.echo(_summarize_resolution_result(resolution_result), err=True)
@@ -77,6 +80,7 @@ def main(
     unresolved_count = len(unresolved_results)
     fetched_count = sum(1 for item in result.fetch_results if item.record is not None)
 
+    typer.echo(f"Execution mode: {mode.value}")
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
     typer.echo(f"Invalid rows: {len(result.input_result.invalid_values)}")
 

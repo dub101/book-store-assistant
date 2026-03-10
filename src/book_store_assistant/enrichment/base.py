@@ -1,8 +1,9 @@
 from typing import Protocol
 
-from book_store_assistant.models import BookRecord
+from book_store_assistant.enrichment.models import EnrichmentResult
+from book_store_assistant.sources.models import SourceBookRecord
 
 
-class BookEnricher(Protocol):
-    def enrich(self, record: BookRecord) -> BookRecord:
-        """Return an enriched version of a book record."""
+class SourceRecordEnricher(Protocol):
+    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
+        """Return enrichment data derived from a source record."""

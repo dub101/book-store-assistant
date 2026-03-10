@@ -3,6 +3,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from book_store_assistant.cli import app
+from book_store_assistant.config import ExecutionMode
 from book_store_assistant.models import BookRecord
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
@@ -20,6 +21,7 @@ def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
     result = runner.invoke(app, [str(input_file)])
 
     assert result.exit_code == 0
+    assert "Execution mode: rules-only" in result.stdout
     assert "Valid ISBNs: 1" in result.stdout
     assert "Invalid rows: 1" in result.stdout
     assert "Invalid values:" in result.stdout
@@ -163,3 +165,20 @@ def test_cli_main_reports_final_resolution_statuses(
     assert result.exit_code == 0
     assert "9780306406157: resolved" in result.stderr
     assert "9780306406158: review (MISSING_SYNOPSIS, MISSING_SUBJECT)" in result.stderr
+
+
+@patch("book_store_assistant.cli.process_isbn_file")
+def test_cli_main_passes_execution_mode_to_pipeline(mock_process_isbn_file, tmp_path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    mock_process_isbn_file.return_value.resolution_results = []
+    mock_process_isbn_file.return_value.input_result.valid_inputs = []
+    mock_process_isbn_file.return_value.input_result.invalid_values = []
+    mock_process_isbn_file.return_value.fetch_results = []
+
+    result = runner.invoke(app, [str(input_file), "--mode", ExecutionMode.AI_ENRICHED.value])
+
+    assert result.exit_code == 0
+    mock_process_isbn_file.assert_called_once()
+    assert mock_process_isbn_file.call_args.kwargs["mode"] == ExecutionMode.AI_ENRICHED
+    assert "Execution mode: ai-enriched" in result.stdout
