@@ -4,6 +4,7 @@ from pathlib import Path
 import typer
 
 from book_store_assistant.config import ExecutionMode
+from book_store_assistant.enrichment.models import EnrichmentResult
 from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.review_export import export_unresolved_results
@@ -44,6 +45,22 @@ def _summarize_resolution_result(result: ResolutionResult) -> str:
     return f"{isbn}: review"
 
 
+def _summarize_enrichment_result(result: EnrichmentResult) -> str:
+    if result.applied and result.generated_synopsis is not None:
+        return f"{result.isbn}: enrichment applied"
+
+    if result.skipped_reason and result.evidence:
+        return (
+            f"{result.isbn}: enrichment skipped "
+            f"({result.skipped_reason}, evidence={len(result.evidence)})"
+        )
+
+    if result.skipped_reason:
+        return f"{result.isbn}: enrichment skipped ({result.skipped_reason})"
+
+    return f"{result.isbn}: enrichment not applied"
+
+
 @app.command()
 def main(
     input_path: Path,
@@ -76,6 +93,10 @@ def main(
     else:
         result = process_isbn_file(input_path, mode=mode)
 
+    if mode is ExecutionMode.AI_ENRICHED:
+        for enrichment_result in result.enrichment_results:
+            typer.echo(_summarize_enrichment_result(enrichment_result), err=True)
+
     for resolution_result in result.resolution_results:
         typer.echo(_summarize_resolution_result(resolution_result), err=True)
 
@@ -94,6 +115,21 @@ def main(
             typer.echo(f"- {invalid_value}")
 
     typer.echo(f"Fetched records: {fetched_count}")
+    if mode is ExecutionMode.AI_ENRICHED:
+        enrichment_applied_count = sum(1 for item in result.enrichment_results if item.applied)
+        evidence_count = sum(1 for item in result.enrichment_results if item.evidence)
+        enrichment_skipped_counts = Counter(
+            item.skipped_reason for item in result.enrichment_results if item.skipped_reason
+        )
+
+        typer.echo(f"Records with evidence: {evidence_count}")
+        typer.echo(f"Enrichment applied: {enrichment_applied_count}")
+
+        if enrichment_skipped_counts:
+            typer.echo("Enrichment skips:")
+            for skipped_reason, count in sorted(enrichment_skipped_counts.items()):
+                typer.echo(f"- {skipped_reason}: {count}")
+
     typer.echo(f"Resolved records: {resolved_count}")
     typer.echo(f"Unresolved records: {unresolved_count}")
 
