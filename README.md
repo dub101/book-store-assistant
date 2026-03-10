@@ -26,6 +26,8 @@ Implemented:
 - CLI support for export and review export
 - CLI fetch progress and per-ISBN fetch outcome logs
 - CLI final per-ISBN resolution status logs
+- CLI source issue-code counts and Google Books rate-limit warnings
+- Configurable Google Books retry/backoff for HTTP 429 responses
 - Dual execution modes: `rules-only` and `ai-enriched`
 - AI enrichment contracts, validation, and provider wiring
 - OpenAI-backed synopsis generation adapter
@@ -77,6 +79,7 @@ Review workbook columns:
 - CoverURL
 - Synopsis
 - FieldSources
+- SourceIssueCodes
 - EnrichmentStatus
 - EvidenceCount
 - EvidenceOrigins
@@ -233,6 +236,8 @@ CLI summary behavior:
 - prints invalid raw input values
 - prints fetched, resolved, and unresolved counts
 - prints execution mode
+- prints aggregated source issue-code counts
+- warns explicitly when Google Books rate limiting is detected
 - prints unresolved source counts
 - prints unresolved reason-code counts
 - shows fetch progress during long runs
@@ -250,6 +255,31 @@ Current `ai-enriched` limitation:
 - AI generation only happens when the pipeline can gather grounded descriptive evidence
 - if no synopsis and no trusted source-page description are available, the row remains unresolved
 - the current bottleneck is still evidence coverage, not model availability
+
+Current source-reliability note:
+- Google Books fetches now retry on HTTP 429 responses with exponential backoff
+- if Google Books eventually succeeds after retries, the run still reports the rate-limit issue code in the CLI summary so operators can see upstream degradation
+
+## Demo Run
+
+For a real demo with the current sample file, use:
+
+```bash
+bsa data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+If you do not want to use the shell helper:
+
+```bash
+OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
+OPENAI_MODEL="gpt-4o-mini" \
+./.venv/bin/python -m book_store_assistant.cli data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+Expected demo outcome:
+- the CLI prints fetch progress, enrichment decisions, per-ISBN resolution statuses, source issue-code counts, and unresolved reason counts
+- resolved rows are written to `data/output/books.ai-enriched.xlsx`
+- unresolved rows are written to `data/output/review.ai-enriched.xlsx`
 
 ## Geslib Import Workflow
 

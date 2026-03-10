@@ -9,6 +9,8 @@ def test_app_config_uses_project_data_directories() -> None:
     assert config.input_dir == Path("data/input")
     assert config.output_dir == Path("data/output")
     assert config.google_books_api_base_url == "https://www.googleapis.com/books/v1/volumes"
+    assert config.google_books_max_retries == 2
+    assert config.google_books_backoff_seconds == 1.0
     assert config.open_library_api_base_url == "https://openlibrary.org/api/books"
     assert config.execution_mode == ExecutionMode.RULES_ONLY
     assert config.ai_provider == AIProvider.OPENAI
