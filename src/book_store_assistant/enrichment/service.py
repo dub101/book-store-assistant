@@ -1,5 +1,9 @@
 from book_store_assistant.config import ExecutionMode
-from book_store_assistant.enrichment.base import SourceRecordEnricher, SynopsisGenerator
+from book_store_assistant.enrichment.base import (
+    PageContentFetcher,
+    SourceRecordEnricher,
+    SynopsisGenerator,
+)
 from book_store_assistant.enrichment.evidence import collect_descriptive_evidence
 from book_store_assistant.enrichment.generation import (
     has_sufficient_evidence,
@@ -15,8 +19,11 @@ AI_SYNOPSIS_SOURCE = "ai_enriched"
 
 
 class NoOpSourceRecordEnricher:
+    def __init__(self, page_fetcher: PageContentFetcher | None = None) -> None:
+        self.page_fetcher = page_fetcher
+
     def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
-        evidence = collect_descriptive_evidence(record)
+        evidence = collect_descriptive_evidence(record, page_fetcher=self.page_fetcher)
         skipped_reason = "existing_synopsis_present" if evidence else "insufficient_evidence"
 
         return EnrichmentResult(
@@ -29,11 +36,16 @@ class NoOpSourceRecordEnricher:
 
 
 class DefaultSourceRecordEnricher:
-    def __init__(self, generator: SynopsisGenerator | None = None) -> None:
+    def __init__(
+        self,
+        generator: SynopsisGenerator | None = None,
+        page_fetcher: PageContentFetcher | None = None,
+    ) -> None:
         self.generator = generator
+        self.page_fetcher = page_fetcher
 
     def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
-        evidence = collect_descriptive_evidence(record)
+        evidence = collect_descriptive_evidence(record, page_fetcher=self.page_fetcher)
 
         if _should_preserve_existing_synopsis(record):
             return EnrichmentResult(
@@ -150,6 +162,7 @@ def enrich_fetch_results(
     mode: ExecutionMode,
     enricher: SourceRecordEnricher | None = None,
     generator: SynopsisGenerator | None = None,
+    page_fetcher: PageContentFetcher | None = None,
 ) -> tuple[list[FetchResult], list[EnrichmentResult]]:
     if mode is ExecutionMode.RULES_ONLY:
         return (
@@ -160,7 +173,10 @@ def enrich_fetch_results(
             ],
         )
 
-    active_enricher = enricher or DefaultSourceRecordEnricher(generator=generator)
+    active_enricher = enricher or DefaultSourceRecordEnricher(
+        generator=generator,
+        page_fetcher=page_fetcher,
+    )
     enriched_fetch_results: list[FetchResult] = []
     enrichment_results: list[EnrichmentResult] = []
 

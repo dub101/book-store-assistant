@@ -45,10 +45,14 @@ def parse_open_library_payload(payload: dict, isbn: str) -> SourceBookRecord | N
     subject_names = [subject.get("name") for subject in subjects if subject.get("name")]
 
     cover = data.get("cover") or {}
+    source_url = data.get("url")
+    if isinstance(source_url, str) and source_url.startswith("/"):
+        source_url = f"https://openlibrary.org{source_url}"
 
     return SourceBookRecord(
         source_name="open_library",
         isbn=isbn,
+        source_url=source_url,
         title=data.get("title"),
         subtitle=data.get("subtitle"),
         author=", ".join(author_names) if author_names else None,

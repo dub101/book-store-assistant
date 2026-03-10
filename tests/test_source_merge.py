@@ -15,6 +15,7 @@ def test_merge_source_records_fills_missing_fields_from_later_records() -> None:
             SourceBookRecord(
                 source_name="google_books",
                 isbn="9780306406157",
+                source_url="https://example.com/google",
                 title="Example Title",
                 author="Primary Author",
                 categories=["Fiction"],
@@ -32,6 +33,7 @@ def test_merge_source_records_fills_missing_fields_from_later_records() -> None:
     )
 
     assert merged.source_name == "google_books + open_library"
+    assert str(merged.source_url) == "https://example.com/google"
     assert merged.title == "Example Title"
     assert merged.author == "Primary Author"
     assert merged.editorial == "Later Editorial"
@@ -42,6 +44,7 @@ def test_merge_source_records_fills_missing_fields_from_later_records() -> None:
     assert merged.field_sources == {
         "title": "google_books",
         "author": "google_books",
+        "source_url": "google_books",
         "editorial": "open_library",
         "synopsis": "open_library",
         "subject": "open_library",
@@ -56,6 +59,7 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
             SourceBookRecord(
                 source_name="google_books",
                 isbn="9780306406157",
+                source_url="https://example.com/google",
                 title="Primary Title",
                 author="Primary Author",
                 editorial="Primary Editorial",
@@ -66,6 +70,7 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
             SourceBookRecord(
                 source_name="open_library",
                 isbn="9780306406157",
+                source_url="https://example.com/open-library",
                 title="Secondary Title",
                 author="Secondary Author",
                 editorial="Secondary Editorial",
@@ -77,6 +82,7 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
     )
 
     assert merged.title == "Primary Title"
+    assert str(merged.source_url) == "https://example.com/google"
     assert merged.author == "Primary Author"
     assert merged.editorial == "Primary Editorial"
     assert merged.synopsis == "Sinopsis primaria."
@@ -84,6 +90,7 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
     assert merged.language == "es"
     assert merged.field_sources == {
         "title": "google_books",
+        "source_url": "google_books",
         "author": "google_books",
         "editorial": "google_books",
         "synopsis": "google_books",

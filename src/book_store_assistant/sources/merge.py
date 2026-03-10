@@ -49,6 +49,9 @@ def _seed_field_sources(record: SourceBookRecord) -> dict[str, str]:
     if record.cover_url is not None and "cover_url" not in field_sources:
         field_sources["cover_url"] = record.source_name
 
+    if record.source_url is not None and "source_url" not in field_sources:
+        field_sources["source_url"] = record.source_name
+
     if record.categories and "categories" not in field_sources:
         field_sources["categories"] = record.source_name
 
@@ -85,6 +88,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         source_name = _merge_source_names(merged.source_name, record.source_name)
         categories = _merge_string_lists(merged.categories, record.categories)
         cover_url = merged.cover_url or record.cover_url
+        source_url = merged.source_url or record.source_url
         title = _merge_scalar_field(merged, record, field_sources, "title")
         subtitle = _merge_scalar_field(merged, record, field_sources, "subtitle")
         author = _merge_scalar_field(merged, record, field_sources, "author")
@@ -97,6 +101,11 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
             field_sources["cover_url"] = record.source_name
         elif merged.cover_url is not None and "cover_url" not in field_sources:
             field_sources["cover_url"] = merged.source_name
+
+        if merged.source_url is None and record.source_url is not None:
+            field_sources["source_url"] = record.source_name
+        elif merged.source_url is not None and "source_url" not in field_sources:
+            field_sources["source_url"] = merged.source_name
 
         if categories:
             merged_category_source = field_sources.get("categories")
@@ -115,6 +124,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         merged = SourceBookRecord(
             source_name=source_name,
             isbn=merged.isbn,
+            source_url=source_url,
             title=title,
             subtitle=subtitle,
             author=author,

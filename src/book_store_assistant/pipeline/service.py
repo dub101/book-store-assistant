@@ -2,6 +2,7 @@ from pathlib import Path
 
 from book_store_assistant.config import AppConfig, ExecutionMode
 from book_store_assistant.enrichment.base import SourceRecordEnricher, SynopsisGenerator
+from book_store_assistant.enrichment.page_fetch import HttpPageContentFetcher
 from book_store_assistant.enrichment.providers import build_default_synopsis_generator
 from book_store_assistant.enrichment.service import enrich_fetch_results
 from book_store_assistant.pipeline.input import read_isbn_inputs
@@ -55,6 +56,7 @@ def process_isbn_file(
     input_result = read_isbn_inputs(input_path)
     active_source = source or build_default_source()
     active_generator = generator or build_default_synopsis_generator(app_config)
+    page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     fetch_results = fetch_all(
         active_source,
         input_result.valid_inputs,
@@ -66,6 +68,7 @@ def process_isbn_file(
         mode=active_mode,
         enricher=enricher,
         generator=active_generator,
+        page_fetcher=page_fetcher,
     )
     resolution_results = resolve_all(enriched_fetch_results)
     resolution_results = _attach_enrichment_results(

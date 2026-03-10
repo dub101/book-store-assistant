@@ -16,6 +16,7 @@ def test_parse_google_books_payload_returns_source_record() -> None:
                     "imageLinks": {
                         "thumbnail": "https://example.com/cover.jpg",
                     },
+                    "infoLink": "https://example.com/book",
                 }
             }
         ]
@@ -26,6 +27,7 @@ def test_parse_google_books_payload_returns_source_record() -> None:
     assert record is not None
     assert record.source_name == "google_books"
     assert record.isbn == "9780306406157"
+    assert str(record.source_url) == "https://example.com/book"
     assert record.author == "Author One, Author Two"
     assert record.language == "es"
     assert record.categories == ["Fiction", "Literary Collections"]

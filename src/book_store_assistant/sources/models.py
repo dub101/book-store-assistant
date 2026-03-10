@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, HttpUrl
 class SourceBookRecord(BaseModel):
     source_name: str
     isbn: str
+    source_url: HttpUrl | None = None
     title: str | None = None
     subtitle: str | None = None
     author: str | None = None

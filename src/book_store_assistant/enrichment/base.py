@@ -20,3 +20,8 @@ class SynopsisGenerator(Protocol):
         evidence: list[DescriptiveEvidence],
     ) -> GeneratedSynopsis | None:
         """Return a grounded generated synopsis or None when no output is available."""
+
+
+class PageContentFetcher(Protocol):
+    def fetch_text(self, url: str) -> str | None:
+        """Return fetched page text for a trusted source URL."""

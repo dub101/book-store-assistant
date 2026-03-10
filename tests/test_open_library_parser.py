@@ -26,6 +26,7 @@ def test_parse_open_library_payload_returns_source_record() -> None:
             "cover": {
                 "medium": "https://example.com/cover.jpg",
             },
+            "url": "/books/OL1M/Example-Title",
         }
     }
 
@@ -39,6 +40,7 @@ def test_parse_open_library_payload_returns_source_record() -> None:
     assert record.author == "Author One, Author Two"
     assert record.editorial == "Example Editorial"
     assert record.synopsis == "Resumen del libro."
+    assert str(record.source_url) == "https://openlibrary.org/books/OL1M/Example-Title"
     assert record.categories == ["Fiction", "Literature"]
     assert record.language == "es"
     assert str(record.cover_url) == "https://example.com/cover.jpg"

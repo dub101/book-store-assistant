@@ -16,6 +16,7 @@ def parse_google_books_payload(payload: dict, isbn: str) -> SourceBookRecord | N
     return SourceBookRecord(
         source_name="google_books",
         isbn=isbn,
+        source_url=volume_info.get("infoLink"),
         title=volume_info.get("title"),
         subtitle=volume_info.get("subtitle"),
         author=", ".join(authors) if authors else None,
