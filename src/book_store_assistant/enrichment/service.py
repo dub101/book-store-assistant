@@ -1,29 +1,135 @@
 from book_store_assistant.config import ExecutionMode
-from book_store_assistant.enrichment.base import SourceRecordEnricher
+from book_store_assistant.enrichment.base import SourceRecordEnricher, SynopsisGenerator
+from book_store_assistant.enrichment.evidence import collect_descriptive_evidence
+from book_store_assistant.enrichment.generation import (
+    has_sufficient_evidence,
+    validate_generated_synopsis,
+)
 from book_store_assistant.enrichment.models import EnrichmentResult
+from book_store_assistant.resolution.synopsis_resolution import is_spanish_language
+from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
+from book_store_assistant.synopsis import has_synopsis
 
 AI_SYNOPSIS_SOURCE = "ai_enriched"
 
 
 class NoOpSourceRecordEnricher:
-    def enrich(self, record) -> EnrichmentResult:
+    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
+        evidence = collect_descriptive_evidence(record)
+        skipped_reason = "existing_synopsis_present" if evidence else "insufficient_evidence"
+
         return EnrichmentResult(
             isbn=record.isbn,
             source_name=record.source_name,
             applied=False,
-            skipped_reason="no_enrichment_available",
+            skipped_reason=skipped_reason,
+            evidence=evidence,
         )
+
+
+class DefaultSourceRecordEnricher:
+    def __init__(self, generator: SynopsisGenerator | None = None) -> None:
+        self.generator = generator
+
+    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
+        evidence = collect_descriptive_evidence(record)
+
+        if _should_preserve_existing_synopsis(record):
+            return EnrichmentResult(
+                isbn=record.isbn,
+                source_name=record.source_name,
+                applied=False,
+                skipped_reason="existing_synopsis_present",
+                evidence=evidence,
+            )
+
+        if not has_sufficient_evidence(evidence):
+            return EnrichmentResult(
+                isbn=record.isbn,
+                source_name=record.source_name,
+                applied=False,
+                skipped_reason="insufficient_evidence",
+                evidence=evidence,
+            )
+
+        if self.generator is None:
+            return EnrichmentResult(
+                isbn=record.isbn,
+                source_name=record.source_name,
+                applied=False,
+                skipped_reason="no_generator_configured",
+                evidence=evidence,
+            )
+
+        generated_synopsis = self.generator.generate(record.isbn, evidence)
+        if generated_synopsis is None:
+            return EnrichmentResult(
+                isbn=record.isbn,
+                source_name=record.source_name,
+                applied=False,
+                skipped_reason="generator_returned_no_synopsis",
+                evidence=evidence,
+            )
+
+        validation_flags = validate_generated_synopsis(generated_synopsis, evidence)
+        if validation_flags:
+            return EnrichmentResult(
+                isbn=record.isbn,
+                source_name=record.source_name,
+                applied=False,
+                skipped_reason="generated_synopsis_rejected",
+                evidence=evidence,
+                generated_synopsis=generated_synopsis.model_copy(
+                    update={"validation_flags": validation_flags}
+                ),
+            )
+
+        return EnrichmentResult(
+            isbn=record.isbn,
+            source_name=record.source_name,
+            applied=True,
+            evidence=evidence,
+            generated_synopsis=generated_synopsis,
+        )
+
+
+def _normalize_enrichment_result(
+    record: SourceBookRecord,
+    enrichment_result: EnrichmentResult,
+) -> EnrichmentResult:
+    if enrichment_result.evidence:
+        return enrichment_result
+
+    fallback_evidence = collect_descriptive_evidence(record)
+    if fallback_evidence:
+        return enrichment_result.model_copy(update={"evidence": fallback_evidence})
+
+    return enrichment_result
+
+
+def _should_preserve_existing_synopsis(record: SourceBookRecord) -> bool:
+    if not has_synopsis(record.synopsis):
+        return False
+
+    if record.language is None:
+        return True
+
+    return is_spanish_language(record.language)
 
 
 def _apply_generated_synopsis(
     fetch_result: FetchResult,
     enrichment_result: EnrichmentResult,
 ) -> FetchResult:
-    if fetch_result.record is None or enrichment_result.generated_synopsis is None:
+    if (
+        fetch_result.record is None
+        or enrichment_result.generated_synopsis is None
+        or not enrichment_result.applied
+    ):
         return fetch_result
 
-    if fetch_result.record.synopsis:
+    if _should_preserve_existing_synopsis(fetch_result.record):
         return fetch_result
 
     enriched_field_sources = dict(fetch_result.record.field_sources)
@@ -43,6 +149,7 @@ def enrich_fetch_results(
     fetch_results: list[FetchResult],
     mode: ExecutionMode,
     enricher: SourceRecordEnricher | None = None,
+    generator: SynopsisGenerator | None = None,
 ) -> tuple[list[FetchResult], list[EnrichmentResult]]:
     if mode is ExecutionMode.RULES_ONLY:
         return (
@@ -53,7 +160,7 @@ def enrich_fetch_results(
             ],
         )
 
-    active_enricher = enricher or NoOpSourceRecordEnricher()
+    active_enricher = enricher or DefaultSourceRecordEnricher(generator=generator)
     enriched_fetch_results: list[FetchResult] = []
     enrichment_results: list[EnrichmentResult] = []
 
@@ -68,7 +175,10 @@ def enrich_fetch_results(
             )
             continue
 
-        enrichment_result = active_enricher.enrich(fetch_result.record)
+        enrichment_result = _normalize_enrichment_result(
+            fetch_result.record,
+            active_enricher.enrich(fetch_result.record),
+        )
         enrichment_results.append(enrichment_result)
         enriched_fetch_results.append(_apply_generated_synopsis(fetch_result, enrichment_result))
 

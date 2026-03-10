@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from book_store_assistant.config import AppConfig, ExecutionMode
-from book_store_assistant.enrichment.base import SourceRecordEnricher
+from book_store_assistant.enrichment.base import SourceRecordEnricher, SynopsisGenerator
 from book_store_assistant.enrichment.service import enrich_fetch_results
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
@@ -26,6 +26,7 @@ def process_isbn_file(
     config: AppConfig | None = None,
     mode: ExecutionMode | None = None,
     enricher: SourceRecordEnricher | None = None,
+    generator: SynopsisGenerator | None = None,
     on_fetch_start: FetchStartCallback | None = None,
     on_fetch_complete: FetchCompleteCallback | None = None,
 ) -> ProcessResult:
@@ -44,6 +45,7 @@ def process_isbn_file(
         fetch_results,
         mode=active_mode,
         enricher=enricher,
+        generator=generator,
     )
     resolution_results = resolve_all(enriched_fetch_results)
 

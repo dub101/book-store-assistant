@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from book_store_assistant.config import AppConfig, ExecutionMode
-from book_store_assistant.enrichment.models import EnrichmentResult
+from book_store_assistant.enrichment.models import EnrichmentResult, GeneratedSynopsis
 from book_store_assistant.pipeline.service import build_default_source, process_isbn_file
 from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
@@ -53,6 +53,14 @@ class StubEnricher:
         )
 
 
+class StubGenerator:
+    def generate(self, isbn: str, evidence) -> GeneratedSynopsis | None:
+        return GeneratedSynopsis(
+            text="Resumen generado a partir de evidencia textual suficiente y trazable del origen.",
+            evidence_indexes=[0],
+        )
+
+
 class DummyResolvedSource:
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(
@@ -99,5 +107,55 @@ def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
             source_name="google_books",
             applied=False,
             skipped_reason="no_enrichment_available",
+            evidence=[
+                {
+                    "source_name": "google_books",
+                    "evidence_type": "source_synopsis",
+                    "text": "Resumen del libro.",
+                    "source_url": None,
+                    "language": None,
+                    "quality_flags": ["trusted_source_synopsis", "unknown_language"],
+                }
+            ],
         )
     ]
+
+
+class DummyNonSpanishSynopsisSource:
+    def fetch(self, isbn: str) -> FetchResult:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn=isbn,
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+                synopsis=(
+                    "This detailed source description provides enough grounded evidence to produce "
+                    "a Spanish synopsis without inventing metadata."
+                ),
+                language="en",
+                subject="FICCION",
+            ),
+            errors=[],
+        )
+
+
+def test_process_isbn_file_applies_generator_in_ai_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(
+        input_file,
+        source=DummyNonSpanishSynopsisSource(),
+        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        generator=StubGenerator(),
+    )
+
+    assert result.fetch_results[0].record is not None
+    assert result.fetch_results[0].record.synopsis == (
+        "Resumen generado a partir de evidencia textual suficiente y trazable del origen."
+    )
+    assert result.fetch_results[0].record.language == "es"
+    assert result.resolution_results[0].record is not None
