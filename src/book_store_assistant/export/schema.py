@@ -29,6 +29,9 @@ REVIEW_HEADERS = [
     "CoverURL",
     "Synopsis",
     "FieldSources",
+    "EnrichmentStatus",
+    "EvidenceCount",
+    "GeneratedSynopsisFlags",
     "ReasonCodes",
     "ReviewDetails",
 ]
@@ -48,6 +51,9 @@ REVIEW_COLUMN_WIDTHS = {
     "L": 36,
     "M": 60,
     "N": 40,
-    "O": 28,
-    "P": 60,
+    "O": 24,
+    "P": 14,
+    "Q": 36,
+    "R": 28,
+    "S": 60,
 }

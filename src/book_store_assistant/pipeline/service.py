@@ -17,6 +17,24 @@ from book_store_assistant.sources.service import (
 )
 
 
+def _attach_enrichment_results(
+    resolution_results,
+    enrichment_results,
+):
+    attached_results = []
+
+    for resolution_result, enrichment_result in zip(
+        resolution_results,
+        enrichment_results,
+        strict=True,
+    ):
+        attached_results.append(
+            resolution_result.model_copy(update={"enrichment_result": enrichment_result})
+        )
+
+    return attached_results
+
+
 def build_default_source() -> MetadataSource:
     return FallbackMetadataSource(build_default_sources())
 
@@ -50,6 +68,10 @@ def process_isbn_file(
         generator=active_generator,
     )
     resolution_results = resolve_all(enriched_fetch_results)
+    resolution_results = _attach_enrichment_results(
+        resolution_results,
+        enrichment_results,
+    )
 
     return ProcessResult(
         input_result=input_result,

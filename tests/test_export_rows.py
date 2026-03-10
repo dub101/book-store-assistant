@@ -73,6 +73,9 @@ def test_build_review_row_returns_expected_values() -> None:
         "https://example.com/cover.jpg",
         "Book description.",
         "editorial=open_library; title=google_books",
+        None,
+        None,
+        None,
         "MISSING_SYNOPSIS",
         "Synopsis came from google_books with language 'en'.",
     ]

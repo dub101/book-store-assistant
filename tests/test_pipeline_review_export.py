@@ -2,6 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
+from book_store_assistant.enrichment.models import EnrichmentResult
 from book_store_assistant.models import BookRecord
 from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.resolution.results import ResolutionResult
@@ -15,6 +16,10 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
         ResolutionResult(
             record=None,
             source_record=source_record,
+            enrichment_result=EnrichmentResult(
+                isbn="9780306406157",
+                skipped_reason="no_generator_configured",
+            ),
             errors=["Synopsis is missing."],
         ),
         ResolutionResult(
@@ -38,6 +43,7 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
+    assert sheet.cell(row=2, column=15).value == "no_generator_configured"
 
 
 def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: Path) -> None:

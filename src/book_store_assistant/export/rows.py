@@ -28,8 +28,12 @@ def build_books_row(record: BookRecord) -> list[str | None]:
 
 def build_review_row(result: ResolutionResult) -> list[str | None]:
     source_record = result.source_record
+    enrichment_result = result.enrichment_result
     if source_record is None:
         return [
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -56,6 +60,19 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
     cover_url = str(source_record.cover_url) if source_record.cover_url else None
     categories = ", ".join(source_record.categories)
     field_sources = _format_field_sources(source_record.field_sources)
+    generated_synopsis_flags = (
+        ", ".join(enrichment_result.generated_synopsis.validation_flags)
+        if enrichment_result is not None and enrichment_result.generated_synopsis is not None
+        else None
+    )
+    enrichment_status = None
+    evidence_count = None
+    if enrichment_result is not None:
+        if enrichment_result.applied:
+            enrichment_status = "applied"
+        else:
+            enrichment_status = enrichment_result.skipped_reason or "not_applied"
+        evidence_count = str(len(enrichment_result.evidence))
 
     return [
         source_record.isbn,
@@ -72,6 +89,9 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
         cover_url,
         source_record.synopsis,
         field_sources,
+        enrichment_status,
+        evidence_count,
+        generated_synopsis_flags,
         ", ".join(result.reason_codes),
         "; ".join(result.review_details),
     ]
