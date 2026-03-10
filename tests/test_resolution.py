@@ -115,6 +115,32 @@ def test_resolve_book_record_rejects_unmapped_direct_subject(tmp_path: Path) -> 
     ]
 
 
+def test_resolve_book_record_uses_tabular_subject_alias_for_category(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.tsv"
+    subject_file.write_text(
+        "Subject\tDescription\tSubject_Type\tAliases\n"
+        "1301\tLITERATURA Y NOVELA\tL0\tRomance literature | Literature\n",
+        encoding="utf-8",
+    )
+
+    source_record = SourceBookRecord(
+        source_name="google_books + open_library",
+        isbn="9788467035704",
+        title="Don Quijote de la Mancha",
+        author="Miguel de Cervantes Saavedra",
+        editorial="Austral",
+        synopsis="Resumen del libro.",
+        language="es",
+        categories=["Literary Criticism", "Romance literature"],
+        field_sources={"categories": "google_books + open_library"},
+    )
+
+    result = resolve_book_record(source_record, subjects_path=subject_file)
+
+    assert result.record is not None
+    assert result.record.subject == "LITERATURA Y NOVELA"
+
+
 def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Path) -> None:
     subject_file = tmp_path / "subjects.txt"
     subject_file.write_text("Narrativa\nHistoria\n", encoding="utf-8")

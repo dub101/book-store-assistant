@@ -26,3 +26,16 @@ def test_get_subjects_filters_non_book_subject_types_by_default(tmp_path: Path) 
     subjects = subject_mapping.get_subjects(subject_file)
 
     assert subjects == ["FICCION"]
+
+
+def test_get_subject_rows_includes_aliases_for_tabular_catalog(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.tsv"
+    subject_file.write_text(
+        "Subject\tDescription\tSubject_Type\tAliases\n"
+        "1301\tLITERATURA Y NOVELA\tL0\tRomance literature | Literature\n",
+        encoding="utf-8",
+    )
+
+    rows = subject_mapping.get_subject_rows(subject_file)
+
+    assert rows == [["LITERATURA Y NOVELA", "Romance literature", "Literature"]]

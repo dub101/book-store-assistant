@@ -54,7 +54,7 @@ def get_subject_rows(
 ) -> list[list[str]]:
     entries = get_subject_entries(path, allowed_subject_types)
     if entries:
-        return [[entry.description] for entry in entries]
+        return [[entry.description, *entry.aliases] for entry in entries]
 
     return load_subject_rows(path)
 

@@ -69,6 +69,13 @@ def _load_tabular_subject_entries(path: Path) -> list[SubjectEntry]:
             if "subject_type" in normalized_header
             else normalized_header.index("tipo")
         )
+        aliases_index = (
+            normalized_header.index("aliases")
+            if "aliases" in normalized_header
+            else normalized_header.index("alias")
+            if "alias" in normalized_header
+            else None
+        )
 
         for row in reader:
             if not row or not any(value.strip() for value in row):
@@ -77,6 +84,13 @@ def _load_tabular_subject_entries(path: Path) -> list[SubjectEntry]:
             subject = row[subject_index].strip()
             description = row[description_index].strip()
             subject_type = row[subject_type_index].strip()
+            aliases: tuple[str, ...] = ()
+            if aliases_index is not None and aliases_index < len(row):
+                aliases = tuple(
+                    value.strip()
+                    for value in row[aliases_index].split("|")
+                    if value.strip()
+                )
 
             if not subject or not description:
                 continue
@@ -86,6 +100,7 @@ def _load_tabular_subject_entries(path: Path) -> list[SubjectEntry]:
                     subject=subject,
                     description=description,
                     subject_type=subject_type,
+                    aliases=aliases,
                 )
             )
 
@@ -101,7 +116,12 @@ def load_subject_entries(path: Path) -> list[SubjectEntry]:
         return _load_tabular_subject_entries(path)
 
     return [
-        SubjectEntry(subject=row[0], description=row[0], subject_type="")
+        SubjectEntry(
+            subject=row[0],
+            description=row[0],
+            subject_type="",
+            aliases=tuple(row[1:]),
+        )
         for row in _load_legacy_subject_rows(lines)
     ]
 
@@ -112,7 +132,7 @@ def load_subject_rows(path: Path) -> list[list[str]]:
         return []
 
     if _is_tabular_subject_catalog(lines):
-        return [[entry.description] for entry in load_subject_entries(path)]
+        return [[entry.description, *entry.aliases] for entry in load_subject_entries(path)]
 
     return _load_legacy_subject_rows(lines)
 

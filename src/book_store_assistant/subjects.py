@@ -6,3 +6,4 @@ class SubjectEntry:
     subject: str
     description: str
     subject_type: str
+    aliases: tuple[str, ...] = ()
