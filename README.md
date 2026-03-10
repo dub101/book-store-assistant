@@ -1,57 +1,144 @@
 # Book Store Assistant
 
-Python tool to transform a CSV of ISBNs into Geslib-ready Excel files with completed
-book metadata and a separate review file for unresolved rows.
+Book Store Assistant transforms a CSV of ISBNs into:
+- a Geslib-ready Excel workbook for resolved books
+- a review workbook for rows that still need manual attention
 
-## Current Status
+The project is optimized for trustworthy resolution rather than maximum yield. It prefers review over invention.
+
+## Goal
+
+The business goal is to automate bookstore intake while preserving metadata quality.
+
+For a row to be resolved, the pipeline must produce:
+- `ISBN`
+- `Title`
+- `Author`
+- `Editorial`
+- `Synopsis`
+- `Subject`
+- `SubjectCode`
+
+Additional rules:
+- `Synopsis` must be in Spanish
+- `Subject` must come from the internal bookstore catalog
+- metadata must remain factual
+- unresolved or unsafe rows go to review rather than being guessed
+
+## Execution Modes
+
+The application supports two modes:
+
+- `rules-only`
+  - deterministic resolution only
+  - no AI synopsis generation
+  - non-Spanish or missing synopsis goes to review
+
+- `ai-enriched`
+  - runs the same deterministic pipeline first
+  - collects grounded evidence from trusted source data and trusted source pages
+  - may generate a Spanish synopsis only when evidence is sufficient
+  - must not make outcomes worse than `rules-only`
+
+Current AI behavior is additive:
+- existing acceptable synopsis data is preserved
+- AI is only used to fill missing or unusable synopsis fields
+- rejected or weak generations stay visible in diagnostics and review output
+
+## Pipeline Flow
+
+The main runtime flow is:
+
+1. Read ISBN inputs from CSV.
+2. Normalize and validate ISBNs.
+3. Fetch source metadata through source adapters.
+4. Merge source records conservatively and preserve field provenance.
+5. Optionally enrich synopsis data in `ai-enriched`.
+6. Resolve business-required fields.
+7. Split into resolved rows and review rows.
+8. Export workbook outputs.
+
+The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
+
+## Architecture
+
+The codebase follows a layered, pipeline-oriented structure.
+
+Core layers:
+- `pipeline/`
+  - orchestration and process-level contracts
+  - coordinates input, fetch, enrichment, resolution, and export
+- `sources/`
+  - metadata source ports/adapters
+  - provider-specific fetchers, payload parsers, merge logic, and source issue tracking
+- `enrichment/`
+  - evidence collection and synopsis generation
+  - provider wiring for AI-backed enrichment
+- `resolution/`
+  - business rules for synopsis acceptance, subject resolution, and required-field checks
+- `export/`
+  - workbook schemas, row builders, and Excel writing
+- `validation/`
+  - export validation and record-level checks
+
+Shared support modules:
+- `config.py`
+  - application configuration defaults
+- `models.py`
+  - resolved output model
+- `subject_loader.py`, `subject_mapping.py`, `subject_selection.py`
+  - bookstore subject catalog loading and matching
+- `isbn.py`
+  - normalization and validity rules for ISBNs
+
+Architectural intent:
+- schema-first: intermediate results are explicit models
+- ports/adapters: external sources stay isolated from core resolution logic
+- rules-first: deterministic metadata and business rules take priority
+- additive enrichment: AI is used only where it can be grounded and safely constrained
+
+## Repo Map
+
+Important package entry points:
+- `src/book_store_assistant/cli.py`
+  - Typer CLI entry point
+- `src/book_store_assistant/pipeline/service.py`
+  - end-to-end orchestration
+- `src/book_store_assistant/resolution/books.py`
+  - required-field resolution and review routing
+- `src/book_store_assistant/sources/google_books.py`
+  - Google Books adapter with retry/backoff
+- `src/book_store_assistant/sources/open_library.py`
+  - Open Library adapter
+- `src/book_store_assistant/export/schema.py`
+  - workbook column contracts
+- `data/reference/subjects.tsv`
+  - internal subject catalog
+
+## Current Backbone Capabilities
 
 Implemented:
-- Python project scaffold
-- CLI entry point
+- project scaffold with `pytest`, `ruff`, and `mypy`
 - ISBN normalization and validation
-- CSV ingestion for ISBN files
-- Structured pipeline result models
-- Google Books source integration and payload parser
-- Open Library source integration and payload parser
-- Conservative multi-source merge for deterministic fields
-- Field-level source provenance for merged metadata
-- Batch fetch and batch resolution services
-- Subject loading from a reference file
-- Subject catalog aliases using `Canonical | Alias1 | Alias2` format
-- Subject selection and subject resolution from source categories
-- Structured unresolved reason codes and review details
-- Synopsis presence and Spanish-language review rules
-- Excel export for resolved records
-- Excel export for unresolved review rows
-- CLI support for export and review export
-- CLI fetch progress and per-ISBN fetch outcome logs
-- CLI final per-ISBN resolution status logs
-- CLI source issue-code counts and Google Books rate-limit warnings
-- Configurable Google Books retry/backoff for HTTP 429 responses
-- Dual execution modes: `rules-only` and `ai-enriched`
-- AI enrichment contracts, validation, and provider wiring
-- OpenAI-backed synopsis generation adapter
-- Trusted descriptive evidence collection from source synopsis fields
-- Trusted page-description evidence extraction from source URLs
-- Review export diagnostics for enrichment outcomes
-- Test suite with coverage reporting
+- CSV ingestion
+- structured pipeline result models
+- Google Books and Open Library source adapters
+- conservative multi-source merge with field provenance
+- structured fetch issue codes
+- Google Books retry/backoff for HTTP `429`
+- deterministic resolution and unresolved/review routing
+- dual execution modes: `rules-only` and `ai-enriched`
+- grounded evidence collection for AI synopsis generation
+- resolved and review Excel export
+- internal subject catalog loading and alias-aware matching
+- CLI progress, status summaries, and degraded-source warnings
 
-Pending:
-- Real subject catalog tuning from bookstore feedback
-- More robust subject heuristics beyond conservative embedded matching
-- Real end-to-end yield tuning on live ISBN batches
-- Broader descriptive evidence collection beyond current trusted source pages
-- Optional "normalize all synopsis" mode for consistent tone and length
-- Better CLI/docs examples and operator workflow polish
+Still intentionally out of scope for the backbone:
+- maximizing yield through many more sources
+- broad subject taxonomy expansion beyond curated internal aliases
+- aggressive heuristic guessing of missing metadata
 
-## Version 1 Scope
-
-Input:
-- CSV file with one ISBN per row
-
-Output:
-- Excel file ready for Geslib import
-- Excel review file for unresolved rows
+## Output Contracts
 
 Resolved workbook columns:
 - ISBN
@@ -87,39 +174,25 @@ Review workbook columns:
 - ReasonCodes
 - ReviewDetails
 
-## Rules
-
-- ISBN, Title, Author, Editorial, Synopsis, Subject, and SubjectCode are mandatory for resolved output
-- Subtitle is included only when relevant
-- Synopsis must be in Spanish
-- In `rules-only` mode, if the available synopsis is non-Spanish, the row is sent to review
-- In `ai-enriched` mode, the pipeline may generate a Spanish synopsis only from grounded descriptive evidence
-- If the AI pipeline does not have enough evidence, or the generated synopsis fails validation, the row stays in review
-- Subject must be selected from the bookstore's internal list
-- Resolved export includes both the subject description and the internal subject code
-- Cover image is provided as a URL
-- Metadata should remain factual; the tool should not invent book data
-
 ## Subject Catalog Format
 
 The reference subject file lives at `data/reference/subjects.tsv`.
 
 Supported formats:
-- Plain canonical subject: `Narrativa`
-- Canonical subject with aliases: `Historia | Historical | Historia universal`
-- Tabular catalog with `Subject`, `Description`, and `Subject_Type` columns
+- plain canonical subject: `Narrativa`
+- canonical subject with aliases: `Historia | Historical | Historia universal`
+- tabular catalog with `Subject`, `Description`, `Subject_Type`, and optional `Aliases`
 
 Rules:
-- The first value is the canonical bookstore subject used in exports
-- Additional `|`-separated values are accepted aliases for matching
-- Blank lines and `#` comments are ignored
+- the canonical export value is the subject `Description`
+- `Subject` in the resolved workbook is the human-readable bookstore description
+- `SubjectCode` is the internal bookstore code from the same catalog row
+- optional aliases are accepted for matching but are not exported as resolved subject values
+- blank lines and `#` comments are ignored
+- the current pipeline resolves only book subject types (`L0`)
+- non-book subject types such as `P0` remain in the catalog but are excluded from current subject resolution
 
-Current pipeline note:
-- The ISBN import pipeline currently resolves subjects only against book subject types (`L0`)
-- Non-book subject types such as `P0` are preserved in the catalog for future use, but are excluded from subject resolution in the current workflow
-- Resolved export keeps `Subject` as the human-readable description and adds `SubjectCode` for Geslib mapping
-
-Example:
+Legacy example:
 ```text
 # canonical | aliases
 Narrativa | Ficcion | Fiction | Novel
@@ -129,9 +202,9 @@ Infantil | Juvenile | Juvenile Fiction
 
 Tabular example:
 ```text
-Subject	Description	Subject_Type
-13	FICCION	L0
-1402	HISTORIA	L0
+Subject	Description	Subject_Type	Aliases
+13	FICCION	L0	Fiction | Novel
+1301	LITERATURA Y NOVELA	L0	Literature | Romance literature
 22	PELUCHES Y TITERES	P0
 ```
 
@@ -158,25 +231,6 @@ Run lint and type checks:
 .venv/bin/ruff check .
 .venv/bin/mypy
 ```
-
-## Execution Modes
-
-The application supports two execution modes:
-
-- `rules-only`
-  - current deterministic pipeline
-  - no AI synopsis generation
-  - preserves the original behavior of the project
-
-- `ai-enriched`
-  - runs the same base pipeline
-  - collects descriptive evidence from trusted source fields and trusted source pages
-  - may generate a Spanish synopsis through the AI enrichment path when evidence is sufficient
-  - validates generated synopsis before allowing it into resolution
-
-Current priority is `fill-missing` behavior:
-- AI is used to fill missing or unusable synopsis fields when grounded evidence exists
-- future normalization of all synopsis text for consistent tone/length is possible, but not yet implemented
 
 ## Environment Setup
 
@@ -207,9 +261,9 @@ Important:
 - running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
 - using the `bsa` helper avoids that mismatch
 
-## Current CLI
+## CLI
 
-The current CLI reads ISBNs from a CSV file, fetches metadata, resolves valid records, and can export both resolved and unresolved rows.
+The CLI reads ISBNs from a CSV file, runs the pipeline, and can export both resolved and review outputs.
 
 Example:
 ```bash
@@ -280,6 +334,55 @@ Expected demo outcome:
 - the CLI prints fetch progress, enrichment decisions, per-ISBN resolution statuses, source issue-code counts, and unresolved reason counts
 - resolved rows are written to `data/output/books.ai-enriched.xlsx`
 - unresolved rows are written to `data/output/review.ai-enriched.xlsx`
+
+## How To Extend The Project
+
+To add a new metadata source:
+- create a new adapter in `src/book_store_assistant/sources/`
+- keep provider-specific parsing inside that adapter or its parser module
+- return structured `FetchResult` data, including issue codes on failures
+- add the source in `src/book_store_assistant/sources/defaults.py`
+- cover it with focused adapter/parser tests
+
+To change business rules:
+- start in `src/book_store_assistant/resolution/`
+- keep deterministic business decisions there rather than in source adapters or the CLI
+
+To change workbook columns:
+- update `src/book_store_assistant/export/schema.py`
+- update row builders in `src/book_store_assistant/export/rows.py`
+- update export validation and tests together
+
+To evolve AI enrichment:
+- keep evidence gathering in `src/book_store_assistant/enrichment/evidence.py`
+- keep generation/provider concerns in `src/book_store_assistant/enrichment/`
+- preserve the rules-first, grounded-only behavior
+
+## Quality Gate
+
+The standard local validation flow is:
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/mypy src
+.venv/bin/pytest
+```
+
+For day-to-day work:
+- make changes in coherent slices
+- stop at stable checkpoints
+- prefer focused tests while iterating
+- run the full quality gate before committing
+
+## Known Boundaries
+
+This backbone is intentionally conservative.
+
+Current limitations:
+- source availability still affects yield
+- synopsis generation depends on grounded evidence coverage
+- subject matching is limited to the internal catalog and its curated aliases
+- the system prefers review over speculative resolution
 
 ## Geslib Import Workflow
 
