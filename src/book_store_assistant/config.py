@@ -36,6 +36,20 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    return default
+
+
 def _env_execution_mode() -> ExecutionMode:
     raw_value = os.getenv("BSA_EXECUTION_MODE")
     if raw_value is None:
@@ -58,6 +72,9 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_float("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", 1.0)
     )
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
+    publisher_page_lookup_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", False)
+    )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
     )

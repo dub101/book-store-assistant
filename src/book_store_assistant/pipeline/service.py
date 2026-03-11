@@ -17,6 +17,9 @@ from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
+from book_store_assistant.sources.publisher_pages import (
+    augment_fetch_results_with_publisher_pages,
+)
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
@@ -96,6 +99,11 @@ def process_isbn_file(
         on_fetch_start=on_fetch_start,
         on_fetch_complete=on_fetch_complete,
     )
+    if app_config.publisher_page_lookup_enabled:
+        fetch_results = augment_fetch_results_with_publisher_pages(
+            fetch_results,
+            timeout_seconds=app_config.request_timeout_seconds,
+        )
     enriched_fetch_results, enrichment_results = enrich_fetch_results(
         fetch_results,
         mode=active_mode,
