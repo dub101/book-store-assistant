@@ -8,6 +8,7 @@ __pycache__/
 
 data/input/*
 !data/input/.gitkeep
+!data/input/sample_*.csv
 
 data/output/*
 !data/output/.gitkeep

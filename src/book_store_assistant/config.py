@@ -2,7 +2,7 @@ import os
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ExecutionMode(str, Enum):
@@ -14,16 +14,57 @@ class AIProvider(str, Enum):
     OPENAI = "openai"
 
 
+def _env_float(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        return float(raw_value)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
+def _env_execution_mode() -> ExecutionMode:
+    raw_value = os.getenv("BSA_EXECUTION_MODE")
+    if raw_value is None:
+        return ExecutionMode.RULES_ONLY
+
+    try:
+        return ExecutionMode(raw_value)
+    except ValueError:
+        return ExecutionMode.RULES_ONLY
+
+
 class AppConfig(BaseModel):
     input_dir: Path = Path("data/input")
     output_dir: Path = Path("data/output")
     google_books_api_base_url: str = "https://www.googleapis.com/books/v1/volumes"
-    google_books_max_retries: int = 2
-    google_books_backoff_seconds: float = 1.0
+    google_books_max_retries: int = Field(
+        default_factory=lambda: _env_int("BSA_GOOGLE_BOOKS_MAX_RETRIES", 2)
+    )
+    google_books_backoff_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", 1.0)
+    )
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
-    request_timeout_seconds: float = 10.0
-    execution_mode: ExecutionMode = ExecutionMode.RULES_ONLY
+    request_timeout_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
+    )
+    execution_mode: ExecutionMode = Field(default_factory=_env_execution_mode)
     ai_provider: AIProvider = AIProvider.OPENAI
-    openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
-    openai_api_base_url: str = os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1")
-    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    openai_api_base_url: str = Field(
+        default_factory=lambda: os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1")
+    )
+    openai_model: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))

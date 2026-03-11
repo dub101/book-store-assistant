@@ -272,17 +272,17 @@ Example:
 
 AI-enriched example:
 ```bash
-.venv/bin/book-store-assistant data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+.venv/bin/book-store-assistant data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 Shell-helper example:
 ```bash
-bsa data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+bsa data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 Module form:
 ```bash
-.venv/bin/python -m book_store_assistant.cli data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+.venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 CLI summary behavior:
@@ -316,10 +316,16 @@ Current source-reliability note:
 
 ## Demo Run
 
-For a real demo with the current sample file, use:
+For a quick demo, use the smaller tracked batch:
 
 ```bash
-bsa data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+bsa data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+For a larger operator-style demo batch, use:
+
+```bash
+bsa data/input/sample_2.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 If you do not want to use the shell helper:
@@ -327,13 +333,30 @@ If you do not want to use the shell helper:
 ```bash
 OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
 OPENAI_MODEL="gpt-4o-mini" \
-./.venv/bin/python -m book_store_assistant.cli data/input/client_isbns.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+./.venv/bin/python -m book_store_assistant.cli data/input/sample_2.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 Expected demo outcome:
-- the CLI prints fetch progress, enrichment decisions, per-ISBN resolution statuses, source issue-code counts, and unresolved reason counts
+- the CLI prints fetch progress, enrichment progress, per-ISBN enrichment/resolution statuses, source issue-code counts, and unresolved reason counts
 - resolved rows are written to `data/output/books.ai-enriched.xlsx`
 - unresolved rows are written to `data/output/review.ai-enriched.xlsx`
+
+## Operator Workflow
+
+Recommended operator flow:
+
+1. Start with `sample_1.csv` for a quick smoke run or use a fresh ISBN file in `data/input/`.
+2. Run `ai-enriched` mode when you want the best safe synopsis coverage.
+3. Check the CLI summary for:
+   - source issue codes
+   - Google Books rate-limit warnings
+   - unresolved reason counts
+4. Review `books.*.xlsx` for resolved rows ready for Geslib import.
+5. Review `review.*.xlsx` for unresolved rows, source diagnostics, and enrichment diagnostics.
+
+Input file hygiene:
+- tracked repo fixtures live as `sample_*.csv`
+- ad hoc operator files in `data/input/` remain ignored by git unless explicitly promoted to tracked samples
 
 ## How To Extend The Project
 
@@ -374,6 +397,34 @@ For day-to-day work:
 - prefer focused tests while iterating
 - run the full quality gate before committing
 
+## Contributor Workflow
+
+Recommended contributor loop:
+
+1. Check `git status --short --branch`.
+2. Read the affected code path before editing.
+3. Make one coherent slice at a time.
+4. Run focused tests while iterating.
+5. Run the full quality gate before committing.
+6. Keep commits split by concern:
+   - runtime behavior
+   - tests
+   - docs when possible
+
+Useful local commands:
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/mypy src
+.venv/bin/pytest
+```
+
+Sample-batch regression tests:
+
+```bash
+.venv/bin/pytest tests/test_sample_batch_regressions.py
+```
+
 ## Known Boundaries
 
 This backbone is intentionally conservative.
@@ -404,62 +455,22 @@ Current operator note:
 - `GeneratedSynopsisFlags` shows validation failures when a generated synopsis was rejected
 - `EvidenceOrigins` shows whether evidence came from direct source metadata, structured provider page data, or scraped provider page text
 
-## Source Expansion Research
+## Optional Future Work
 
-The Cerlalc feasibility spike has been completed.
+The backbone is designed so more trusted sources can be added later without restructuring the core pipeline.
 
-See `docs/cerlalc_research.md` for the working feasibility note.
+Examples:
+- trusted publisher pages such as Planeta
+- deferred bibliographic adapters such as Cerlalc where they materially improve coverage
+- additional review diagnostics informed by real operator use
 
-Current conclusion:
-- Cerlalc is relevant as a Spanish and Latin American bibliographic source
-- the obvious public search path is not suitable for ISBN lookup
-- stable-looking `rilvi` record pages exist, but a clean public lookup endpoint was not confirmed
-- Cerlalc may still be useful later for title, editorial, language, and subject clues
-- Cerlalc is not currently the best next source because it is unlikely to materially improve synopsis coverage
-
-Why this matters:
-- recent real-batch testing showed low resolved yield
-- the main blockers were missing synopsis and weak Spanish-language coverage
-- the next source should be selected primarily on its ability to improve Spanish synopsis availability
-
-Planned probe workflow:
-```bash
-python scripts/probe_cerlalc.py 9786070728792
-```
-
-The probe established that Cerlalc should be treated as a deferred source candidate rather than the immediate next adapter.
-
-## AI Enrichment Flow
-
-Current AI-enriched flow:
-
-1. Fetch and merge source metadata.
-2. Collect trusted descriptive evidence from:
-   - source synopsis/description fields
-   - trusted source page descriptions from source URLs
-3. Decide whether evidence is sufficient.
-4. If configured, call the AI synopsis generator.
-5. Validate generated synopsis:
-   - must be Spanish
-   - must meet minimum length
-   - must reference supporting evidence
-6. If valid, inject generated synopsis before resolution.
-7. If invalid or unsupported, keep the row in review with diagnostics.
-
-## Next Steps
-
-1. Re-run end-to-end acceptance testing on real ISBN batches with `ai-enriched`.
-2. Compare:
-   - evidence-bearing rows
-   - enrichment-applied rows
-   - resolved yield vs `rules-only`
-3. Expand trusted evidence collection for rows that still show `insufficient_evidence`.
-4. Improve review diagnostics and operator workflow based on real output.
-5. Revisit optional "normalize all synopsis" behavior later, after evidence coverage is strong enough.
+Current recommendation:
+- treat source expansion as optional follow-on work
+- preserve the current rules-first, adapter-based design when adding new providers
 
 ## Project Structure
 - `src/book_store_assistant/` application code
 - `tests/` automated tests
-- `data/input/` local input CSV files kept out of git except `.gitkeep`
+- `data/input/` tracked sample CSVs plus ignored ad hoc local input files
 - `data/output/` generated output files
 - `data/reference/subjects.tsv` internal subject catalog
