@@ -12,6 +12,8 @@ from book_store_assistant.enrichment.service import (
 )
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
+from book_store_assistant.resolution.base import SubjectMapper
+from book_store_assistant.resolution.providers import build_default_subject_mapper
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
@@ -83,6 +85,7 @@ def process_isbn_file(
     mode: ExecutionMode | None = None,
     enricher: SourceRecordEnricher | None = None,
     generator: SynopsisGenerator | None = None,
+    subject_mapper: SubjectMapper | None = None,
     on_fetch_start: FetchStartCallback | None = None,
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_enrichment_start: EnrichmentStartCallback | None = None,
@@ -93,6 +96,12 @@ def process_isbn_file(
     active_mode = mode or app_config.execution_mode
     input_result = read_isbn_inputs(input_path)
     active_generator = generator or build_default_synopsis_generator(app_config)
+    active_subject_mapper = (
+        subject_mapper
+        or build_default_subject_mapper(app_config)
+        if active_mode is ExecutionMode.AI_ENRICHED
+        else None
+    )
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     if source is None:
         fetch_results = fetch_with_intermediate_stages(
@@ -126,7 +135,10 @@ def process_isbn_file(
     )
     if active_mode is ExecutionMode.AI_ENRICHED:
         baseline_resolution_results = resolve_all(fetch_results)
-        enriched_resolution_results = resolve_all(enriched_fetch_results)
+        enriched_resolution_results = resolve_all(
+            enriched_fetch_results,
+            subject_mapper=active_subject_mapper,
+        )
         resolution_results = _select_best_resolution_results(
             baseline_resolution_results,
             enriched_resolution_results,

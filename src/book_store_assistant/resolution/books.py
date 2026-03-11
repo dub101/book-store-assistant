@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from book_store_assistant.models import BookRecord
+from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.subject_resolution import resolve_subject
 from book_store_assistant.resolution.synopsis_resolution import (
@@ -10,6 +11,7 @@ from book_store_assistant.resolution.synopsis_resolution import (
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.subject_mapping import (
     find_subject_entry_by_description,
+    get_subject_entries,
     get_subject_rows,
 )
 
@@ -82,6 +84,7 @@ def _add_issue(
 def resolve_book_record(
     source_record: SourceBookRecord,
     subjects_path: Path | None = None,
+    subject_mapper: SubjectMapper | None = None,
 ) -> ResolutionResult:
     reason_codes: list[str] = []
     review_details: list[str] = []
@@ -89,11 +92,16 @@ def resolve_book_record(
     allowed_subject_rows = (
         get_subject_rows(subjects_path) if subjects_path is not None else get_subject_rows()
     )
+    allowed_subject_entries = (
+        get_subject_entries(subjects_path) if subjects_path is not None else get_subject_entries()
+    )
 
     resolved_subject = source_record.subject or resolve_subject(
         source_record.categories,
         allowed_subject_rows,
     )
+    if resolved_subject is None and subject_mapper is not None:
+        resolved_subject = subject_mapper.map_subject(source_record, allowed_subject_entries)
     subject_entry = (
         find_subject_entry_by_description(resolved_subject, path=subjects_path)
         if resolved_subject is not None and subjects_path is not None

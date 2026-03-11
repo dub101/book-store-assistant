@@ -1,12 +1,10 @@
-from pathlib import Path
-
 from book_store_assistant.sources.intermediate import export_fetch_results, read_fetch_results
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
 
-def test_fetch_results_can_roundtrip_through_intermediate_excel(tmp_path: Path) -> None:
-    output_file = tmp_path / "cache.xlsx"
+def test_fetch_results_can_roundtrip_through_intermediate_jsonl(tmp_path) -> None:
+    output_file = tmp_path / "cache.jsonl"
     results = [
         FetchResult(
             isbn="9780306406157",

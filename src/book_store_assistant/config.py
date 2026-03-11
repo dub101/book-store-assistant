@@ -94,6 +94,12 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
     )
     execution_mode: ExecutionMode = Field(default_factory=_env_execution_mode)
+    llm_subject_mapping_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_LLM_SUBJECT_MAPPING_ENABLED", True)
+    )
+    llm_subject_mapping_min_confidence: float = Field(
+        default_factory=lambda: _env_float("BSA_LLM_SUBJECT_MAPPING_MIN_CONFIDENCE", 0.85)
+    )
     ai_provider: AIProvider = AIProvider.OPENAI
     openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     openai_api_base_url: str = Field(

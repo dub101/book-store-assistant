@@ -15,7 +15,7 @@ STAGED_SOURCE_CACHE_KEY = "staged_fetch_v1"
 
 
 def _stage_output_path(intermediate_dir: Path, input_path: Path, stage_name: str) -> Path:
-    return intermediate_dir / f"{input_path.stem}.{stage_name}.xlsx"
+    return intermediate_dir / f"{input_path.stem}.{stage_name}.jsonl"
 
 
 def _has_minimum_bibliographic_fields(result: FetchResult) -> bool:

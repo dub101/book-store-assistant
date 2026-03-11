@@ -83,6 +83,11 @@ class StubGenerator:
         )
 
 
+class StubSubjectMapper:
+    def map_subject(self, record: SourceBookRecord, allowed_subject_entries) -> str | None:
+        return "FICCION"
+
+
 class DummyResolvedSource:
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(
@@ -287,6 +292,40 @@ def test_process_isbn_file_applies_generator_in_ai_mode(tmp_path: Path) -> None:
     )
     assert result.fetch_results[0].record.language == "es"
     assert result.resolution_results[0].record is not None
+
+
+class DummyMissingSubjectSource:
+    def fetch(self, isbn: str) -> FetchResult:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn=isbn,
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+                synopsis="Resumen del libro.",
+                language="es",
+                categories=["Narrative fiction"],
+            ),
+            errors=[],
+        )
+
+
+def test_process_isbn_file_uses_subject_mapper_in_ai_mode(tmp_path: Path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(
+        input_file,
+        source=DummyMissingSubjectSource(),
+        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        subject_mapper=StubSubjectMapper(),
+        enricher=StubEnricher(),
+    )
+
+    assert result.resolution_results[0].record is not None
+    assert result.resolution_results[0].record.subject == "FICCION"
 
 
 def test_process_isbn_file_preserves_rules_only_resolution_when_ai_does_not_apply(

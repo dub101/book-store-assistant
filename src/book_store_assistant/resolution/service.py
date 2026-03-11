@@ -1,3 +1,4 @@
+from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.books import resolve_book_record
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.issues import format_issue_detail
@@ -21,7 +22,10 @@ def _merge_unique(*values: list[str]) -> list[str]:
     return merged
 
 
-def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
+def resolve_all(
+    fetch_results: list[FetchResult],
+    subject_mapper: SubjectMapper | None = None,
+) -> list[ResolutionResult]:
     resolution_results: list[ResolutionResult] = []
 
     for fetch_result in fetch_results:
@@ -47,7 +51,10 @@ def resolve_all(fetch_results: list[FetchResult]) -> list[ResolutionResult]:
             )
             continue
 
-        resolved_result = resolve_book_record(fetch_result.record)
+        resolved_result = resolve_book_record(
+            fetch_result.record,
+            subject_mapper=subject_mapper,
+        )
 
         if resolved_result.record is None and fetch_result.errors:
             merged_reason_codes = _merge_unique(

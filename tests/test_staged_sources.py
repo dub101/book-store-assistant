@@ -77,6 +77,6 @@ def test_fetch_with_intermediate_stages_queries_google_only_for_missing_minimum_
     assert results[0].record.title == "Cached Title"
     assert results[1].record is not None
     assert results[1].record.author == "Google Author"
-    assert (config.intermediate_dir / "sample.cache.xlsx").exists()
-    assert (config.intermediate_dir / "sample.open_library.xlsx").exists()
-    assert (config.intermediate_dir / "sample.google_books.xlsx").exists()
+    assert (config.intermediate_dir / "sample.cache.jsonl").exists()
+    assert (config.intermediate_dir / "sample.open_library.jsonl").exists()
+    assert (config.intermediate_dir / "sample.google_books.jsonl").exists()
