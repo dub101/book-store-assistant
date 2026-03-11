@@ -12,6 +12,7 @@ from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.open_library import OpenLibrarySource
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
+from book_store_assistant.synopsis import has_synopsis
 
 STAGED_SOURCE_CACHE_KEY = "staged_fetch_v1"
 StageUpdateCallback = Callable[[str], None]
@@ -36,8 +37,17 @@ def _has_subject_evidence(result: FetchResult) -> bool:
     return bool(record is not None and (record.subject or record.categories))
 
 
+def _has_resolved_synopsis(result: FetchResult) -> bool:
+    record = result.record
+    return bool(record is not None and has_synopsis(record.synopsis))
+
+
 def _is_fetch_complete_for_resolution(result: FetchResult) -> bool:
-    return _has_minimum_bibliographic_fields(result) and _has_subject_evidence(result)
+    return (
+        _has_minimum_bibliographic_fields(result)
+        and _has_subject_evidence(result)
+        and _has_resolved_synopsis(result)
+    )
 
 
 def _prefix_result(result: FetchResult, source_name: str) -> FetchResult:

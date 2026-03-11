@@ -50,3 +50,26 @@ def test_parse_google_books_payload_keeps_unknown_language_codes() -> None:
 
     assert record is not None
     assert record.language == "fre"
+
+
+def test_parse_google_books_payload_falls_back_to_search_info_snippet() -> None:
+    payload = {
+        "items": [
+            {
+                "volumeInfo": {
+                    "title": "Example Title",
+                    "language": "es",
+                },
+                "searchInfo": {
+                    "textSnippet": (
+                        "Primera novela &lt;b&gt;inolvidable&lt;/b&gt; del autor."
+                    )
+                },
+            }
+        ]
+    }
+
+    record = parse_google_books_payload(payload, "9780306406157")
+
+    assert record is not None
+    assert record.synopsis == "Primera novela inolvidable del autor."

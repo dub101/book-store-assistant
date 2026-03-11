@@ -422,12 +422,26 @@ def match_publisher_profile(editorial: str | None) -> PublisherProfile | None:
     if not normalized_editorial:
         return None
 
+    raw_candidates = [
+        editorial,
+        *(
+            candidate.strip()
+            for candidate in re.split(r"[,/;|]+", editorial)
+            if candidate.strip()
+        ),
+    ]
+    candidates = {
+        normalized_candidate
+        for candidate in raw_candidates
+        if (normalized_candidate := _normalize_text(candidate))
+    }
+
     for profile in SUPPORTED_PUBLISHERS:
         aliases = {
             _normalize_text(profile.key),
             *(_normalize_text(alias) for alias in profile.editorial_aliases),
         }
-        if normalized_editorial in aliases:
+        if candidates & aliases:
             return profile
 
     return None

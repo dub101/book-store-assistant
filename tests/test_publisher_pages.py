@@ -95,6 +95,23 @@ def test_match_publisher_profile_supports_penguin_random_house_imprints() -> Non
     assert profile.domains == ("penguinlibros.com", "megustaleer.com")
 
 
+def test_match_publisher_profile_supports_composite_editorial_strings() -> None:
+    profile = match_publisher_profile(
+        (
+            "Alfaguara, Real Academia Española, "
+            "Asociación de Academias de la Lengua Española"
+        )
+    )
+
+    assert profile is not None
+    assert profile.key == "penguin_random_house"
+
+    profile = match_publisher_profile("Real Academia Española / Alfaguara")
+
+    assert profile is not None
+    assert profile.key == "penguin_random_house"
+
+
 def test_match_publisher_profile_supports_anagrama() -> None:
     profile = match_publisher_profile("Editorial Anagrama")
 

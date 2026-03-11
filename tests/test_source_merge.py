@@ -51,6 +51,16 @@ def test_merge_source_records_fills_missing_fields_from_later_records() -> None:
         "language": "open_library",
         "categories": "google_books + open_library",
     }
+    assert merged.field_confidence == {
+        "title": 0.75,
+        "author": 0.75,
+        "source_url": 0.75,
+        "editorial": 0.6,
+        "synopsis": 0.6,
+        "subject": 0.6,
+        "language": 0.6,
+        "categories": 0.75,
+    }
 
 
 def test_merge_source_records_does_not_override_existing_values() -> None:
@@ -97,6 +107,15 @@ def test_merge_source_records_does_not_override_existing_values() -> None:
         "subject": "google_books",
         "language": "google_books",
     }
+    assert merged.field_confidence == {
+        "title": 0.75,
+        "source_url": 0.75,
+        "author": 0.75,
+        "editorial": 0.75,
+        "synopsis": 0.75,
+        "subject": 0.75,
+        "language": 0.75,
+    }
 
 
 def test_merge_source_records_deduplicates_source_names_and_categories() -> None:
@@ -120,3 +139,32 @@ def test_merge_source_records_deduplicates_source_names_and_categories() -> None
     assert merged.field_sources == {
         "categories": "google_books + open_library",
     }
+    assert merged.field_confidence == {
+        "categories": 0.75,
+    }
+
+
+def test_merge_source_records_prefers_higher_confidence_values() -> None:
+    merged = merge_source_records(
+        [
+            SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Generic Title",
+                editorial="Generic Editorial",
+            ),
+            SourceBookRecord(
+                source_name="bne",
+                isbn="9780306406157",
+                title="Authoritative Title",
+                editorial="Authoritative Editorial",
+            ),
+        ]
+    )
+
+    assert merged.title == "Authoritative Title"
+    assert merged.editorial == "Authoritative Editorial"
+    assert merged.field_sources["title"] == "bne"
+    assert merged.field_sources["editorial"] == "bne"
+    assert merged.field_confidence["title"] == 1.0
+    assert merged.field_confidence["editorial"] == 1.0

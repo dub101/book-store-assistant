@@ -12,3 +12,4 @@ def test_source_book_record_allows_partial_metadata() -> None:
     assert record.title == "Example Title"
     assert record.author is None
     assert record.field_sources == {}
+    assert record.field_confidence == {}

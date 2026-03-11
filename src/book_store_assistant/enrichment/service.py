@@ -12,6 +12,7 @@ from book_store_assistant.enrichment.generation import (
     validate_generated_synopsis,
 )
 from book_store_assistant.enrichment.models import EnrichmentResult
+from book_store_assistant.sources.confidence import source_confidence
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -123,13 +124,17 @@ def _apply_generated_synopsis(
         return fetch_result
 
     enriched_field_sources = dict(fetch_result.record.field_sources)
+    enriched_field_confidence = dict(fetch_result.record.field_confidence)
     enriched_field_sources["synopsis"] = AI_SYNOPSIS_SOURCE
+    enriched_field_confidence["synopsis"] = source_confidence(AI_SYNOPSIS_SOURCE)
+    enriched_field_confidence["language"] = source_confidence(AI_SYNOPSIS_SOURCE)
 
     enriched_record = fetch_result.record.model_copy(
         update={
             "synopsis": enrichment_result.generated_synopsis.text,
             "language": enrichment_result.generated_synopsis.language,
             "field_sources": enriched_field_sources,
+            "field_confidence": enriched_field_confidence,
         }
     )
     return fetch_result.model_copy(update={"record": enriched_record})

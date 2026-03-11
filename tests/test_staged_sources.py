@@ -30,6 +30,7 @@ def test_fetch_with_intermediate_stages_skips_downstream_sources_for_complete_ca
                 title="Cached Title",
                 author="Cached Author",
                 editorial="Cached Editorial",
+                synopsis="Resumen ya disponible.",
                 subject="FICCION",
             ),
             errors=[],
@@ -96,7 +97,7 @@ def test_fetch_with_intermediate_stages_skips_downstream_sources_for_complete_ca
     assert (config.intermediate_dir / "sample.google_books.jsonl").exists()
 
 
-def test_fetch_with_intermediate_stages_fetches_subject_evidence_after_cache(
+def test_fetch_with_intermediate_stages_fetches_google_when_synopsis_is_still_missing(
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "sample.csv"
@@ -169,7 +170,7 @@ def test_fetch_with_intermediate_stages_fetches_subject_evidence_after_cache(
 
     mock_bne.assert_called_once_with("9780306406157")
     assert mock_batch.call_args.args[0] == ["9780306406157"]
-    mock_google.assert_not_called()
+    mock_google.assert_called_once_with("9780306406157")
     assert results[0].record is not None
     assert results[0].record.categories == ["Narrative fiction"]
 
