@@ -112,6 +112,9 @@ def main(
                 if enrichment_progress is not None:
                     enrichment_progress.update(1)
 
+            def on_status_update(message: str) -> None:
+                typer.echo(message, err=True)
+
             result = process_isbn_file(
                 input_path,
                 mode=mode,
@@ -119,9 +122,14 @@ def main(
                 on_fetch_complete=on_fetch_complete,
                 on_enrichment_start=on_enrichment_start,
                 on_enrichment_complete=on_enrichment_complete,
+                on_status_update=on_status_update,
             )
     else:
-        result = process_isbn_file(input_path, mode=mode)
+        result = process_isbn_file(
+            input_path,
+            mode=mode,
+            on_status_update=lambda message: typer.echo(message, err=True),
+        )
 
     if mode is ExecutionMode.AI_ENRICHED:
         for enrichment_result in result.enrichment_results:

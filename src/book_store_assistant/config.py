@@ -1,5 +1,7 @@
 import os
+import tomllib
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -14,9 +16,46 @@ class AIProvider(str, Enum):
     OPENAI = "openai"
 
 
+@lru_cache(maxsize=1)
+def _load_config_file() -> dict[str, object]:
+    config_path = Path(os.getenv("BSA_CONFIG_FILE", "bsa.toml"))
+    if not config_path.exists():
+        return {}
+
+    try:
+        with config_path.open("rb") as config_file:
+            payload = tomllib.load(config_file)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+    return payload
+
+
+def clear_config_file_cache() -> None:
+    _load_config_file.cache_clear()
+
+
+def _config_value(name: str, default: object) -> object:
+    return _load_config_file().get(name, default)
+
+
+def _configured_str(name: str, default: str) -> str:
+    env_name = f"BSA_{name.upper()}"
+    raw_value = os.getenv(env_name)
+    if raw_value is not None:
+        return raw_value
+
+    file_value = _config_value(name, default)
+    return file_value if isinstance(file_value, str) else default
+
+
 def _env_float(name: str, default: float) -> float:
     raw_value = os.getenv(name)
     if raw_value is None:
+        file_key = name.removeprefix("BSA_").casefold()
+        file_value = _config_value(file_key, default)
+        if isinstance(file_value, (int, float)):
+            return float(file_value)
         return default
 
     try:
@@ -28,6 +67,10 @@ def _env_float(name: str, default: float) -> float:
 def _env_int(name: str, default: int) -> int:
     raw_value = os.getenv(name)
     if raw_value is None:
+        file_key = name.removeprefix("BSA_").casefold()
+        file_value = _config_value(file_key, default)
+        if isinstance(file_value, int):
+            return file_value
         return default
 
     try:
@@ -39,6 +82,10 @@ def _env_int(name: str, default: int) -> int:
 def _env_bool(name: str, default: bool) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None:
+        file_key = name.removeprefix("BSA_").casefold()
+        file_value = _config_value(file_key, default)
+        if isinstance(file_value, bool):
+            return file_value
         return default
 
     normalized = raw_value.strip().casefold()
@@ -53,6 +100,12 @@ def _env_bool(name: str, default: bool) -> bool:
 def _env_execution_mode() -> ExecutionMode:
     raw_value = os.getenv("BSA_EXECUTION_MODE")
     if raw_value is None:
+        file_value = _config_value("execution_mode", ExecutionMode.RULES_ONLY.value)
+        if isinstance(file_value, str):
+            try:
+                return ExecutionMode(file_value)
+            except ValueError:
+                return ExecutionMode.RULES_ONLY
         return ExecutionMode.RULES_ONLY
 
     try:
@@ -62,16 +115,28 @@ def _env_execution_mode() -> ExecutionMode:
 
 
 class AppConfig(BaseModel):
-    input_dir: Path = Path("data/input")
-    output_dir: Path = Path("data/output")
+    input_dir: Path = Field(
+        default_factory=lambda: Path(_configured_str("input_dir", "data/input"))
+    )
+    output_dir: Path = Field(
+        default_factory=lambda: Path(_configured_str("output_dir", "data/output"))
+    )
     intermediate_dir: Path = Field(
-        default_factory=lambda: Path(os.getenv("BSA_INTERMEDIATE_DIR", "data/intermediate"))
+        default_factory=lambda: Path(_configured_str("intermediate_dir", "data/intermediate"))
     )
     source_cache_dir: Path = Field(
-        default_factory=lambda: Path(os.getenv("BSA_SOURCE_CACHE_DIR", "data/cache/fetch"))
+        default_factory=lambda: Path(_configured_str("source_cache_dir", "data/cache/fetch"))
     )
     source_cache_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_SOURCE_CACHE_ENABLED", True)
+    )
+    publisher_page_cache_dir: Path = Field(
+        default_factory=lambda: Path(
+            _configured_str("publisher_page_cache_dir", "data/cache/publisher_pages")
+        )
+    )
+    publisher_page_cache_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_CACHE_ENABLED", True)
     )
     source_request_pause_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)
@@ -89,6 +154,9 @@ class AppConfig(BaseModel):
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
     publisher_page_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", False)
+    )
+    publisher_page_timeout_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 3.0)
     )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)

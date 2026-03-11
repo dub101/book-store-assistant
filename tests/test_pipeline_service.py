@@ -328,6 +328,42 @@ def test_process_isbn_file_uses_subject_mapper_in_ai_mode(tmp_path: Path) -> Non
     assert result.resolution_results[0].record.subject == "FICCION"
 
 
+class DummyUnmappedDirectSubjectSource:
+    def fetch(self, isbn: str) -> FetchResult:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn=isbn,
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+                synopsis="Resumen del libro.",
+                subject="Narrativa contemporanea",
+                language="es",
+            ),
+            errors=[],
+        )
+
+
+def test_process_isbn_file_uses_subject_mapper_for_unmapped_direct_subject_in_ai_mode(
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    result = process_isbn_file(
+        input_file,
+        source=DummyUnmappedDirectSubjectSource(),
+        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        subject_mapper=StubSubjectMapper(),
+        enricher=StubEnricher(),
+    )
+
+    assert result.resolution_results[0].record is not None
+    assert result.resolution_results[0].record.subject == "FICCION"
+
+
 def test_process_isbn_file_preserves_rules_only_resolution_when_ai_does_not_apply(
     tmp_path: Path,
 ) -> None:
@@ -511,6 +547,29 @@ def test_process_isbn_file_passes_fetch_callbacks_through_to_fetch_layer(
     assert (
         mock_fetch_with_intermediate_stages.call_args.kwargs["on_fetch_complete"]
         is on_fetch_complete
+    )
+
+
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
+def test_process_isbn_file_passes_status_callback_through_to_fetch_layer(
+    mock_fetch_with_intermediate_stages,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    mock_fetch_with_intermediate_stages.return_value = []
+
+    def on_status_update(message: str) -> None:
+        return None
+
+    process_isbn_file(
+        input_file,
+        on_status_update=on_status_update,
+    )
+
+    assert (
+        mock_fetch_with_intermediate_stages.call_args.kwargs["on_stage_update"]
+        is on_status_update
     )
 
 

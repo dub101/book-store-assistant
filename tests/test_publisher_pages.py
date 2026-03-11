@@ -1,5 +1,9 @@
+import httpx
+
+from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_pages import (
+    PUBLISHER_PAGE_ISBN_MISMATCH,
     apply_publisher_page_record,
     augment_fetch_results_with_publisher_pages,
     build_publisher_search_query,
@@ -63,6 +67,16 @@ class StubPageFetcher:
 
     def fetch_text(self, url: str) -> str | None:
         return self.pages.get(url)
+
+
+class RaisingSearcher:
+    def search(
+        self,
+        query: str,
+        allowed_domains: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]:
+        raise httpx.TimeoutException("search timed out")
 
 
 def test_match_publisher_profile_supports_planeta_imprints() -> None:
@@ -132,6 +146,33 @@ def test_extract_publisher_page_record_parses_book_metadata_from_html() -> None:
     )
     assert record.language == "es"
     assert str(record.cover_url) == "https://www.planetadelibros.com/cover.jpg"
+
+
+def test_extract_publisher_page_record_requires_matching_isbn_on_page() -> None:
+    profile = match_publisher_profile("Planeta")
+    assert profile is not None
+
+    html_without_isbn = """
+    <html lang="es">
+      <head>
+        <title>El libro de prueba | Planeta de Libros</title>
+        <meta property="og:title" content="El libro de prueba" />
+        <meta property="og:description" content="Una novela sobre memoria y secretos." />
+      </head>
+      <body>
+        <p>Editorial | Planeta</p>
+      </body>
+    </html>
+    """
+
+    record = extract_publisher_page_record(
+        html_without_isbn,
+        "https://www.planetadelibros.com/libro-de-prueba/123456",
+        "9780306406157",
+        profile,
+    )
+
+    assert record is None
 
 
 def test_apply_publisher_page_record_prefers_official_source_url_and_spanish_synopsis() -> None:
@@ -213,7 +254,81 @@ def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers
     ]
 
 
-def test_augment_fetch_results_with_publisher_pages_skips_unsupported_publishers() -> None:
+def test_publisher_pages_skips_lookup_for_records_with_complete_metadata() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                editorial="Planeta",
+                subject="FICCION",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher(["https://www.planetadelibros.com/libro-de-prueba/123456"])
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=StubPageFetcher({}),
+    )
+
+    assert augmented == fetch_results
+    assert searcher.queries == []
+
+
+def test_publisher_pages_discovers_supported_publishers_when_editorial_is_missing() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                language="en",
+            ),
+            errors=[],
+        )
+    ]
+    searcher = StubSearcher(
+        ["https://www.planetadelibros.com/libro-de-prueba/123456"]
+    )
+    page_fetcher = StubPageFetcher(
+        {"https://www.planetadelibros.com/libro-de-prueba/123456": PLANETA_HTML}
+    )
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+    )
+
+    assert len(augmented) == 1
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial == "Planeta"
+    assert augmented[0].record.synopsis is not None
+    assert augmented[0].record.language == "es"
+    assert searcher.queries == [
+        (
+            '"9780306406157" "El libro de prueba" "Autora Ejemplo"',
+            ("penguinlibros.com", "megustaleer.com"),
+        ),
+        (
+            '"9780306406157" "El libro de prueba" "Autora Ejemplo"',
+            ("planetadelibros.com",),
+        ),
+    ]
+
+
+def test_publisher_pages_falls_back_to_discovery_for_unknown_editorials() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -237,4 +352,115 @@ def test_augment_fetch_results_with_publisher_pages_skips_unsupported_publishers
     )
 
     assert augmented == fetch_results
+    assert searcher.queries == []
+
+
+def test_publisher_pages_records_search_timeout_issue_codes() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=RaisingSearcher(),
+        page_fetcher=StubPageFetcher({}),
+    )
+
+    assert augmented[0].issue_codes == [
+        "PUBLISHER_PAGE_SEARCH_TIMEOUT",
+        "PUBLISHER_PAGE_NO_MATCH",
+    ]
+
+
+def test_publisher_pages_records_isbn_mismatch_issue_code() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                editorial="Planeta",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher(["https://www.planetadelibros.com/libro-de-prueba/123456"])
+    page_fetcher = StubPageFetcher(
+        {
+            "https://www.planetadelibros.com/libro-de-prueba/123456": """
+            <html><body><p>ISBN | 9780306406158</p></body></html>
+            """
+        }
+    )
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+    )
+
+    assert augmented[0].issue_codes == [
+        PUBLISHER_PAGE_ISBN_MISMATCH,
+        "PUBLISHER_PAGE_NO_MATCH",
+    ]
+
+
+def test_publisher_pages_reuses_cached_confirmed_match_without_searching(tmp_path) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                editorial="Planeta",
+                language="en",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    cache = FetchResultCache(tmp_path / "publisher-cache", "publisher_page_lookup_v1")
+    cache.set(
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="publisher_page:planeta",
+                isbn="9780306406157",
+                source_url="https://www.planetadelibros.com/libro-de-prueba/123456",
+                synopsis="Sinopsis oficial en espanol del libro de prueba.",
+                language="es",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    )
+    searcher = StubSearcher(["https://www.planetadelibros.com/libro-de-prueba/123456"])
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=StubPageFetcher({}),
+        cache=cache,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.synopsis == "Sinopsis oficial en espanol del libro de prueba."
     assert searcher.queries == []

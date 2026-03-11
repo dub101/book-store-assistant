@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 
 from book_store_assistant.config import AppConfig, ExecutionMode
@@ -17,9 +18,11 @@ from book_store_assistant.resolution.providers import build_default_subject_mapp
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
+from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.defaults import build_default_sources, wrap_with_default_cache
 from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.publisher_pages import (
+    PUBLISHER_PAGE_CACHE_KEY,
     augment_fetch_results_with_publisher_pages,
 )
 from book_store_assistant.sources.service import (
@@ -28,6 +31,8 @@ from book_store_assistant.sources.service import (
     fetch_all,
 )
 from book_store_assistant.sources.staged import fetch_with_intermediate_stages
+
+StatusUpdateCallback = Callable[[str], None]
 
 
 def _attach_enrichment_results(
@@ -90,6 +95,7 @@ def process_isbn_file(
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_enrichment_start: EnrichmentStartCallback | None = None,
     on_enrichment_complete: EnrichmentCompleteCallback | None = None,
+    on_status_update: StatusUpdateCallback | None = None,
 ) -> ProcessResult:
     """Read ISBNs, fetch metadata, and resolve source records."""
     app_config = config or AppConfig()
@@ -110,6 +116,7 @@ def process_isbn_file(
             app_config,
             on_fetch_start=on_fetch_start,
             on_fetch_complete=on_fetch_complete,
+            on_stage_update=on_status_update,
         )
     else:
         active_source = source
@@ -120,9 +127,16 @@ def process_isbn_file(
             on_fetch_complete=on_fetch_complete,
         )
     if app_config.publisher_page_lookup_enabled:
+        publisher_page_cache = (
+            FetchResultCache(app_config.publisher_page_cache_dir, PUBLISHER_PAGE_CACHE_KEY)
+            if app_config.publisher_page_cache_enabled
+            else None
+        )
         fetch_results = augment_fetch_results_with_publisher_pages(
             fetch_results,
-            timeout_seconds=app_config.request_timeout_seconds,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_page_cache,
         )
     enriched_fetch_results, enrichment_results = enrich_fetch_results(
         fetch_results,

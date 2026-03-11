@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from book_store_assistant.config import AppConfig
@@ -12,6 +13,7 @@ from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
 
 STAGED_SOURCE_CACHE_KEY = "staged_fetch_v1"
+StageUpdateCallback = Callable[[str], None]
 
 
 def _stage_output_path(intermediate_dir: Path, input_path: Path, stage_name: str) -> Path:
@@ -26,6 +28,15 @@ def _has_minimum_bibliographic_fields(result: FetchResult) -> bool:
         and record.author
         and record.editorial
     )
+
+
+def _has_subject_evidence(result: FetchResult) -> bool:
+    record = result.record
+    return bool(record is not None and (record.subject or record.categories))
+
+
+def _is_fetch_complete_for_resolution(result: FetchResult) -> bool:
+    return _has_minimum_bibliographic_fields(result) and _has_subject_evidence(result)
 
 
 def _prefix_result(result: FetchResult, source_name: str) -> FetchResult:
@@ -94,10 +105,14 @@ def fetch_with_intermediate_stages(
     config: AppConfig,
     on_fetch_start: FetchStartCallback | None = None,
     on_fetch_complete: FetchCompleteCallback | None = None,
+    on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
     cache = FetchResultCache(config.source_cache_dir, STAGED_SOURCE_CACHE_KEY)
     open_library = OpenLibrarySource(config)
     google_books = GoogleBooksSource(config)
+
+    if on_stage_update is not None:
+        on_stage_update(f"Stage: reading cache for {len(inputs)} ISBNs")
 
     cache_stage_results = [
         cache.get(item.isbn) or FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
@@ -115,13 +130,23 @@ def fetch_with_intermediate_stages(
     open_library_candidates = [
         item.isbn
         for item in inputs
-        if not _has_minimum_bibliographic_fields(merged_after_cache[item.isbn])
+        if not _is_fetch_complete_for_resolution(merged_after_cache[item.isbn])
     ]
+    if on_stage_update is not None:
+        on_stage_update(
+            "Stage: querying Open Library for "
+            f"{len(open_library_candidates)} ISBNs "
+            f"in {len(_chunked(open_library_candidates, config.open_library_batch_size))} batch(es)"
+        )
 
     open_library_stage_results: list[FetchResult] = []
     for index, batch in enumerate(
         _chunked(open_library_candidates, config.open_library_batch_size)
     ):
+        if on_stage_update is not None and batch:
+            on_stage_update(
+                f"Open Library batch {index + 1}: {len(batch)} ISBNs"
+            )
         if index > 0 and config.source_request_pause_seconds > 0:
             time.sleep(config.source_request_pause_seconds)
 
@@ -152,11 +177,17 @@ def fetch_with_intermediate_stages(
     google_candidates = [
         item.isbn
         for item in inputs
-        if not _has_minimum_bibliographic_fields(merged_after_open_library[item.isbn])
+        if not _is_fetch_complete_for_resolution(merged_after_open_library[item.isbn])
     ]
+    if on_stage_update is not None:
+        on_stage_update(f"Stage: querying Google Books for {len(google_candidates)} ISBNs")
 
     google_stage_results: list[FetchResult] = []
     for index, isbn in enumerate(google_candidates):
+        if on_stage_update is not None:
+            on_stage_update(
+                f"Google Books {index + 1}/{len(google_candidates)}: {isbn}"
+            )
         if index > 0 and config.source_request_pause_seconds > 0:
             time.sleep(config.source_request_pause_seconds)
 
@@ -175,6 +206,8 @@ def fetch_with_intermediate_stages(
 
     final_results: list[FetchResult] = []
     total = len(inputs)
+    if on_stage_update is not None:
+        on_stage_update("Stage: merging staged fetch results")
     for index, item in enumerate(inputs, start=1):
         if on_fetch_start is not None:
             on_fetch_start(index, total, item.isbn)

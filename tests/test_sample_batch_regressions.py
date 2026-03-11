@@ -200,7 +200,10 @@ def test_sample_1_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     result = process_isbn_file(
         SAMPLE_1_PATH,
         source=FixtureBatchSource("sample_1", fixture_isbns),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        config=AppConfig(
+            execution_mode=ExecutionMode.AI_ENRICHED,
+            publisher_page_lookup_enabled=False,
+        ),
         generator=FixtureSynopsisGenerator(),
     )
 
@@ -231,7 +234,10 @@ def test_sample_2_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     result = process_isbn_file(
         SAMPLE_2_PATH,
         source=FixtureBatchSource("sample_2", fixture_isbns),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
+        config=AppConfig(
+            execution_mode=ExecutionMode.AI_ENRICHED,
+            publisher_page_lookup_enabled=False,
+        ),
         generator=FixtureSynopsisGenerator(),
     )
 

@@ -81,6 +81,21 @@ def _add_issue(
     review_details.append(detail)
 
 
+def _resolve_catalog_subject(
+    source_record: SourceBookRecord,
+    allowed_subject_rows: list[list[str]],
+) -> str | None:
+    if source_record.subject:
+        resolved_direct_subject = resolve_subject(
+            [source_record.subject],
+            allowed_subject_rows,
+        )
+        if resolved_direct_subject is not None:
+            return resolved_direct_subject
+
+    return resolve_subject(source_record.categories, allowed_subject_rows)
+
+
 def resolve_book_record(
     source_record: SourceBookRecord,
     subjects_path: Path | None = None,
@@ -96,10 +111,7 @@ def resolve_book_record(
         get_subject_entries(subjects_path) if subjects_path is not None else get_subject_entries()
     )
 
-    resolved_subject = source_record.subject or resolve_subject(
-        source_record.categories,
-        allowed_subject_rows,
-    )
+    resolved_subject = _resolve_catalog_subject(source_record, allowed_subject_rows)
     if resolved_subject is None and subject_mapper is not None:
         resolved_subject = subject_mapper.map_subject(source_record, allowed_subject_entries)
     subject_entry = (

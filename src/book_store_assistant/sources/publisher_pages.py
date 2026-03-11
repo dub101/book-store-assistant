@@ -1,6 +1,7 @@
 import json
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
 from urllib.parse import parse_qs, unquote, urlparse
@@ -10,6 +11,8 @@ from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
+from book_store_assistant.sources.cache import FetchResultCache
+from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
@@ -41,6 +44,9 @@ EDITORIAL_LABEL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
+PublisherPageStatusCallback = Callable[[str], None]
+PUBLISHER_PAGE_CACHE_KEY = "publisher_page_lookup_v1"
+PUBLISHER_PAGE_ISBN_MISMATCH = "PUBLISHER_PAGE_ISBN_MISMATCH"
 
 
 @dataclass(frozen=True)
@@ -166,7 +172,7 @@ class DuckDuckGoHtmlSearcher(PublisherPageSearcher):
             )
             response.raise_for_status()
         except httpx.HTTPError:
-            return []
+            raise
 
         links: list[str] = []
         seen: set[str] = set()
@@ -485,7 +491,7 @@ def extract_publisher_page_record(
 ) -> SourceBookRecord | None:
     isbn_candidates = _extract_isbn_candidates(html)
     normalized_isbn = normalize_isbn(isbn)
-    if isbn_candidates and normalized_isbn not in isbn_candidates:
+    if normalized_isbn not in isbn_candidates:
         return None
 
     json_ld_record = _extract_json_ld_record(html, isbn)
@@ -560,6 +566,20 @@ def _merge_categories(primary: list[str], secondary: list[str]) -> list[str]:
     return merged
 
 
+def _merge_issue_codes(*values: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+
+    for items in values:
+        for item in items:
+            if item in seen:
+                continue
+            seen.add(item)
+            merged.append(item)
+
+    return merged
+
+
 def apply_publisher_page_record(
     existing_record: SourceBookRecord,
     publisher_record: SourceBookRecord,
@@ -585,55 +605,162 @@ def apply_publisher_page_record(
     return merged_record.model_copy(update=updates)
 
 
+def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
+    return not record.editorial
+
+
+def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
+    return not (
+        record.title
+        and record.author
+        and record.editorial
+        and (record.subject or record.categories)
+    )
+
+
+def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:
+    matched_profile = match_publisher_profile(record.editorial)
+    if not _needs_publisher_discovery(record):
+        return [matched_profile] if matched_profile is not None else []
+
+    candidate_profiles: list[PublisherProfile] = []
+    seen_profile_keys: set[str] = set()
+
+    if matched_profile is not None:
+        candidate_profiles.append(matched_profile)
+        seen_profile_keys.add(matched_profile.key)
+
+    for profile in SUPPORTED_PUBLISHERS:
+        if profile.key in seen_profile_keys:
+            continue
+        seen_profile_keys.add(profile.key)
+        candidate_profiles.append(profile)
+
+    return candidate_profiles
+
+
 def augment_fetch_results_with_publisher_pages(
     fetch_results: list[FetchResult],
     timeout_seconds: float,
     searcher: PublisherPageSearcher | None = None,
     page_fetcher: PageContentFetcher | None = None,
+    on_status_update: PublisherPageStatusCallback | None = None,
+    cache: FetchResultCache | None = None,
 ) -> list[FetchResult]:
     active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds)
     active_page_fetcher = page_fetcher or _DefaultPageFetcher(timeout_seconds)
     augmented_results: list[FetchResult] = []
 
-    for fetch_result in fetch_results:
+    if on_status_update is not None:
+        on_status_update(
+            f"Stage: checking publisher pages for {len(fetch_results)} fetched records"
+        )
+
+    for index, fetch_result in enumerate(fetch_results, start=1):
         record = fetch_result.record
         if record is None:
             augmented_results.append(fetch_result)
             continue
 
-        profile = match_publisher_profile(record.editorial)
-        if profile is None:
+        if not _needs_publisher_lookup(record):
+            augmented_results.append(fetch_result)
+            continue
+
+        cached_result = cache.get(record.isbn) if cache is not None else None
+        if cached_result is not None and cached_result.record is not None:
+            augmented_results.append(
+                fetch_result.model_copy(
+                    update={"record": apply_publisher_page_record(record, cached_result.record)}
+                )
+            )
+            continue
+
+        candidate_profiles = _candidate_publisher_profiles(record)
+        if not candidate_profiles:
             augmented_results.append(fetch_result)
             continue
 
         page_url: str | None = None
-        for candidate_url in active_searcher.search(
-            build_publisher_search_query(record),
-            profile.domains,
-        ):
-            page_html = active_page_fetcher.fetch_text(candidate_url)
-            if not page_html:
-                continue
-
-            publisher_record = extract_publisher_page_record(
-                page_html,
-                candidate_url,
-                record.isbn,
-                profile,
+        publisher_issue_codes: list[str] = []
+        query = build_publisher_search_query(record)
+        if on_status_update is not None:
+            on_status_update(
+                f"Publisher lookup {index}/{len(fetch_results)}: {record.isbn}"
             )
-            if publisher_record is None:
-                continue
-
-            page_url = candidate_url
-            augmented_results.append(
-                fetch_result.model_copy(
-                    update={"record": apply_publisher_page_record(record, publisher_record)}
+        for profile in candidate_profiles:
+            try:
+                candidate_urls = active_searcher.search(query, profile.domains)
+            except httpx.HTTPError as exc:
+                publisher_issue_codes = _merge_issue_codes(
+                    publisher_issue_codes,
+                    classify_http_issue("publisher_page_search", exc),
                 )
-            )
-            break
+                continue
+
+            for candidate_url in candidate_urls:
+                if not _is_allowed_domain(candidate_url, profile.domains):
+                    continue
+
+                try:
+                    page_html = active_page_fetcher.fetch_text(candidate_url)
+                except httpx.HTTPError as exc:
+                    publisher_issue_codes = _merge_issue_codes(
+                        publisher_issue_codes,
+                        classify_http_issue("publisher_page_fetch", exc),
+                    )
+                    continue
+
+                if page_html is None:
+                    continue
+
+                if normalize_isbn(record.isbn) not in _extract_isbn_candidates(page_html):
+                    publisher_issue_codes = _merge_issue_codes(
+                        publisher_issue_codes,
+                        [PUBLISHER_PAGE_ISBN_MISMATCH],
+                    )
+                    continue
+
+                publisher_record = extract_publisher_page_record(
+                    page_html,
+                    candidate_url,
+                    record.isbn,
+                    profile,
+                )
+                if publisher_record is None:
+                    continue
+
+                page_url = candidate_url
+                if cache is not None:
+                    cache.set(
+                        FetchResult(
+                            isbn=record.isbn,
+                            record=publisher_record,
+                            errors=[],
+                            issue_codes=[],
+                        )
+                    )
+                augmented_results.append(
+                    fetch_result.model_copy(
+                        update={"record": apply_publisher_page_record(record, publisher_record)}
+                    )
+                )
+                break
+
+            if page_url is not None:
+                break
 
         if page_url is None:
-            augmented_results.append(fetch_result)
+            augmented_results.append(
+                fetch_result.model_copy(
+                    update={
+                        "issue_codes": _merge_issue_codes(
+                            fetch_result.issue_codes,
+                            publisher_issue_codes,
+                            [no_match_issue_code("publisher_page")],
+                        )
+                    }
+                )
+            )
 
     return augmented_results
 
@@ -651,6 +778,6 @@ class _DefaultPageFetcher:
             )
             response.raise_for_status()
         except httpx.HTTPError:
-            return None
+            raise
 
         return response.text

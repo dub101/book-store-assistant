@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -16,13 +17,19 @@ from book_store_assistant.sources.results import FetchResult
 runner = CliRunner()
 
 
+def _cli_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env["BSA_PUBLISHER_PAGE_LOOKUP_ENABLED"] = "0"
+    return env
+
+
 @patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_cli_main_reports_pipeline_counts(mock_fetch_with_intermediate_stages, tmp_path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\ninvalid\n", encoding="utf-8")
     mock_fetch_with_intermediate_stages.return_value = []
 
-    result = runner.invoke(app, [str(input_file)])
+    result = runner.invoke(app, [str(input_file)], env=_cli_env())
 
     assert result.exit_code == 0
     assert "Execution mode: rules-only" in result.stdout
@@ -85,7 +92,7 @@ def test_cli_main_reports_unresolved_reason_counts(
         ),
     ]
 
-    result = runner.invoke(app, [str(input_file)])
+    result = runner.invoke(app, [str(input_file)], env=_cli_env())
 
     assert result.exit_code == 0
     assert "9780306406157: review (MISSING_SUBJECT)" in result.stderr
@@ -142,7 +149,7 @@ def test_cli_main_reports_source_issue_code_counts_and_rate_limit_warning(
         resolution_results=[],
     )
 
-    result = runner.invoke(app, [str(input_file)])
+    result = runner.invoke(app, [str(input_file)], env=_cli_env())
 
     assert result.exit_code == 0
     assert "Source issue codes:" in result.stdout
@@ -215,7 +222,7 @@ def test_cli_main_reports_final_resolution_statuses(
         ),
     ]
 
-    result = runner.invoke(app, [str(input_file)])
+    result = runner.invoke(app, [str(input_file)], env=_cli_env())
 
     assert result.exit_code == 0
     assert "9780306406157: resolved" in result.stderr
@@ -233,7 +240,11 @@ def test_cli_main_passes_execution_mode_to_pipeline(mock_process_isbn_file, tmp_
         resolution_results=[],
     )
 
-    result = runner.invoke(app, [str(input_file), "--mode", ExecutionMode.AI_ENRICHED.value])
+    result = runner.invoke(
+        app,
+        [str(input_file), "--mode", ExecutionMode.AI_ENRICHED.value],
+        env=_cli_env(),
+    )
 
     assert result.exit_code == 0
     mock_process_isbn_file.assert_called_once()
@@ -289,7 +300,11 @@ def test_cli_main_reports_enrichment_statuses_in_ai_mode(mock_process_isbn_file,
         resolution_results=[],
     )
 
-    result = runner.invoke(app, [str(input_file), "--mode", ExecutionMode.AI_ENRICHED.value])
+    result = runner.invoke(
+        app,
+        [str(input_file), "--mode", ExecutionMode.AI_ENRICHED.value],
+        env=_cli_env(),
+    )
 
     assert result.exit_code == 0
     assert "9780306406157: enrichment applied" in result.stderr
