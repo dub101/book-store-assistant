@@ -4,6 +4,7 @@ from pathlib import Path
 
 from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.contracts import ISBNInput
+from book_store_assistant.sources.bne import BneSruSource
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.google_books import GoogleBooksSource
 from book_store_assistant.sources.intermediate import export_fetch_results, read_fetch_results
@@ -108,6 +109,7 @@ def fetch_with_intermediate_stages(
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
     cache = FetchResultCache(config.source_cache_dir, STAGED_SOURCE_CACHE_KEY)
+    bne = BneSruSource(config)
     open_library = OpenLibrarySource(config)
     google_books = GoogleBooksSource(config)
 
@@ -127,10 +129,51 @@ def fetch_with_intermediate_stages(
         result.isbn: result
         for result in cache_stage_results
     }
+    merged_after_bne = merged_after_cache
+    if config.bne_lookup_enabled:
+        bne_candidates = [
+            item.isbn
+            for item in inputs
+            if not _is_fetch_complete_for_resolution(merged_after_cache[item.isbn])
+        ]
+        if on_stage_update is not None:
+            on_stage_update(f"Stage: querying BNE for {len(bne_candidates)} ISBNs")
+
+        bne_stage_results: list[FetchResult] = []
+        for index, isbn in enumerate(bne_candidates):
+            if on_stage_update is not None:
+                on_stage_update(f"BNE {index + 1}/{len(bne_candidates)}: {isbn}")
+            if index > 0 and config.source_request_pause_seconds > 0:
+                time.sleep(config.source_request_pause_seconds)
+
+            result = bne.fetch(isbn)
+            bne_stage_results.append(result)
+            cache.set(result)
+
+        bne_stage_results = _save_and_read_stage(
+            bne_stage_results,
+            _stage_output_path(config.intermediate_dir, input_path, "bne"),
+        )
+        bne_by_isbn = {
+            result.isbn: _prefix_result(result, bne.source_name)
+            for result in bne_stage_results
+        }
+
+        merged_after_bne = {}
+        for item in inputs:
+            isbn = item.isbn
+            merged_after_bne[isbn] = _merge_stage_results(
+                merged_after_cache[isbn],
+                bne_by_isbn.get(
+                    isbn,
+                    FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
+                ),
+            )
+
     open_library_candidates = [
         item.isbn
         for item in inputs
-        if not _is_fetch_complete_for_resolution(merged_after_cache[item.isbn])
+        if not _is_fetch_complete_for_resolution(merged_after_bne[item.isbn])
     ]
     if on_stage_update is not None:
         on_stage_update(
@@ -167,7 +210,7 @@ def fetch_with_intermediate_stages(
     merged_after_open_library: dict[str, FetchResult] = {}
     for item in inputs:
         isbn = item.isbn
-        cache_result = merged_after_cache[isbn]
+        cache_result = merged_after_bne[isbn]
         open_library_result = open_library_by_isbn.get(
             isbn,
             FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),

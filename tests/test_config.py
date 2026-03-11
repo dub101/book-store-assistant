@@ -28,6 +28,8 @@ def test_app_config_reads_non_secret_settings_from_config_file(
                 "request_timeout_seconds = 6.0",
                 "source_request_pause_seconds = 0.25",
                 "open_library_batch_size = 12",
+                "bne_lookup_enabled = false",
+                'bne_sru_base_url = "https://catalogo.bne.test/view/sru/34BNE_INST"',
                 'execution_mode = "ai-enriched"',
                 "llm_subject_mapping_enabled = false",
                 "llm_subject_mapping_min_confidence = 0.9",
@@ -51,6 +53,8 @@ def test_app_config_reads_non_secret_settings_from_config_file(
     assert config.request_timeout_seconds == 6.0
     assert config.source_request_pause_seconds == 0.25
     assert config.open_library_batch_size == 12
+    assert config.bne_lookup_enabled is False
+    assert config.bne_sru_base_url == "https://catalogo.bne.test/view/sru/34BNE_INST"
     assert config.execution_mode == ExecutionMode.AI_ENRICHED
     assert config.llm_subject_mapping_enabled is False
     assert config.llm_subject_mapping_min_confidence == 0.9
@@ -67,6 +71,8 @@ def test_app_config_uses_project_data_directories(monkeypatch) -> None:
     assert config.google_books_api_base_url == "https://www.googleapis.com/books/v1/volumes"
     assert config.google_books_max_retries == 2
     assert config.google_books_backoff_seconds == 1.0
+    assert config.bne_lookup_enabled is True
+    assert config.bne_sru_base_url == "https://catalogo.bne.es/view/sru/34BNE_INST"
     assert config.open_library_api_base_url == "https://openlibrary.org/api/books"
     assert config.publisher_page_cache_dir == Path("data/cache/publisher_pages")
     assert config.publisher_page_cache_enabled is True
@@ -82,6 +88,7 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
     clear_config_file_cache()
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_MAX_RETRIES", "4")
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", "0.25")
+    monkeypatch.setenv("BSA_BNE_LOOKUP_ENABLED", "0")
     monkeypatch.setenv("BSA_PUBLISHER_PAGE_CACHE_ENABLED", "0")
     monkeypatch.setenv("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", "2.0")
     monkeypatch.setenv("BSA_REQUEST_TIMEOUT_SECONDS", "3.5")
@@ -92,6 +99,7 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
 
     assert config.google_books_max_retries == 4
     assert config.google_books_backoff_seconds == 0.25
+    assert config.bne_lookup_enabled is False
     assert config.publisher_page_cache_enabled is False
     assert config.publisher_page_timeout_seconds == 2.0
     assert config.request_timeout_seconds == 3.5
@@ -104,6 +112,7 @@ def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatc
     clear_config_file_cache()
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_MAX_RETRIES", "not-an-int")
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", "not-a-float")
+    monkeypatch.setenv("BSA_BNE_LOOKUP_ENABLED", "not-a-bool")
     monkeypatch.setenv("BSA_PUBLISHER_PAGE_CACHE_ENABLED", "not-a-bool")
     monkeypatch.setenv("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", "still-not-a-float")
     monkeypatch.setenv("BSA_REQUEST_TIMEOUT_SECONDS", "still-not-a-float")
@@ -113,6 +122,7 @@ def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatc
 
     assert config.google_books_max_retries == 2
     assert config.google_books_backoff_seconds == 1.0
+    assert config.bne_lookup_enabled is True
     assert config.publisher_page_cache_enabled is True
     assert config.publisher_page_timeout_seconds == 3.0
     assert config.request_timeout_seconds == 10.0

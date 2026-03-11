@@ -28,18 +28,20 @@ class DummySource:
 def test_build_default_sources_returns_sources_in_precedence_order() -> None:
     sources = build_default_sources()
 
-    assert len(sources) == 2
-    assert sources[0].source_name == "google_books"
+    assert len(sources) == 3
+    assert sources[0].source_name == "bne"
     assert sources[1].source_name == "open_library"
+    assert sources[2].source_name == "google_books"
 
 
 def test_build_default_source_returns_fallback_metadata_source() -> None:
     source = build_default_source(AppConfig(source_cache_enabled=False))
 
     assert isinstance(source, FallbackMetadataSource)
-    assert len(source.sources) == 2
-    assert source.sources[0].source_name == "google_books"
+    assert len(source.sources) == 3
+    assert source.sources[0].source_name == "bne"
     assert source.sources[1].source_name == "open_library"
+    assert source.sources[2].source_name == "google_books"
 
 
 def test_build_default_source_wraps_fallback_metadata_source_with_cache() -> None:

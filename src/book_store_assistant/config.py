@@ -144,6 +144,15 @@ class AppConfig(BaseModel):
     open_library_batch_size: int = Field(
         default_factory=lambda: _env_int("BSA_OPEN_LIBRARY_BATCH_SIZE", 25)
     )
+    bne_lookup_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_BNE_LOOKUP_ENABLED", True)
+    )
+    bne_sru_base_url: str = Field(
+        default_factory=lambda: _configured_str(
+            "bne_sru_base_url",
+            "https://catalogo.bne.es/view/sru/34BNE_INST",
+        )
+    )
     google_books_api_base_url: str = "https://www.googleapis.com/books/v1/volumes"
     google_books_max_retries: int = Field(
         default_factory=lambda: _env_int("BSA_GOOGLE_BOOKS_MAX_RETRIES", 2)
