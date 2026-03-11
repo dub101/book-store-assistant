@@ -77,6 +77,38 @@ def _parse_subject_response(text: str) -> tuple[str | None, float]:
     return (cleaned_subject or None), float(confidence)
 
 
+def _extract_output_text(payload: dict) -> str | None:
+    output_text = payload.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return None
+
+    text_parts: list[str] = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+
+        content_items = item.get("content")
+        if not isinstance(content_items, list):
+            continue
+
+        for content_item in content_items:
+            if not isinstance(content_item, dict):
+                continue
+
+            text_value = content_item.get("text")
+            if isinstance(text_value, str) and text_value.strip():
+                text_parts.append(text_value.strip())
+
+    if not text_parts:
+        return None
+
+    return "\n".join(text_parts)
+
+
 class OpenAISubjectMapper(SubjectMapper):
     def __init__(
         self,
@@ -111,7 +143,7 @@ class OpenAISubjectMapper(SubjectMapper):
         )
         response.raise_for_status()
         payload = response.json()
-        output_text = payload.get("output_text")
+        output_text = _extract_output_text(payload)
         if not isinstance(output_text, str) or not output_text.strip():
             return None
 

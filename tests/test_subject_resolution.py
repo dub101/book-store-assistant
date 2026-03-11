@@ -62,3 +62,12 @@ def test_resolve_subject_returns_none_when_no_candidate_matches() -> None:
     )
 
     assert subject is None
+
+
+def test_resolve_subject_prefers_the_most_supported_controlled_match() -> None:
+    subject = resolve_subject(
+        ["Historical", "Fiction", "Novel"],
+        [["Narrativa", "Fiction", "Novel"], ["Historia", "Historical"]],
+    )
+
+    assert subject == "Narrativa"

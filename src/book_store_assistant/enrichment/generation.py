@@ -4,6 +4,14 @@ from book_store_assistant.synopsis import has_synopsis
 
 MIN_EVIDENCE_CHARACTERS = 80
 MIN_GENERATED_SYNOPSIS_CHARACTERS = 40
+DESCRIPTIVE_EVIDENCE_TYPES = frozenset(
+    {
+        "source_synopsis",
+        "source_page_structured_data",
+        "source_page_meta_description",
+        "source_page_body_description",
+    }
+)
 
 
 def has_sufficient_evidence(evidence: list[DescriptiveEvidence]) -> bool:
@@ -29,9 +37,15 @@ def validate_generated_synopsis(
     if not synopsis.evidence_indexes:
         validation_flags.append("missing_evidence_references")
 
+    has_descriptive_reference = False
     for evidence_index in synopsis.evidence_indexes:
         if evidence_index < 0 or evidence_index >= len(evidence):
             validation_flags.append("invalid_evidence_reference")
             break
+        if evidence[evidence_index].evidence_type in DESCRIPTIVE_EVIDENCE_TYPES:
+            has_descriptive_reference = True
+
+    if synopsis.evidence_indexes and not has_descriptive_reference:
+        validation_flags.append("insufficient_descriptive_evidence_reference")
 
     return validation_flags

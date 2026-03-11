@@ -347,3 +347,40 @@ def test_enrich_fetch_results_reports_missing_generator_when_evidence_is_suffici
     )
 
     assert enrichment_results[0].skipped_reason == "no_generator_configured"
+
+
+def test_enrich_fetch_results_rejects_generated_synopsis_without_descriptive_evidence_reference(
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title=(
+                    "Titulo extremadamente largo con suficiente texto para superar el umbral "
+                    "de evidencia sin aportar una descripcion real del libro o su argumento"
+                ),
+            ),
+            errors=[],
+        )
+    ]
+
+    enriched_fetch_results, enrichment_results = enrich_fetch_results(
+        fetch_results,
+        mode=ExecutionMode.AI_ENRICHED,
+        generator=StubGenerator(
+            GeneratedSynopsis(
+                text="Resumen generado a partir de texto bibliografico insuficiente.",
+                evidence_indexes=[0],
+            )
+        ),
+    )
+
+    assert enriched_fetch_results == fetch_results
+    assert enrichment_results[0].applied is False
+    assert enrichment_results[0].skipped_reason == "generated_synopsis_rejected"
+    assert enrichment_results[0].generated_synopsis is not None
+    assert enrichment_results[0].generated_synopsis.validation_flags == [
+        "insufficient_descriptive_evidence_reference"
+    ]
