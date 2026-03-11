@@ -267,7 +267,7 @@ The CLI reads ISBNs from a CSV file, runs the pipeline, and can export both reso
 
 Example:
 ```bash
-.venv/bin/book-store-assistant data/input/isbns.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
+.venv/bin/book-store-assistant data/input/sample_1.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
 AI-enriched example:
