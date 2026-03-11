@@ -5,6 +5,7 @@ class SourceBookRecord(BaseModel):
     source_name: str
     isbn: str
     source_url: HttpUrl | None = None
+    raw_source_payload: str | None = None
     title: str | None = None
     subtitle: str | None = None
     author: str | None = None
@@ -15,3 +16,4 @@ class SourceBookRecord(BaseModel):
     cover_url: HttpUrl | None = None
     language: str | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
+    field_confidence: dict[str, float] = Field(default_factory=dict)

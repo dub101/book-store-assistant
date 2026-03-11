@@ -61,6 +61,7 @@ def parse_bne_sru_payload(payload: str, isbn: str) -> SourceBookRecord | None:
         source_name="bne",
         isbn=isbn,
         source_url=source_url,
+        raw_source_payload=None,
         title=title,
         author=", ".join(creators) if creators else None,
         editorial=", ".join(publishers) if publishers else None,

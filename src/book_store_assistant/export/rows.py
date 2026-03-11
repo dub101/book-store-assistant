@@ -90,6 +90,7 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
         if enrichment_result is not None and enrichment_result.generated_synopsis is not None
         else None
     )
+    raw_source_payload = source_record.raw_source_payload
     enrichment_status = None
     evidence_count = None
     evidence_origins = None
@@ -123,6 +124,7 @@ def build_review_row(result: ResolutionResult) -> list[str | None]:
         generated_synopsis_flags,
         generated_synopsis_text,
         generated_synopsis_raw,
+        raw_source_payload,
         ", ".join(result.reason_codes),
         "; ".join(result.review_details),
     ]

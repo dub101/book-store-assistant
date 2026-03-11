@@ -35,6 +35,7 @@ class BneSruSource:
                 record=None,
                 errors=[str(exc)],
                 issue_codes=classify_http_issue(self.source_name, exc),
+                raw_payload=exc.response.text if isinstance(exc, httpx.HTTPStatusError) else None,
             )
 
         try:
@@ -45,6 +46,7 @@ class BneSruSource:
                 record=None,
                 errors=["Invalid BNE SRU response payload."],
                 issue_codes=["BNE_FETCH_ERROR"],
+                raw_payload=response.text,
             )
 
         if record is None:
@@ -53,6 +55,14 @@ class BneSruSource:
                 record=None,
                 errors=["No BNE match found."],
                 issue_codes=[no_match_issue_code(self.source_name)],
+                raw_payload=response.text,
             )
 
-        return FetchResult(isbn=isbn, record=record, errors=[], issue_codes=[])
+        record = record.model_copy(update={"raw_source_payload": response.text})
+        return FetchResult(
+            isbn=isbn,
+            record=record,
+            errors=[],
+            issue_codes=[],
+            raw_payload=response.text,
+        )

@@ -16,6 +16,7 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     source_record = SourceBookRecord(
         source_name="google_books + open_library",
         isbn="9780306406157",
+        raw_source_payload='{"items":[{"volumeInfo":{"title":"Example Title"}}]}',
         title="Example Title",
         subtitle="Example Subtitle",
         author="Example Author",
@@ -102,10 +103,13 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=21).value == (
         '{"text":"Resumen corto","language":"es","evidence_indexes":[0]}'
     )
-    assert sheet.cell(row=2, column=22).value == "MISSING_SYNOPSIS"
+    assert sheet.cell(row=2, column=22).value == (
+        '{"items":[{"volumeInfo":{"title":"Example Title"}}]}'
+    )
+    assert sheet.cell(row=2, column=23).value == "MISSING_SYNOPSIS"
     assert (
         "Synopsis came from google_books with language 'en'."
-        in sheet.cell(row=2, column=23).value
+        in sheet.cell(row=2, column=24).value
     )
     assert sheet.cell(row=2, column=13).alignment.wrap_text is True
     assert sheet.cell(row=2, column=14).alignment.wrap_text is True
@@ -115,6 +119,7 @@ def test_review_rows_can_be_written_to_excel(tmp_path: Path) -> None:
     assert sheet.cell(row=2, column=21).alignment.wrap_text is True
     assert sheet.cell(row=2, column=22).alignment.wrap_text is True
     assert sheet.cell(row=2, column=23).alignment.wrap_text is True
+    assert sheet.cell(row=2, column=24).alignment.wrap_text is True
     assert sheet.freeze_panes == "A2"
-    assert sheet.auto_filter.ref == "A1:W2"
+    assert sheet.auto_filter.ref == "A1:X2"
     assert sheet.max_row == 2

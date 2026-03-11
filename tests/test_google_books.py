@@ -41,6 +41,8 @@ def test_google_books_source_fetches_and_parses_response(mock_get: Mock) -> None
 
     assert result.record is not None
     assert result.record.title == "Example Title"
+    assert result.raw_payload is not None
+    assert result.record.raw_source_payload == result.raw_payload
     assert result.errors == []
     assert result.issue_codes == []
     mock_get.assert_called_once()
@@ -86,6 +88,7 @@ def test_google_books_source_retries_rate_limits_and_preserves_issue_codes(
 
     assert result.record is not None
     assert result.record.title == "Example Title"
+    assert result.raw_payload is not None
     assert result.errors == []
     assert result.issue_codes == ["GOOGLE_BOOKS_HTTP_429", "GOOGLE_BOOKS_RATE_LIMITED"]
     assert mock_get.call_count == 2

@@ -36,6 +36,7 @@ REVIEW_HEADERS = [
     "GeneratedSynopsisFlags",
     "GeneratedSynopsisText",
     "GeneratedSynopsisRaw",
+    "RawSourcePayload",
     "ReasonCodes",
     "ReviewDetails",
 ]
@@ -62,6 +63,7 @@ REVIEW_COLUMN_WIDTHS = {
     "S": 36,
     "T": 48,
     "U": 60,
-    "V": 28,
-    "W": 60,
+    "V": 80,
+    "W": 28,
+    "X": 60,
 }

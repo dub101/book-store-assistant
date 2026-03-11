@@ -1,3 +1,4 @@
+import json
 import time
 
 import httpx
@@ -60,6 +61,7 @@ class GoogleBooksSource:
                     record=None,
                     errors=[str(exc)],
                     issue_codes=issue_codes,
+                    raw_payload=exc.response.text,
                 )
             except httpx.HTTPError as exc:
                 return FetchResult(
@@ -78,7 +80,9 @@ class GoogleBooksSource:
                 issue_codes=issue_codes,
             )
 
-        record = parse_google_books_payload(response.json(), isbn)
+        payload = response.json()
+        raw_payload = json.dumps(payload, ensure_ascii=False)
+        record = parse_google_books_payload(payload, isbn)
         if record is None:
             no_match_code = no_match_issue_code(self.source_name)
             result_issue_codes = (
@@ -91,11 +95,14 @@ class GoogleBooksSource:
                 record=None,
                 errors=["No Google Books match found."],
                 issue_codes=result_issue_codes,
+                raw_payload=raw_payload,
             )
 
+        record = record.model_copy(update={"raw_source_payload": raw_payload})
         return FetchResult(
             isbn=isbn,
             record=record,
             errors=[],
             issue_codes=issue_codes,
+            raw_payload=raw_payload,
         )

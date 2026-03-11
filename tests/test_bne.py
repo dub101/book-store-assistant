@@ -46,6 +46,8 @@ def test_bne_source_fetches_and_parses_response(mock_get: Mock) -> None:
     assert result.record is not None
     assert result.record.title == "Example Title"
     assert result.record.source_name == "bne"
+    assert result.raw_payload is not None
+    assert result.record.raw_source_payload == result.raw_payload
     assert result.errors == []
     assert result.issue_codes == []
     mock_get.assert_called_once()

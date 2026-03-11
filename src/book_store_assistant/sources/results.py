@@ -10,3 +10,4 @@ class FetchResult(BaseModel):
     errors: list[str]
     issue_codes: list[str] = []
     publisher_identity: PublisherIdentityResult | None = None
+    raw_payload: str | None = None

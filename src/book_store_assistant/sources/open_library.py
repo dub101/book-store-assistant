@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from book_store_assistant.config import AppConfig
@@ -35,11 +37,17 @@ class OpenLibrarySource:
                     record=None,
                     errors=[str(exc)],
                     issue_codes=issue_codes,
+                    raw_payload=(
+                        exc.response.text
+                        if isinstance(exc, httpx.HTTPStatusError)
+                        else None
+                    ),
                 )
                 for isbn in isbns
             ]
 
         payload = response.json()
+        raw_payload = json.dumps(payload, ensure_ascii=False)
         results: list[FetchResult] = []
         for isbn in isbns:
             record = parse_open_library_payload(payload, isbn)
@@ -50,11 +58,20 @@ class OpenLibrarySource:
                         record=None,
                         errors=["No Open Library match found."],
                         issue_codes=[no_match_issue_code(self.source_name)],
+                        raw_payload=raw_payload,
                     )
                 )
                 continue
 
-            results.append(FetchResult(isbn=isbn, record=record, errors=[]))
+            record = record.model_copy(update={"raw_source_payload": raw_payload})
+            results.append(
+                FetchResult(
+                    isbn=isbn,
+                    record=record,
+                    errors=[],
+                    raw_payload=raw_payload,
+                )
+            )
 
         return results
 

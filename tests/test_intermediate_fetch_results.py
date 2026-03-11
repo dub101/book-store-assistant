@@ -12,6 +12,7 @@ def test_fetch_results_can_roundtrip_through_intermediate_jsonl(tmp_path) -> Non
                 source_name="google_books",
                 isbn="9780306406157",
                 source_url="https://example.com/book",
+                raw_source_payload='{"items":[{"volumeInfo":{"title":"Example Title"}}]}',
                 title="Example Title",
                 subtitle="Example Subtitle",
                 author="Example Author",
@@ -25,12 +26,14 @@ def test_fetch_results_can_roundtrip_through_intermediate_jsonl(tmp_path) -> Non
             ),
             errors=["google_books: Timeout"],
             issue_codes=["GOOGLE_BOOKS:GOOGLE_BOOKS_TIMEOUT"],
+            raw_payload='{"items":[{"volumeInfo":{"title":"Example Title"}}]}',
         ),
         FetchResult(
             isbn="9780306406158",
             record=None,
             errors=[],
             issue_codes=[],
+            raw_payload='{"items":[]}',
         ),
     ]
 

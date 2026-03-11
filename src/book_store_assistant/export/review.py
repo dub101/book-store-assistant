@@ -38,7 +38,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
         sheet,
         freeze_panes="A2",
         column_widths=REVIEW_COLUMN_WIDTHS,
-        wrap_columns=(13, 23),
+        wrap_columns=(13, 24),
     )
 
     validation_errors = validate_review_sheet(sheet)

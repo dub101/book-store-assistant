@@ -53,6 +53,7 @@ def parse_open_library_payload(payload: dict, isbn: str) -> SourceBookRecord | N
         source_name="open_library",
         isbn=isbn,
         source_url=source_url,
+        raw_source_payload=None,
         title=data.get("title"),
         subtitle=data.get("subtitle"),
         author=", ".join(author_names) if author_names else None,

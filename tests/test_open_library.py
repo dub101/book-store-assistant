@@ -38,6 +38,8 @@ def test_open_library_source_fetches_and_parses_response(mock_get: Mock) -> None
     assert result.record is not None
     assert result.record.title == "Example Title"
     assert result.record.source_name == "open_library"
+    assert result.raw_payload is not None
+    assert result.record.raw_source_payload == result.raw_payload
     assert result.errors == []
     assert result.issue_codes == []
     mock_get.assert_called_once()
@@ -63,6 +65,7 @@ def test_open_library_source_fetch_batches_multiple_isbns(mock_get: Mock) -> Non
     assert len(results) == 2
     assert results[0].record is not None
     assert results[0].record.title == "Example Title"
+    assert results[0].raw_payload is not None
     assert results[1].record is None
     assert results[1].errors == ["No Open Library match found."]
     mock_get.assert_called_once()
