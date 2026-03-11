@@ -37,12 +37,13 @@ The application supports two modes:
 - `ai-enriched`
   - runs the same deterministic pipeline first
   - collects grounded evidence from trusted source data and trusted source pages
-  - may generate a Spanish synopsis only when evidence is sufficient
+  - may generate a standardized Spanish synopsis when evidence is sufficient
   - must not make outcomes worse than `rules-only`
 
-Current AI behavior is additive:
-- existing acceptable synopsis data is preserved
-- AI is only used to fill missing or unusable synopsis fields
+Current AI behavior:
+- synopsis generation is grounded by collected evidence only
+- output synopsis text may be standardized in `ai-enriched` when evidence is sufficient
+- subject mapping remains constrained to exact values from the internal catalog
 - rejected or weak generations stay visible in diagnostics and review output
 
 ## Pipeline Flow
@@ -51,12 +52,15 @@ The main runtime flow is:
 
 1. Read ISBN inputs from CSV.
 2. Normalize and validate ISBNs.
-3. Fetch source metadata through source adapters.
-4. Merge source records conservatively and preserve field provenance.
-5. Optionally enrich synopsis data in `ai-enriched`.
-6. Resolve business-required fields.
-7. Split into resolved rows and review rows.
-8. Export workbook outputs.
+3. Read cached fetch results.
+4. Batch query Open Library for rows still missing required metadata.
+5. Query Google Books one by one for rows still missing required metadata.
+6. Optionally query trusted publisher pages as a last metadata-acquisition step.
+7. Merge source records conservatively and preserve field provenance.
+8. Optionally enrich synopsis data in `ai-enriched`.
+9. Resolve business-required fields.
+10. Split into resolved rows and review rows.
+11. Export workbook outputs.
 
 The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
 
@@ -123,12 +127,17 @@ Implemented:
 - CSV ingestion
 - structured pipeline result models
 - Google Books and Open Library source adapters
+- staged fetch flow: cache -> Open Library -> Google Books -> publisher pages
+- JSONL intermediates for staged fetch results
+- successful fetch-result caching
 - conservative multi-source merge with field provenance
 - structured fetch issue codes
 - Google Books retry/backoff for HTTP `429`
+- optional publisher-page lookup with ISBN-confirmed page parsing
 - deterministic resolution and unresolved/review routing
 - dual execution modes: `rules-only` and `ai-enriched`
 - grounded evidence collection for AI synopsis generation
+- constrained AI subject mapping to internal catalog values only
 - resolved and review Excel export
 - internal subject catalog loading and alias-aware matching
 - CLI progress, status summaries, and degraded-source warnings
@@ -232,32 +241,71 @@ Run lint and type checks:
 .venv/bin/mypy
 ```
 
-## Environment Setup
+## Configuration
 
-The app reads AI configuration from the process environment.
-It does not load `.env` files by itself.
+Non-secret operational settings can live in `bsa.toml`.
+An example file is included as `bsa.toml.example`.
 
-Minimum variables:
+Configuration precedence:
+1. explicit CLI/runtime arguments
+2. environment variables
+3. `bsa.toml`
+4. code defaults
+
+Recommended:
+- keep non-secret pipeline settings in `bsa.toml`
+- keep secrets such as `OPENAI_API_KEY` in the shell environment
+
+Typical `bsa.toml` settings:
+```bash
+input_dir = "data/input"
+output_dir = "data/output"
+intermediate_dir = "data/intermediate"
+source_cache_dir = "data/cache/fetch"
+publisher_page_cache_dir = "data/cache/publisher_pages"
+source_cache_enabled = true
+publisher_page_cache_enabled = true
+publisher_page_lookup_enabled = false
+publisher_page_timeout_seconds = 3.0
+request_timeout_seconds = 10.0
+source_request_pause_seconds = 0.5
+open_library_batch_size = 25
+execution_mode = "rules-only"
+llm_subject_mapping_enabled = true
+llm_subject_mapping_min_confidence = 0.85
+```
+
+Secrets and provider settings still come from the process environment.
+
+Minimum AI variables:
 ```bash
 export OPENAI_API_KEY="sk-..."
 export OPENAI_MODEL="gpt-4o-mini"
 ```
 
-If you prefer a shell helper, define one in `~/.bashrc` that exports the project-specific values and runs the repo CLI.
+The app does not load `.env` files by itself.
+
+If you prefer a shell helper, define one in `~/.bashrc` that runs the repo CLI.
 
 Recommended helper:
 ```bash
 bsa() {
   cd "$HOME/Documents/projects/pet_projects/book-store-assistant" || return
-  OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
-  OPENAI_MODEL="gpt-4o-mini" \
   ./.venv/bin/python -m book_store_assistant.cli "$@"
 }
 ```
 
 Important:
-- the app reads process environment only
+- `bsa.toml` is optional and intended for non-secret settings
+- process environment overrides `bsa.toml`
 - values stored in `.env` are ignored unless you export them into the shell yourself
+
+## Current Caveats
+
+- Open Library and publisher search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
+- publisher discovery is intentionally conservative and only trusts pages that explicitly contain the target ISBN
+- DuckDuckGo HTML search is currently opportunistic, not a guaranteed backbone source
+- output file names passed to the CLI should generally be unsuffixed, for example `sample_3_books.xlsx`
 - running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
 - using the `bsa` helper avoids that mismatch
 
