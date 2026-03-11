@@ -53,14 +53,16 @@ The main runtime flow is:
 1. Read ISBN inputs from CSV.
 2. Normalize and validate ISBNs.
 3. Read cached fetch results.
-4. Batch query Open Library for rows still missing required metadata.
-5. Query Google Books one by one for rows still missing required metadata.
-6. Optionally query trusted publisher pages as a last metadata-acquisition step.
-7. Merge source records conservatively and preserve field provenance.
-8. Optionally enrich synopsis data in `ai-enriched`.
-9. Resolve business-required fields.
-10. Split into resolved rows and review rows.
-11. Export workbook outputs.
+4. Query BNE for rows still missing required metadata when enabled.
+5. Batch query Open Library for rows still missing required metadata.
+6. Query Google Books one by one for rows still missing required metadata or synopsis support.
+7. Optionally query trusted publisher pages as a last metadata-acquisition step.
+8. Resolve publisher identity separately from edition metadata and attach provenance.
+9. Merge source records conservatively with field-level confidence and provenance.
+10. Optionally enrich synopsis data in `ai-enriched`.
+11. Resolve business-required fields.
+12. Split into resolved rows and review rows.
+13. Export workbook outputs.
 
 The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
 
@@ -72,6 +74,9 @@ Core layers:
 - `pipeline/`
   - orchestration and process-level contracts
   - coordinates input, fetch, enrichment, resolution, and export
+- `publisher_identity/`
+  - publisher/imprint resolution separated from edition metadata resolution
+  - stores publisher provenance, confidence, and matching method
 - `sources/`
   - metadata source ports/adapters
   - provider-specific fetchers, payload parsers, merge logic, and source issue tracking
@@ -100,6 +105,7 @@ Architectural intent:
 - ports/adapters: external sources stay isolated from core resolution logic
 - rules-first: deterministic metadata and business rules take priority
 - additive enrichment: AI is used only where it can be grounded and safely constrained
+- auditability-first: chosen metadata stays explainable through field provenance, confidence, and raw payload retention
 
 ## Repo Map
 
@@ -108,8 +114,12 @@ Important package entry points:
   - Typer CLI entry point
 - `src/book_store_assistant/pipeline/service.py`
   - end-to-end orchestration
+- `src/book_store_assistant/publisher_identity/service.py`
+  - publisher identity resolution and attachment
 - `src/book_store_assistant/resolution/books.py`
   - required-field resolution and review routing
+- `src/book_store_assistant/sources/bne.py`
+  - BNE SRU adapter for Spain-first metadata lookup
 - `src/book_store_assistant/sources/google_books.py`
   - Google Books adapter with retry/backoff
 - `src/book_store_assistant/sources/open_library.py`
@@ -126,19 +136,24 @@ Implemented:
 - ISBN normalization and validation
 - CSV ingestion
 - structured pipeline result models
-- Google Books and Open Library source adapters
-- staged fetch flow: cache -> Open Library -> Google Books -> publisher pages
+- BNE, Google Books, and Open Library source adapters
+- staged fetch flow: cache -> BNE -> Open Library -> Google Books -> publisher pages
 - JSONL intermediates for staged fetch results
 - successful fetch-result caching
-- conservative multi-source merge with field provenance
+- separate publisher identity resolution with provenance and confidence
+- conservative multi-source merge with field provenance and field-level confidence
 - structured fetch issue codes
 - Google Books retry/backoff for HTTP `429`
 - optional publisher-page lookup with ISBN-confirmed page parsing
 - deterministic resolution and unresolved/review routing
 - dual execution modes: `rules-only` and `ai-enriched`
 - grounded evidence collection for AI synopsis generation
+- Google Books synopsis fallback through `searchInfo.textSnippet` when `description` is absent
 - constrained AI subject mapping to internal catalog values only
+- stronger deterministic subject resolution from controlled provider terms before LLM fallback
+- generated synopsis rejection when cited evidence is not descriptively grounded
 - resolved and review Excel export
+- raw upstream payload retention in fetch results and review output for auditing
 - internal subject catalog loading and alias-aware matching
 - CLI progress, status summaries, and degraded-source warnings
 
@@ -180,6 +195,9 @@ Review workbook columns:
 - EvidenceCount
 - EvidenceOrigins
 - GeneratedSynopsisFlags
+- GeneratedSynopsisText
+- GeneratedSynopsisRaw
+- RawSourcePayload
 - ReasonCodes
 - ReviewDetails
 
@@ -264,6 +282,8 @@ intermediate_dir = "data/intermediate"
 source_cache_dir = "data/cache/fetch"
 publisher_page_cache_dir = "data/cache/publisher_pages"
 source_cache_enabled = true
+bne_lookup_enabled = true
+bne_sru_base_url = "https://catalogo.bne.es/view/sru/34BNE_INST"
 publisher_page_cache_enabled = true
 publisher_page_lookup_enabled = false
 publisher_page_timeout_seconds = 3.0
@@ -302,7 +322,7 @@ Important:
 
 ## Current Caveats
 
-- Open Library and publisher search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
+- BNE, Open Library, Google Books, and publisher search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
 - publisher discovery is intentionally conservative and only trusts pages that explicitly contain the target ISBN
 - DuckDuckGo HTML search is currently opportunistic, not a guaranteed backbone source
 - output file names passed to the CLI should generally be unsuffixed, for example `sample_3_books.xlsx`
@@ -361,6 +381,8 @@ Current `ai-enriched` limitation:
 Current source-reliability note:
 - Google Books fetches now retry on HTTP 429 responses with exponential backoff
 - if Google Books eventually succeeds after retries, the run still reports the rate-limit issue code in the CLI summary so operators can see upstream degradation
+- rules-only mode now continues to Google Books when synopsis is still missing, even if Open Library already supplied title/author/editorial/categories
+- source review rows now retain raw upstream payload text for audit and debugging
 
 ## Demo Run
 
@@ -501,7 +523,9 @@ Current operator note:
 - `EnrichmentStatus` appears only in the review workbook for AI-enrichment diagnosis
 - `EvidenceCount` shows how many evidence blocks were collected for that unresolved row
 - `GeneratedSynopsisFlags` shows validation failures when a generated synopsis was rejected
+- `GeneratedSynopsisText` and `GeneratedSynopsisRaw` show the attempted AI synopsis and raw model output when generation was rejected
 - `EvidenceOrigins` shows whether evidence came from direct source metadata, structured provider page data, or scraped provider page text
+- `RawSourcePayload` shows the original upstream payload captured for the unresolved row
 
 ## Optional Future Work
 
