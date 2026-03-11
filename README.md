@@ -305,12 +305,17 @@ export OPENAI_MODEL="gpt-4o-mini"
 
 The app does not load `.env` files by itself.
 
-If you prefer a shell helper, define one in `~/.bashrc` that runs the repo CLI.
+Preferred way to run the project:
+- use the `bsa` shell helper
+- this repo's shell helper maps `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` to `OPENAI_API_KEY` before launching the CLI
+- this avoids the common mistake where direct `python -m ...` runs miss the API key and silently degrade `ai-enriched` mode
 
 Recommended helper:
 ```bash
 bsa() {
   cd "$HOME/Documents/projects/pet_projects/book-store-assistant" || return
+  OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
+  OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
   ./.venv/bin/python -m book_store_assistant.cli "$@"
 }
 ```
@@ -319,6 +324,7 @@ Important:
 - `bsa.toml` is optional and intended for non-secret settings
 - process environment overrides `bsa.toml`
 - values stored in `.env` are ignored unless you export them into the shell yourself
+- if you do not use `bsa`, export `OPENAI_API_KEY` in the same shell or pass it inline when invoking the CLI
 
 ## Current Caveats
 
@@ -333,25 +339,31 @@ Important:
 
 The CLI reads ISBNs from a CSV file, runs the pipeline, and can export both resolved and review outputs.
 
-Example:
+Recommended invocation:
 ```bash
-.venv/bin/book-store-assistant data/input/sample_1.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
+bsa data/input/sample_1.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
-AI-enriched example:
-```bash
-.venv/bin/book-store-assistant data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
-
-Shell-helper example:
+Recommended AI-enriched invocation:
 ```bash
 bsa data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
 
-Module form:
+Equivalent direct CLI form:
 ```bash
+.venv/bin/book-store-assistant data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+```
+
+Equivalent module form:
+```bash
+OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
+OPENAI_MODEL="gpt-4o-mini" \
 .venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
 ```
+
+Direct invocation note:
+- `bsa` is the safest default because it supplies the project-specific OpenAI key mapping automatically
+- direct `.venv/bin/book-store-assistant` and `.venv/bin/python -m ...` invocations are fine only when `OPENAI_API_KEY` is already exported in that shell
 
 CLI summary behavior:
 - prints valid and invalid input counts
