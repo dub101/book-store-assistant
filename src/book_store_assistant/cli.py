@@ -48,43 +48,12 @@ def _summarize_resolution_result(result: ResolutionResult) -> str:
 
 def _summarize_enrichment_result(result: EnrichmentResult) -> str:
     if result.applied and result.generated_synopsis is not None:
-        return (
-            f"{result.isbn}: enrichment applied "
-            f"(generated_synopsis={result.generated_synopsis.text})"
-        )
-
-    generated_text = (
-        result.generated_synopsis.text
-        if result.generated_synopsis is not None and result.generated_synopsis.text.strip()
-        else None
-    )
-
-    if result.skipped_reason and result.evidence and generated_text:
-        return (
-            f"{result.isbn}: enrichment skipped "
-            f"({result.skipped_reason}, evidence={len(result.evidence)}, "
-            f"generated_synopsis={generated_text})"
-        )
-
-    if result.skipped_reason and result.generated_synopsis is not None:
-        raw_output_text = result.generated_synopsis.raw_output_text
-        if raw_output_text:
-            return (
-                f"{result.isbn}: enrichment skipped "
-                f"({result.skipped_reason}, evidence={len(result.evidence)}, "
-                f"generated_raw={raw_output_text})"
-            )
+        return f"{result.isbn}: enrichment applied"
 
     if result.skipped_reason and result.evidence:
         return (
             f"{result.isbn}: enrichment skipped "
             f"({result.skipped_reason}, evidence={len(result.evidence)})"
-        )
-
-    if result.skipped_reason and generated_text:
-        return (
-            f"{result.isbn}: enrichment skipped "
-            f"({result.skipped_reason}, generated_synopsis={generated_text})"
         )
 
     if result.skipped_reason:

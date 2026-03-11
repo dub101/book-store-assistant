@@ -293,7 +293,6 @@ def test_cli_main_reports_enrichment_statuses_in_ai_mode(mock_process_isbn_file,
 
     assert result.exit_code == 0
     assert "9780306406157: enrichment applied" in result.stderr
-    assert "generated_synopsis=Resumen generado suficiente para la prueba." in result.stderr
     assert "9780306406158: enrichment skipped (no_generator_configured)" in result.stderr
     assert "Records with evidence: 0" in result.stdout
     assert "Enrichment applied: 1" in result.stdout
