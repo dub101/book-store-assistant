@@ -238,6 +238,8 @@ def test_cli_main_passes_execution_mode_to_pipeline(mock_process_isbn_file, tmp_
     assert result.exit_code == 0
     mock_process_isbn_file.assert_called_once()
     assert mock_process_isbn_file.call_args.kwargs["mode"] == ExecutionMode.AI_ENRICHED
+    assert mock_process_isbn_file.call_args.kwargs["on_enrichment_start"] is not None
+    assert mock_process_isbn_file.call_args.kwargs["on_enrichment_complete"] is not None
     assert "Execution mode: ai-enriched" in result.stdout
 
 

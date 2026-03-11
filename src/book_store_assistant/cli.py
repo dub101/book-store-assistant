@@ -1,4 +1,5 @@
 from collections import Counter
+from contextlib import nullcontext
 from pathlib import Path
 
 import typer
@@ -109,25 +110,46 @@ def main(
 ) -> None:
     """Read ISBNs from a CSV file and report pipeline counts."""
     input_preview = read_isbn_inputs(input_path)
+    enrichment_progress_context = (
+        typer.progressbar(
+            length=len(input_preview.valid_inputs),
+            label="Enriching records",
+        )
+        if mode is ExecutionMode.AI_ENRICHED
+        else nullcontext(None)
+    )
 
     if input_preview.valid_inputs:
         with typer.progressbar(
             length=len(input_preview.valid_inputs),
             label="Consulting ISBNs",
-        ) as progress:
+        ) as fetch_progress, enrichment_progress_context as enrichment_progress:
 
             def on_fetch_start(index: int, total: int, isbn: str) -> None:
                 typer.echo(f"Consulting ISBN {index}/{total}: {isbn}", err=True)
 
             def on_fetch_complete(index: int, total: int, result: FetchResult) -> None:
-                progress.update(1)
+                fetch_progress.update(1)
                 typer.echo(_summarize_fetch_result(result), err=True)
+
+            def on_enrichment_start(index: int, total: int, isbn: str) -> None:
+                return None
+
+            def on_enrichment_complete(
+                index: int,
+                total: int,
+                result: EnrichmentResult,
+            ) -> None:
+                if enrichment_progress is not None:
+                    enrichment_progress.update(1)
 
             result = process_isbn_file(
                 input_path,
                 mode=mode,
                 on_fetch_start=on_fetch_start,
                 on_fetch_complete=on_fetch_complete,
+                on_enrichment_start=on_enrichment_start,
+                on_enrichment_complete=on_enrichment_complete,
             )
     else:
         result = process_isbn_file(input_path, mode=mode)

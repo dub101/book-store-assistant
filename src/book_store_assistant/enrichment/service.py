@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from book_store_assistant.config import ExecutionMode
 from book_store_assistant.enrichment.base import (
     PageContentFetcher,
@@ -16,6 +18,8 @@ from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.synopsis import has_synopsis
 
 AI_SYNOPSIS_SOURCE = "ai_enriched"
+EnrichmentStartCallback = Callable[[int, int, str], None]
+EnrichmentCompleteCallback = Callable[[int, int, EnrichmentResult], None]
 
 
 class NoOpSourceRecordEnricher:
@@ -163,6 +167,8 @@ def enrich_fetch_results(
     enricher: SourceRecordEnricher | None = None,
     generator: SynopsisGenerator | None = None,
     page_fetcher: PageContentFetcher | None = None,
+    on_enrichment_start: EnrichmentStartCallback | None = None,
+    on_enrichment_complete: EnrichmentCompleteCallback | None = None,
 ) -> tuple[list[FetchResult], list[EnrichmentResult]]:
     if mode is ExecutionMode.RULES_ONLY:
         return (
@@ -179,16 +185,21 @@ def enrich_fetch_results(
     )
     enriched_fetch_results: list[FetchResult] = []
     enrichment_results: list[EnrichmentResult] = []
+    total = len(fetch_results)
 
-    for fetch_result in fetch_results:
+    for index, fetch_result in enumerate(fetch_results, start=1):
+        if on_enrichment_start is not None:
+            on_enrichment_start(index, total, fetch_result.isbn)
+
         if fetch_result.record is None:
-            enriched_fetch_results.append(fetch_result)
-            enrichment_results.append(
-                EnrichmentResult(
-                    isbn=fetch_result.isbn,
-                    skipped_reason="no_source_record",
-                )
+            enrichment_result = EnrichmentResult(
+                isbn=fetch_result.isbn,
+                skipped_reason="no_source_record",
             )
+            enriched_fetch_results.append(fetch_result)
+            enrichment_results.append(enrichment_result)
+            if on_enrichment_complete is not None:
+                on_enrichment_complete(index, total, enrichment_result)
             continue
 
         enrichment_result = _normalize_enrichment_result(
@@ -197,5 +208,7 @@ def enrich_fetch_results(
         )
         enrichment_results.append(enrichment_result)
         enriched_fetch_results.append(_apply_generated_synopsis(fetch_result, enrichment_result))
+        if on_enrichment_complete is not None:
+            on_enrichment_complete(index, total, enrichment_result)
 
     return enriched_fetch_results, enrichment_results

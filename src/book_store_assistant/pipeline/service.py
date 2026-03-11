@@ -2,15 +2,22 @@ from pathlib import Path
 
 from book_store_assistant.config import AppConfig, ExecutionMode
 from book_store_assistant.enrichment.base import SourceRecordEnricher, SynopsisGenerator
+from book_store_assistant.enrichment.models import EnrichmentResult
 from book_store_assistant.enrichment.page_fetch import HttpPageContentFetcher
 from book_store_assistant.enrichment.providers import build_default_synopsis_generator
-from book_store_assistant.enrichment.service import enrich_fetch_results
+from book_store_assistant.enrichment.service import (
+    EnrichmentCompleteCallback,
+    EnrichmentStartCallback,
+    enrich_fetch_results,
+)
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
+from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.fallback import FallbackMetadataSource
+from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
     FetchStartCallback,
@@ -19,10 +26,10 @@ from book_store_assistant.sources.service import (
 
 
 def _attach_enrichment_results(
-    resolution_results,
-    enrichment_results,
-):
-    attached_results = []
+    resolution_results: list[ResolutionResult],
+    enrichment_results: list[EnrichmentResult],
+) -> list[ResolutionResult]:
+    attached_results: list[ResolutionResult] = []
 
     for resolution_result, enrichment_result in zip(
         resolution_results,
@@ -37,10 +44,10 @@ def _attach_enrichment_results(
 
 
 def _select_best_resolution_results(
-    baseline_results,
-    enriched_results,
-):
-    selected_results = []
+    baseline_results: list[ResolutionResult],
+    enriched_results: list[ResolutionResult],
+) -> list[ResolutionResult]:
+    selected_results: list[ResolutionResult] = []
 
     for baseline_result, enriched_result in zip(
         baseline_results,
@@ -73,6 +80,8 @@ def process_isbn_file(
     generator: SynopsisGenerator | None = None,
     on_fetch_start: FetchStartCallback | None = None,
     on_fetch_complete: FetchCompleteCallback | None = None,
+    on_enrichment_start: EnrichmentStartCallback | None = None,
+    on_enrichment_complete: EnrichmentCompleteCallback | None = None,
 ) -> ProcessResult:
     """Read ISBNs, fetch metadata, and resolve source records."""
     app_config = config or AppConfig()
@@ -81,7 +90,7 @@ def process_isbn_file(
     active_source = source or build_default_source()
     active_generator = generator or build_default_synopsis_generator(app_config)
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
-    fetch_results = fetch_all(
+    fetch_results: list[FetchResult] = fetch_all(
         active_source,
         input_result.valid_inputs,
         on_fetch_start=on_fetch_start,
@@ -93,6 +102,8 @@ def process_isbn_file(
         enricher=enricher,
         generator=active_generator,
         page_fetcher=page_fetcher,
+        on_enrichment_start=on_enrichment_start,
+        on_enrichment_complete=on_enrichment_complete,
     )
     if active_mode is ExecutionMode.AI_ENRICHED:
         baseline_resolution_results = resolve_all(fetch_results)

@@ -47,6 +47,51 @@ def test_enrich_fetch_results_skips_enrichment_in_rules_only_mode() -> None:
     ]
 
 
+def test_enrich_fetch_results_reports_progress_callbacks_for_each_item() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                synopsis="Descripcion del libro.",
+                language="es",
+                field_sources={"synopsis": "google_books"},
+            ),
+            errors=[],
+        ),
+        FetchResult(
+            isbn="9780306406158",
+            record=None,
+            errors=["No match"],
+        ),
+    ]
+    starts: list[tuple[int, int, str]] = []
+    completes: list[tuple[int, int, str]] = []
+
+    def on_enrichment_start(index: int, total: int, isbn: str) -> None:
+        starts.append((index, total, isbn))
+
+    def on_enrichment_complete(index: int, total: int, result: EnrichmentResult) -> None:
+        completes.append((index, total, result.isbn))
+
+    enrich_fetch_results(
+        fetch_results,
+        mode=ExecutionMode.AI_ENRICHED,
+        on_enrichment_start=on_enrichment_start,
+        on_enrichment_complete=on_enrichment_complete,
+    )
+
+    assert starts == [
+        (1, 2, "9780306406157"),
+        (2, 2, "9780306406158"),
+    ]
+    assert completes == [
+        (1, 2, "9780306406157"),
+        (2, 2, "9780306406158"),
+    ]
+
+
 def test_enrich_fetch_results_collects_existing_synopsis_evidence_in_ai_mode() -> None:
     fetch_results = [
         FetchResult(
