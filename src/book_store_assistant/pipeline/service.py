@@ -15,7 +15,7 @@ from book_store_assistant.pipeline.process_results import ProcessResult
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
-from book_store_assistant.sources.defaults import build_default_sources
+from book_store_assistant.sources.defaults import build_default_sources, wrap_with_default_cache
 from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.publisher_pages import (
     augment_fetch_results_with_publisher_pages,
@@ -70,8 +70,10 @@ def _select_best_resolution_results(
     return selected_results
 
 
-def build_default_source() -> MetadataSource:
-    return FallbackMetadataSource(build_default_sources())
+def build_default_source(config: AppConfig | None = None) -> MetadataSource:
+    active_config = config or AppConfig()
+    base_source = FallbackMetadataSource(build_default_sources(active_config))
+    return wrap_with_default_cache(base_source, active_config)
 
 
 def process_isbn_file(
@@ -90,7 +92,7 @@ def process_isbn_file(
     app_config = config or AppConfig()
     active_mode = mode or app_config.execution_mode
     input_result = read_isbn_inputs(input_path)
-    active_source = source or build_default_source()
+    active_source = source or build_default_source(app_config)
     active_generator = generator or build_default_synopsis_generator(app_config)
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     fetch_results: list[FetchResult] = fetch_all(

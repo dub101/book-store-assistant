@@ -73,6 +73,30 @@ def test_match_publisher_profile_supports_planeta_imprints() -> None:
     assert profile.domains == ("planetadelibros.com",)
 
 
+def test_match_publisher_profile_supports_penguin_random_house_imprints() -> None:
+    profile = match_publisher_profile("Alfaguara")
+
+    assert profile is not None
+    assert profile.key == "penguin_random_house"
+    assert profile.domains == ("penguinlibros.com", "megustaleer.com")
+
+
+def test_match_publisher_profile_supports_anagrama() -> None:
+    profile = match_publisher_profile("Editorial Anagrama")
+
+    assert profile is not None
+    assert profile.key == "anagrama"
+    assert profile.domains == ("anagrama-ed.es",)
+
+
+def test_match_publisher_profile_supports_urano_imprints() -> None:
+    profile = match_publisher_profile("Umbriel")
+
+    assert profile is not None
+    assert profile.key == "urano"
+    assert profile.domains == ("edicionesurano.com",)
+
+
 def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> None:
     query = build_publisher_search_query(
         SourceBookRecord(
