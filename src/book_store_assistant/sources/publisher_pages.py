@@ -11,6 +11,7 @@ from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
+from book_store_assistant.resolution.synopsis_resolution import is_spanish_language
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
@@ -610,11 +611,17 @@ def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
 
 
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
+    synopsis_needs_support = (
+        not record.synopsis
+        or record.language is None
+        or not is_spanish_language(record.language)
+    )
     return not (
         record.title
         and record.author
         and record.editorial
         and (record.subject or record.categories)
+        and not synopsis_needs_support
     )
 
 

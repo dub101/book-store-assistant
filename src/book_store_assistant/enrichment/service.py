@@ -12,10 +12,8 @@ from book_store_assistant.enrichment.generation import (
     validate_generated_synopsis,
 )
 from book_store_assistant.enrichment.models import EnrichmentResult
-from book_store_assistant.resolution.synopsis_resolution import is_spanish_language
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
-from book_store_assistant.synopsis import has_synopsis
 
 AI_SYNOPSIS_SOURCE = "ai_enriched"
 EnrichmentStartCallback = Callable[[int, int, str], None]
@@ -50,15 +48,6 @@ class DefaultSourceRecordEnricher:
 
     def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
         evidence = collect_descriptive_evidence(record, page_fetcher=self.page_fetcher)
-
-        if _should_preserve_existing_synopsis(record):
-            return EnrichmentResult(
-                isbn=record.isbn,
-                source_name=record.source_name,
-                applied=False,
-                skipped_reason="existing_synopsis_present",
-                evidence=evidence,
-            )
 
         if not has_sufficient_evidence(evidence):
             return EnrichmentResult(
@@ -122,18 +111,6 @@ def _normalize_enrichment_result(
         return enrichment_result.model_copy(update={"evidence": fallback_evidence})
 
     return enrichment_result
-
-
-def _should_preserve_existing_synopsis(record: SourceBookRecord) -> bool:
-    if not has_synopsis(record.synopsis):
-        return False
-
-    if record.language is None:
-        return True
-
-    return is_spanish_language(record.language)
-
-
 def _apply_generated_synopsis(
     fetch_result: FetchResult,
     enrichment_result: EnrichmentResult,
@@ -143,9 +120,6 @@ def _apply_generated_synopsis(
         or enrichment_result.generated_synopsis is None
         or not enrichment_result.applied
     ):
-        return fetch_result
-
-    if _should_preserve_existing_synopsis(fetch_result.record):
         return fetch_result
 
     enriched_field_sources = dict(fetch_result.record.field_sources)

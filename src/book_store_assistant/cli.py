@@ -17,6 +17,8 @@ app = typer.Typer(help="Book Store Assistant CLI.")
 
 
 def _mode_output_path(path: Path, mode: ExecutionMode) -> Path:
+    if path.stem.endswith(f".{mode.value}"):
+        return path
     return path.with_name(f"{path.stem}.{mode.value}{path.suffix}")
 
 

@@ -5,6 +5,11 @@ from book_store_assistant.enrichment.service import AI_SYNOPSIS_SOURCE, enrich_f
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
+LONG_EXISTING_SYNOPSIS = (
+    "Descripcion del libro lo bastante extensa para servir como evidencia suficiente "
+    "y permitir una estandarizacion conservadora del resumen final."
+)
+
 
 class StubEnricher:
     def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
@@ -99,7 +104,7 @@ def test_enrich_fetch_results_collects_existing_synopsis_evidence_in_ai_mode() -
             record=SourceBookRecord(
                 source_name="google_books + open_library",
                 isbn="9780306406157",
-                synopsis="Descripcion del libro.",
+                synopsis=LONG_EXISTING_SYNOPSIS,
                 language="es",
                 field_sources={"synopsis": "open_library"},
             ),
@@ -113,18 +118,51 @@ def test_enrich_fetch_results_collects_existing_synopsis_evidence_in_ai_mode() -
     )
 
     assert enriched_fetch_results == fetch_results
-    assert enrichment_results[0].skipped_reason == "existing_synopsis_present"
+    assert enrichment_results[0].skipped_reason == "no_generator_configured"
     assert len(enrichment_results[0].evidence) == 1
     assert enrichment_results[0].evidence[0].source_name == "open_library"
     assert enrichment_results[0].evidence[0].evidence_type == SOURCE_SYNOPSIS_EVIDENCE
     assert enrichment_results[0].evidence[0].evidence_origin == "direct_source_record"
-    assert enrichment_results[0].evidence[0].text == "Descripcion del libro."
+    assert enrichment_results[0].evidence[0].text == LONG_EXISTING_SYNOPSIS
     assert enrichment_results[0].evidence[0].language == "es"
     assert enrichment_results[0].evidence[0].extraction_method == "source_synopsis_field"
     assert enrichment_results[0].evidence[0].quality_flags == [
         "trusted_source_synopsis",
         "spanish_language",
     ]
+
+
+def test_enrich_fetch_results_standardizes_existing_spanish_synopsis_when_generator_is_available(
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                synopsis=LONG_EXISTING_SYNOPSIS,
+                language="es",
+                field_sources={"synopsis": "google_books"},
+            ),
+            errors=[],
+        )
+    ]
+    generated = GeneratedSynopsis(
+        text="Resumen generado a partir de evidencia textual suficiente y trazable del origen.",
+        evidence_indexes=[0],
+    )
+
+    enriched_fetch_results, enrichment_results = enrich_fetch_results(
+        fetch_results,
+        mode=ExecutionMode.AI_ENRICHED,
+        generator=StubGenerator(generated),
+    )
+
+    assert enriched_fetch_results[0].record is not None
+    assert enriched_fetch_results[0].record.synopsis == generated.text
+    assert enriched_fetch_results[0].record.language == "es"
+    assert enriched_fetch_results[0].record.field_sources["synopsis"] == AI_SYNOPSIS_SOURCE
+    assert enrichment_results[0].applied is True
 
 
 def test_enrich_fetch_results_applies_generated_synopsis_in_ai_mode() -> None:

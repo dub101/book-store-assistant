@@ -264,6 +264,8 @@ def test_publisher_pages_skips_lookup_for_records_with_complete_metadata() -> No
                 title="El libro de prueba",
                 author="Autora Ejemplo",
                 editorial="Planeta",
+                synopsis="Sinopsis oficial en espanol del libro de prueba.",
+                language="es",
                 subject="FICCION",
             ),
             errors=[],
