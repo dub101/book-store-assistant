@@ -4,6 +4,7 @@ from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_pages import (
     PUBLISHER_PAGE_ISBN_MISMATCH,
+    _rank_candidate_urls,
     apply_publisher_page_record,
     augment_fetch_results_with_publisher_pages,
     build_publisher_search_query,
@@ -86,6 +87,21 @@ def test_match_publisher_profile_supports_planeta_imprints() -> None:
     assert profile.key == "planeta"
     assert profile.domains == ("planetadelibros.com",)
 
+    profile = match_publisher_profile("Grupo Planeta (GBS)")
+
+    assert profile is not None
+    assert profile.key == "planeta"
+
+    profile = match_publisher_profile("[Barcelona], Deusto")
+
+    assert profile is not None
+    assert profile.key == "planeta"
+
+    profile = match_publisher_profile("Destino Infantil & Juvenil")
+
+    assert profile is not None
+    assert profile.key == "planeta"
+
 
 def test_match_publisher_profile_supports_penguin_random_house_imprints() -> None:
     profile = match_publisher_profile("Alfaguara")
@@ -111,6 +127,11 @@ def test_match_publisher_profile_supports_composite_editorial_strings() -> None:
     assert profile is not None
     assert profile.key == "penguin_random_house"
 
+    profile = match_publisher_profile("Real Academia Espanola")
+
+    assert profile is not None
+    assert profile.key == "penguin_random_house"
+
 
 def test_match_publisher_profile_supports_anagrama() -> None:
     profile = match_publisher_profile("Editorial Anagrama")
@@ -128,17 +149,65 @@ def test_match_publisher_profile_supports_urano_imprints() -> None:
     assert profile.domains == ("edicionesurano.com",)
 
 
+def test_match_publisher_profile_supports_galaxia_gutenberg() -> None:
+    profile = match_publisher_profile("Barcelona, Círculo de Lectores, Galaxia Gutenberg")
+
+    assert profile is not None
+    assert profile.key == "galaxia_gutenberg"
+    assert profile.domains == ("galaxiagutenberg.com",)
+
+
+def test_match_publisher_profile_supports_norma_editorial() -> None:
+    profile = match_publisher_profile("Norma S A Editorial")
+
+    assert profile is not None
+    assert profile.key == "norma_editorial"
+    assert profile.domains == ("normaeditorial.com",)
+
+
+def test_match_publisher_profile_supports_lectorum() -> None:
+    profile = match_publisher_profile("Lectorum Publications")
+
+    assert profile is not None
+    assert profile.key == "lectorum"
+    assert profile.domains == ("lectorum.com",)
+
+
 def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> None:
     query = build_publisher_search_query(
         SourceBookRecord(
             source_name="google_books",
             isbn="9780306406157",
-            title="El libro de prueba",
+            title="El libro de prueba: edición especial",
             author="Autora Ejemplo, Otra Autora",
+            editorial="Planeta",
         )
     )
 
-    assert query == '"9780306406157" "El libro de prueba" "Autora Ejemplo"'
+    assert query == (
+        '"9780306406157" "El libro de prueba: edición especial" '
+        '"El libro de prueba" "Autora Ejemplo" "Planeta"'
+    )
+
+
+def test_rank_candidate_urls_prefers_title_like_product_pages() -> None:
+    record = SourceBookRecord(
+        source_name="google_books",
+        isbn="9780306406157",
+        title="El libro de prueba",
+        author="Autora Ejemplo",
+    )
+
+    ranked = _rank_candidate_urls(
+        [
+            "https://www.planetadelibros.com/autor/autora-ejemplo/00001",
+            "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456",
+            "https://www.planetadelibros.com/blog/noticias-del-mes/99999",
+        ],
+        record,
+    )
+
+    assert ranked[0] == "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456"
 
 
 def test_extract_publisher_page_record_parses_book_metadata_from_html() -> None:
@@ -265,7 +334,7 @@ def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers
     assert "planetadelibros.com" in str(augmented[0].record.source_url)
     assert searcher.queries == [
         (
-            '"9780306406157" "El libro de prueba" "Autora Ejemplo"',
+            '"9780306406157" "El libro de prueba" "Autora Ejemplo" "Planeta"',
             ("planetadelibros.com",),
         )
     ]
@@ -345,6 +414,45 @@ def test_publisher_pages_discovers_supported_publishers_when_editorial_is_missin
             ("planetadelibros.com",),
         ),
     ]
+
+
+def test_publisher_pages_tries_best_ranked_candidate_first() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                editorial="Planeta",
+                language="en",
+            ),
+            errors=[],
+        )
+    ]
+    searcher = StubSearcher(
+        [
+            "https://www.planetadelibros.com/blog/noticias-del-mes/99999",
+            "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456",
+        ]
+    )
+    page_fetcher = StubPageFetcher(
+        {
+            "https://www.planetadelibros.com/blog/noticias-del-mes/99999": "<html></html>",
+            "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456": PLANETA_HTML,
+        }
+    )
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+    )
+
+    assert augmented[0].record is not None
+    assert "planetadelibros.com" in str(augmented[0].record.source_url)
 
 
 def test_publisher_pages_falls_back_to_discovery_for_unknown_editorials() -> None:

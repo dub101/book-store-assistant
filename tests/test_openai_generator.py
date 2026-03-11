@@ -102,3 +102,31 @@ def test_openai_generator_calls_responses_api(mock_post) -> None:
     assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer test-key"
     assert mock_post.call_args.kwargs["json"]["model"] == "gpt-4o-mini"
     assert mock_post.call_args.kwargs["json"]["text"]["format"]["type"] == "json_schema"
+
+
+@patch("book_store_assistant.enrichment.openai_generator.httpx.post")
+def test_openai_generator_returns_none_on_http_error(mock_post) -> None:
+    mock_post.side_effect = httpx.ConnectTimeout("timed out")
+
+    generator = OpenAISynopsisGenerator(
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        timeout_seconds=10.0,
+    )
+
+    result = generator.generate(
+        "9780306406157",
+        [
+            DescriptiveEvidence(
+                source_name="google_books",
+                evidence_type="source_synopsis",
+                evidence_origin="direct_source_record",
+                text="This is enough grounded evidence to generate a Spanish synopsis safely.",
+                language="en",
+                extraction_method="source_synopsis_field",
+            )
+        ],
+    )
+
+    assert result is None

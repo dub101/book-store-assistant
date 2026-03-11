@@ -151,18 +151,17 @@ def process_isbn_file(
             on_fetch_start=on_fetch_start,
             on_fetch_complete=on_fetch_complete,
         )
-    if app_config.publisher_page_lookup_enabled:
-        publisher_page_cache = (
-            FetchResultCache(app_config.publisher_page_cache_dir, PUBLISHER_PAGE_CACHE_KEY)
-            if app_config.publisher_page_cache_enabled
-            else None
-        )
-        fetch_results = augment_fetch_results_with_publisher_pages(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            cache=publisher_page_cache,
-        )
+    publisher_page_cache = (
+        FetchResultCache(app_config.publisher_page_cache_dir, PUBLISHER_PAGE_CACHE_KEY)
+        if app_config.publisher_page_cache_enabled
+        else None
+    )
+    fetch_results = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=app_config.publisher_page_timeout_seconds,
+        on_status_update=on_status_update,
+        cache=publisher_page_cache,
+    )
     publisher_identity_results = resolve_publisher_identities(fetch_results)
     fetch_results = attach_publisher_identities(fetch_results, publisher_identity_results)
     enriched_fetch_results, enrichment_results = enrich_fetch_results(

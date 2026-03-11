@@ -156,27 +156,30 @@ class OpenAISynopsisGenerator(SynopsisGenerator):
         isbn: str,
         evidence: list[DescriptiveEvidence],
     ) -> GeneratedSynopsis | None:
-        response = httpx.post(
-            f"{self.base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "input": _build_messages(isbn, evidence),
-                "text": {
-                    "format": {
-                        "type": "json_schema",
-                        "name": GENERATED_SYNOPSIS_JSON_SCHEMA["name"],
-                        "schema": GENERATED_SYNOPSIS_JSON_SCHEMA["schema"],
-                        "strict": GENERATED_SYNOPSIS_JSON_SCHEMA["strict"],
+        try:
+            response = httpx.post(
+                f"{self.base_url}/responses",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "input": _build_messages(isbn, evidence),
+                    "text": {
+                        "format": {
+                            "type": "json_schema",
+                            "name": GENERATED_SYNOPSIS_JSON_SCHEMA["name"],
+                            "schema": GENERATED_SYNOPSIS_JSON_SCHEMA["schema"],
+                            "strict": GENERATED_SYNOPSIS_JSON_SCHEMA["strict"],
+                        }
                     }
                 },
-            },
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return None
 
         output_text = _extract_output_text(response.json())
         if output_text is None:

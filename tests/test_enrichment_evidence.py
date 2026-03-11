@@ -95,6 +95,28 @@ def test_extract_description_candidates_from_html_reads_body_description() -> No
     ]
 
 
+def test_extract_description_candidates_from_html_reads_backcover_style_sections() -> None:
+    html = """
+    <html>
+      <body>
+        <h2>Contracubierta</h2>
+        <div>
+          Esta contracubierta desarrolla con suficiente detalle el conflicto, el tono y el
+          contexto narrativo de la obra para servir como evidencia confiable.
+        </div>
+      </body>
+    </html>
+    """
+
+    assert extract_description_candidates_from_html(html) == [
+        (
+            "body_description",
+            "Esta contracubierta desarrolla con suficiente detalle el conflicto, el tono y el "
+            "contexto narrativo de la obra para servir como evidencia confiable.",
+        )
+    ]
+
+
 def test_extract_description_candidates_from_html_reads_google_books_embedded_data() -> None:
     html = r"""
     <html>

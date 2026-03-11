@@ -181,9 +181,19 @@ def enrich_fetch_results(
                 on_enrichment_complete(index, total, enrichment_result)
             continue
 
+        try:
+            raw_enrichment_result = active_enricher.enrich(fetch_result.record)
+        except Exception:
+            raw_enrichment_result = EnrichmentResult(
+                isbn=fetch_result.isbn,
+                source_name=fetch_result.record.source_name,
+                applied=False,
+                skipped_reason="enricher_error",
+            )
+
         enrichment_result = _normalize_enrichment_result(
             fetch_result.record,
-            active_enricher.enrich(fetch_result.record),
+            raw_enrichment_result,
         )
         enrichment_results.append(enrichment_result)
         enriched_fetch_results.append(_apply_generated_synopsis(fetch_result, enrichment_result))

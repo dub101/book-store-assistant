@@ -75,6 +75,7 @@ SUPPORTED_PUBLISHERS = (
             "molino",
             "plaza janes",
             "plaza & janes",
+            "de borsillo",
             "random comics",
             "reservoir books",
             "roca editorial",
@@ -87,6 +88,8 @@ SUPPORTED_PUBLISHERS = (
             "electa",
             "futuropolis",
             "penguin clasicos",
+            "real academia espanola",
+            "real academia española",
         ),
     ),
     PublisherProfile(
@@ -105,6 +108,26 @@ SUPPORTED_PUBLISHERS = (
             "paidos",
             "tusquets",
             "austral",
+            "alienta",
+            "alienta editorial",
+            "booket",
+            "critica",
+            "crítica",
+            "cupula",
+            "cúpula",
+            "deusto",
+            "destino infantil juvenil",
+            "ediciones peninsula",
+            "galera",
+            "geo planeta",
+            "grupo planeta",
+            "grupo planeta gbs",
+            "grupo planeta spain",
+            "libros cupula",
+            "libros cúpula",
+            "peninsula",
+            "península",
+            "temas de hoy",
         ),
     ),
     PublisherProfile(
@@ -131,6 +154,32 @@ SUPPORTED_PUBLISHERS = (
             "titania",
             "umbriel",
             "uranito",
+        ),
+    ),
+    PublisherProfile(
+        key="galaxia_gutenberg",
+        domains=("galaxiagutenberg.com",),
+        editorial_aliases=(
+            "galaxia gutenberg",
+            "circulo de lectores",
+            "círculo de lectores",
+        ),
+    ),
+    PublisherProfile(
+        key="norma_editorial",
+        domains=("normaeditorial.com",),
+        editorial_aliases=(
+            "norma editorial",
+            "norma s a editorial",
+            "editorial norma",
+        ),
+    ),
+    PublisherProfile(
+        key="lectorum",
+        domains=("lectorum.com",),
+        editorial_aliases=(
+            "lectorum",
+            "lectorum publications",
         ),
     ),
 )
@@ -426,7 +475,7 @@ def match_publisher_profile(editorial: str | None) -> PublisherProfile | None:
         editorial,
         *(
             candidate.strip()
-            for candidate in re.split(r"[,/;|]+", editorial)
+            for candidate in re.split(r"[,/;|&()\[\]]+", editorial)
             if candidate.strip()
         ),
     ]
@@ -452,13 +501,52 @@ def build_publisher_search_query(record: SourceBookRecord) -> str:
 
     if record.title:
         query_parts.append(f'"{record.title}"')
+        title_head = record.title.split(":", maxsplit=1)[0].strip()
+        if title_head and title_head != record.title:
+            query_parts.append(f'"{title_head}"')
 
     if record.author:
         primary_author = record.author.split(",", maxsplit=1)[0].strip()
         if primary_author:
             query_parts.append(f'"{primary_author}"')
 
+    if record.editorial:
+        query_parts.append(f'"{record.editorial}"')
+
     return " ".join(query_parts)
+
+
+def _score_candidate_url(url: str, record: SourceBookRecord) -> tuple[int, int, int]:
+    normalized_url = _normalize_text(url)
+    title_score = 0
+    author_score = 0
+    isbn_score = 1 if record.isbn in url else 0
+
+    if record.title:
+        title_head = record.title.split(":", maxsplit=1)[0].strip()
+        normalized_title = _normalize_text(title_head or record.title)
+        if normalized_title and normalized_title in normalized_url:
+            title_score = 2
+        elif normalized_title:
+            title_tokens = [token for token in normalized_title.split() if len(token) > 3]
+            title_score = 1 if title_tokens and all(token in normalized_url for token in title_tokens[:3]) else 0
+
+    if record.author:
+        primary_author = record.author.split(",", maxsplit=1)[0].strip()
+        normalized_author = _normalize_text(primary_author)
+        author_tokens = [token for token in normalized_author.split() if len(token) > 2]
+        if author_tokens and any(token in normalized_url for token in author_tokens):
+            author_score = 1
+
+    return (isbn_score, title_score, author_score)
+
+
+def _rank_candidate_urls(candidate_urls: list[str], record: SourceBookRecord) -> list[str]:
+    return sorted(
+        candidate_urls,
+        key=lambda candidate_url: _score_candidate_url(candidate_url, record),
+        reverse=True,
+    )
 
 
 def _extract_html_title(html: str) -> str | None:
@@ -718,7 +806,7 @@ def augment_fetch_results_with_publisher_pages(
                 )
                 continue
 
-            for candidate_url in candidate_urls:
+            for candidate_url in _rank_candidate_urls(candidate_urls, record):
                 if not _is_allowed_domain(candidate_url, profile.domains):
                     continue
 

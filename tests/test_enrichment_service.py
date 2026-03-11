@@ -32,6 +32,11 @@ class StubGenerator:
         return self.synopsis
 
 
+class RaisingEnricher:
+    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
+        raise RuntimeError("boom")
+
+
 def test_enrich_fetch_results_skips_enrichment_in_rules_only_mode() -> None:
     fetch_results = [
         FetchResult(
@@ -281,6 +286,48 @@ def test_enrich_fetch_results_skips_missing_source_records_in_ai_mode() -> None:
     assert enriched_fetch_results == fetch_results
     assert enrichment_results == [
         EnrichmentResult(isbn="9780306406157", skipped_reason="no_source_record")
+    ]
+
+
+def test_enrich_fetch_results_converts_enricher_exceptions_to_skips() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Example Title",
+            ),
+            errors=[],
+        )
+    ]
+
+    enriched_fetch_results, enrichment_results = enrich_fetch_results(
+        fetch_results,
+        mode=ExecutionMode.AI_ENRICHED,
+        enricher=RaisingEnricher(),
+    )
+
+    assert enriched_fetch_results == fetch_results
+    assert enrichment_results == [
+        EnrichmentResult(
+            isbn="9780306406157",
+            source_name="google_books",
+            applied=False,
+            skipped_reason="enricher_error",
+            evidence=[
+                {
+                    "source_name": "google_books",
+                    "evidence_type": "source_title",
+                    "evidence_origin": "direct_source_record",
+                    "text": "Example Title",
+                    "source_url": None,
+                    "language": None,
+                    "extraction_method": "source_title_field",
+                    "quality_flags": ["trusted_source_bibliographic_field", "title"],
+                }
+            ],
+        )
     ]
 
 

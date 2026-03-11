@@ -22,7 +22,6 @@ def test_app_config_reads_non_secret_settings_from_config_file(
                 'intermediate_dir = "custom/intermediate"',
                 'source_cache_dir = "custom/cache/fetch"',
                 'publisher_page_cache_dir = "custom/cache/publisher_pages"',
-                "publisher_page_lookup_enabled = true",
                 "publisher_page_cache_enabled = false",
                 "publisher_page_timeout_seconds = 2.5",
                 "request_timeout_seconds = 6.0",
@@ -47,7 +46,6 @@ def test_app_config_reads_non_secret_settings_from_config_file(
     assert config.intermediate_dir == Path("custom/intermediate")
     assert config.source_cache_dir == Path("custom/cache/fetch")
     assert config.publisher_page_cache_dir == Path("custom/cache/publisher_pages")
-    assert config.publisher_page_lookup_enabled is True
     assert config.publisher_page_cache_enabled is False
     assert config.publisher_page_timeout_seconds == 2.5
     assert config.request_timeout_seconds == 6.0

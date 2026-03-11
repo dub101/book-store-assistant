@@ -161,9 +161,6 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_float("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", 1.0)
     )
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
-    publisher_page_lookup_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", False)
-    )
     publisher_page_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 3.0)
     )

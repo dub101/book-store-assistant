@@ -11,6 +11,9 @@ PUBLISHER_DISPLAY_NAMES = {
     "penguin_random_house": "Penguin Random House Grupo Editorial",
     "planeta": "Planeta",
     "anagrama": "Anagrama",
+    "galaxia_gutenberg": "Galaxia Gutenberg",
+    "lectorum": "Lectorum",
+    "norma_editorial": "Norma Editorial",
     "urano": "Urano",
 }
 

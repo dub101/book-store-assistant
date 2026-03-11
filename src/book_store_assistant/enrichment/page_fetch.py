@@ -24,8 +24,17 @@ JSON_LD_SCRIPT_PATTERN = re.compile(
 BODY_DESCRIPTION_PATTERNS = (
     re.compile(
         r"<(?P<tag>div|section|p|span)[^>]*(?:id|class|data-testid|data-qa|itemprop)="
-        r'["\'][^"\']*(?:description|synopsis|sinopsis|summary|resumen|about)[^"\']*["\']'
+        r'["\'][^"\']*(?:description|synopsis|sinopsis|summary|resumen|about|'
+        r'contracubierta|contra-cubierta|contra_cubierta|solapa|sobre(?:[-_ ]+el)?[-_ ]+libro|'
+        r'book[-_ ]+description|descripcion(?:[-_ ]+del)?[-_ ]+libro)[^"\']*["\']'
         r"[^>]*>(?P<content>.*?)</(?P=tag)>",
+        re.IGNORECASE | re.DOTALL,
+    ),
+    re.compile(
+        r"<(?P<label_tag>h[1-6]|div|section|span|strong|b|p)[^>]*>"
+        r"\s*(?:contracubierta|contra cubierta|solapa|sinopsis(?: del libro)?|"
+        r"resumen|sobre el libro|acerca del libro)\s*</(?P=label_tag)>\s*"
+        r"<(?P<content_tag>div|section|p|span)[^>]*>(?P<content>.*?)</(?P=content_tag)>",
         re.IGNORECASE | re.DOTALL,
     ),
 )

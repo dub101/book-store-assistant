@@ -154,7 +154,7 @@ def test_attach_publisher_identity_results_attaches_identity_to_resolution_resul
 
 
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
-def test_process_isbn_file_applies_publisher_page_lookup_when_enabled(
+def test_process_isbn_file_always_applies_publisher_page_lookup(
     mock_augment_publisher_pages,
     tmp_path: Path,
 ) -> None:
@@ -182,32 +182,11 @@ def test_process_isbn_file_applies_publisher_page_lookup_when_enabled(
         input_file,
         source=DummyResolvedSource(),
         config=AppConfig(
-            publisher_page_lookup_enabled=True,
             execution_mode=ExecutionMode.RULES_ONLY,
         ),
     )
 
     mock_augment_publisher_pages.assert_called_once()
-
-
-@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
-def test_process_isbn_file_skips_publisher_page_lookup_when_disabled(
-    mock_augment_publisher_pages,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    process_isbn_file(
-        input_file,
-        source=DummyResolvedSource(),
-        config=AppConfig(
-            publisher_page_lookup_enabled=False,
-            execution_mode=ExecutionMode.RULES_ONLY,
-        ),
-    )
-
-    mock_augment_publisher_pages.assert_not_called()
 
 
 def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
