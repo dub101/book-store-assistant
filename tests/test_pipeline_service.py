@@ -6,10 +6,12 @@ from book_store_assistant.enrichment.models import EnrichmentResult, GeneratedSy
 from book_store_assistant.models import BookRecord
 from book_store_assistant.pipeline.service import (
     _attach_enrichment_results,
+    _attach_publisher_identity_results,
     _select_best_resolution_results,
     build_default_source,
     process_isbn_file,
 )
+from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.cache import CachedMetadataSource
 from book_store_assistant.sources.defaults import DEFAULT_SOURCE_CACHE_KEY, build_default_sources
@@ -114,7 +116,39 @@ def test_process_isbn_file_defaults_to_rules_only_mode(tmp_path: Path) -> None:
     assert result.enrichment_results == [
         EnrichmentResult(isbn="9780306406157", skipped_reason="rules_only_mode")
     ]
+    assert result.publisher_identity_results == [
+        PublisherIdentityResult(
+            isbn="9780306406157",
+            publisher_name="Example Editorial",
+            imprint_name="Example Editorial",
+            source_name="google_books",
+            source_field="editorial",
+            confidence=0.8,
+            resolution_method="editorial_field",
+            evidence=["editorial:Example Editorial"],
+        )
+    ]
     assert result.resolution_results[0].record is not None
+    assert (
+        result.resolution_results[0].publisher_identity
+        == result.publisher_identity_results[0]
+    )
+
+
+def test_attach_publisher_identity_results_attaches_identity_to_resolution_results() -> None:
+    resolution_results = [
+        ResolutionResult(record=None, source_record=None, errors=["fetch failed"])
+    ]
+    publisher_identity_results = [PublisherIdentityResult(isbn="9780306406157")]
+
+    attached_results = _attach_publisher_identity_results(
+        resolution_results,
+        publisher_identity_results,
+    )
+
+    assert attached_results[0].publisher_identity == PublisherIdentityResult(
+        isbn="9780306406157"
+    )
 
 
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")

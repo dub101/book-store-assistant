@@ -13,6 +13,11 @@ from book_store_assistant.enrichment.service import (
 )
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.process_results import ProcessResult
+from book_store_assistant.publisher_identity.models import PublisherIdentityResult
+from book_store_assistant.publisher_identity.service import (
+    attach_publisher_identities,
+    resolve_publisher_identities,
+)
 from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.providers import build_default_subject_mapper
 from book_store_assistant.resolution.results import ResolutionResult
@@ -48,6 +53,26 @@ def _attach_enrichment_results(
     ):
         attached_results.append(
             resolution_result.model_copy(update={"enrichment_result": enrichment_result})
+        )
+
+    return attached_results
+
+
+def _attach_publisher_identity_results(
+    resolution_results: list[ResolutionResult],
+    publisher_identity_results: list[PublisherIdentityResult],
+) -> list[ResolutionResult]:
+    attached_results: list[ResolutionResult] = []
+
+    for resolution_result, publisher_identity_result in zip(
+        resolution_results,
+        publisher_identity_results,
+        strict=True,
+    ):
+        attached_results.append(
+            resolution_result.model_copy(
+                update={"publisher_identity": publisher_identity_result}
+            )
         )
 
     return attached_results
@@ -138,6 +163,8 @@ def process_isbn_file(
             on_status_update=on_status_update,
             cache=publisher_page_cache,
         )
+    publisher_identity_results = resolve_publisher_identities(fetch_results)
+    fetch_results = attach_publisher_identities(fetch_results, publisher_identity_results)
     enriched_fetch_results, enrichment_results = enrich_fetch_results(
         fetch_results,
         mode=active_mode,
@@ -164,10 +191,15 @@ def process_isbn_file(
         resolution_results,
         enrichment_results,
     )
+    resolution_results = _attach_publisher_identity_results(
+        resolution_results,
+        publisher_identity_results,
+    )
 
     return ProcessResult(
         input_result=input_result,
         fetch_results=enriched_fetch_results,
+        publisher_identity_results=publisher_identity_results,
         enrichment_results=enrichment_results,
         resolution_results=resolution_results,
     )
