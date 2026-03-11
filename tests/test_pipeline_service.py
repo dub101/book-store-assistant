@@ -444,14 +444,14 @@ def test_select_best_resolution_results_keeps_unresolved_enriched_result_when_bo
     assert selected_results == enriched_results
 
 
-@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_process_isbn_file_passes_fetch_callbacks_through_to_fetch_layer(
-    mock_fetch_all,
+    mock_fetch_with_intermediate_stages,
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_all.return_value = []
+    mock_fetch_with_intermediate_stages.return_value = []
 
     def on_fetch_start(index: int, total: int, isbn: str) -> None:
         return None
@@ -465,20 +465,26 @@ def test_process_isbn_file_passes_fetch_callbacks_through_to_fetch_layer(
         on_fetch_complete=on_fetch_complete,
     )
 
-    assert mock_fetch_all.call_args.kwargs["on_fetch_start"] is on_fetch_start
-    assert mock_fetch_all.call_args.kwargs["on_fetch_complete"] is on_fetch_complete
+    assert (
+        mock_fetch_with_intermediate_stages.call_args.kwargs["on_fetch_start"]
+        is on_fetch_start
+    )
+    assert (
+        mock_fetch_with_intermediate_stages.call_args.kwargs["on_fetch_complete"]
+        is on_fetch_complete
+    )
 
 
 @patch("book_store_assistant.pipeline.service.enrich_fetch_results")
-@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_process_isbn_file_passes_enrichment_callbacks_through_to_enrichment_layer(
-    mock_fetch_all,
+    mock_fetch_with_intermediate_stages,
     mock_enrich_fetch_results,
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_all.return_value = []
+    mock_fetch_with_intermediate_stages.return_value = []
     mock_enrich_fetch_results.return_value = ([], [])
 
     def on_enrichment_start(index: int, total: int, isbn: str) -> None:
@@ -504,15 +510,15 @@ def test_process_isbn_file_passes_enrichment_callbacks_through_to_enrichment_lay
 
 
 @patch("book_store_assistant.pipeline.service.enrich_fetch_results")
-@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_process_isbn_file_explicit_mode_overrides_configured_mode(
-    mock_fetch_all,
+    mock_fetch_with_intermediate_stages,
     mock_enrich_fetch_results,
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_all.return_value = []
+    mock_fetch_with_intermediate_stages.return_value = []
     mock_enrich_fetch_results.return_value = (
         [],
         [],

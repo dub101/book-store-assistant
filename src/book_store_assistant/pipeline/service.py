@@ -20,12 +20,12 @@ from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.publisher_pages import (
     augment_fetch_results_with_publisher_pages,
 )
-from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
     FetchStartCallback,
     fetch_all,
 )
+from book_store_assistant.sources.staged import fetch_with_intermediate_stages
 
 
 def _attach_enrichment_results(
@@ -92,15 +92,24 @@ def process_isbn_file(
     app_config = config or AppConfig()
     active_mode = mode or app_config.execution_mode
     input_result = read_isbn_inputs(input_path)
-    active_source = source or build_default_source(app_config)
     active_generator = generator or build_default_synopsis_generator(app_config)
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
-    fetch_results: list[FetchResult] = fetch_all(
-        active_source,
-        input_result.valid_inputs,
-        on_fetch_start=on_fetch_start,
-        on_fetch_complete=on_fetch_complete,
-    )
+    if source is None:
+        fetch_results = fetch_with_intermediate_stages(
+            input_path,
+            input_result.valid_inputs,
+            app_config,
+            on_fetch_start=on_fetch_start,
+            on_fetch_complete=on_fetch_complete,
+        )
+    else:
+        active_source = source
+        fetch_results = fetch_all(
+            active_source,
+            input_result.valid_inputs,
+            on_fetch_start=on_fetch_start,
+            on_fetch_complete=on_fetch_complete,
+        )
     if app_config.publisher_page_lookup_enabled:
         fetch_results = augment_fetch_results_with_publisher_pages(
             fetch_results,

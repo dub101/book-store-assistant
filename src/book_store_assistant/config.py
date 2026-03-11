@@ -64,11 +64,20 @@ def _env_execution_mode() -> ExecutionMode:
 class AppConfig(BaseModel):
     input_dir: Path = Path("data/input")
     output_dir: Path = Path("data/output")
+    intermediate_dir: Path = Field(
+        default_factory=lambda: Path(os.getenv("BSA_INTERMEDIATE_DIR", "data/intermediate"))
+    )
     source_cache_dir: Path = Field(
         default_factory=lambda: Path(os.getenv("BSA_SOURCE_CACHE_DIR", "data/cache/fetch"))
     )
     source_cache_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_SOURCE_CACHE_ENABLED", True)
+    )
+    source_request_pause_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)
+    )
+    open_library_batch_size: int = Field(
+        default_factory=lambda: _env_int("BSA_OPEN_LIBRARY_BATCH_SIZE", 25)
     )
     google_books_api_base_url: str = "https://www.googleapis.com/books/v1/volumes"
     google_books_max_retries: int = Field(

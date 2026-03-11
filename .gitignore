@@ -13,4 +13,10 @@ data/input/*
 data/output/*
 !data/output/.gitkeep
 
+data/cache/*
+!data/cache/.gitkeep
+
+data/intermediate/*
+!data/intermediate/.gitkeep
+
 .coverage

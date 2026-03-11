@@ -44,6 +44,31 @@ def test_open_library_source_fetches_and_parses_response(mock_get: Mock) -> None
 
 
 @patch("book_store_assistant.sources.open_library.httpx.get")
+def test_open_library_source_fetch_batches_multiple_isbns(mock_get: Mock) -> None:
+    mock_response = Mock()
+    mock_response.json.return_value = {
+        "ISBN:9780306406157": {
+            "title": "Example Title",
+            "authors": [{"name": "Example Author"}],
+            "publishers": [{"name": "Example Editorial"}],
+        }
+    }
+    mock_response.raise_for_status.return_value = None
+    mock_get.return_value = mock_response
+
+    source = OpenLibrarySource()
+
+    results = source.fetch_batch(["9780306406157", "9780306406158"])
+
+    assert len(results) == 2
+    assert results[0].record is not None
+    assert results[0].record.title == "Example Title"
+    assert results[1].record is None
+    assert results[1].errors == ["No Open Library match found."]
+    mock_get.assert_called_once()
+
+
+@patch("book_store_assistant.sources.open_library.httpx.get")
 def test_open_library_source_returns_error_on_http_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.HTTPError("boom")
 

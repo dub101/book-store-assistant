@@ -16,11 +16,11 @@ from book_store_assistant.sources.results import FetchResult
 runner = CliRunner()
 
 
-@patch("book_store_assistant.pipeline.service.fetch_all")
-def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
+def test_cli_main_reports_pipeline_counts(mock_fetch_with_intermediate_stages, tmp_path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\ninvalid\n", encoding="utf-8")
-    mock_fetch_all.return_value = []
+    mock_fetch_with_intermediate_stages.return_value = []
 
     result = runner.invoke(app, [str(input_file)])
 
@@ -36,16 +36,16 @@ def test_cli_main_reports_pipeline_counts(mock_fetch_all, tmp_path) -> None:
 
 
 @patch("book_store_assistant.pipeline.service.resolve_all")
-@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_cli_main_reports_unresolved_reason_counts(
-    mock_fetch_all,
+    mock_fetch_with_intermediate_stages,
     mock_resolve_all,
     tmp_path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n9780306406158\n", encoding="utf-8")
 
-    mock_fetch_all.return_value = [
+    mock_fetch_with_intermediate_stages.return_value = [
         FetchResult(
             isbn="9780306406157",
             record=SourceBookRecord(
@@ -153,16 +153,16 @@ def test_cli_main_reports_source_issue_code_counts_and_rate_limit_warning(
 
 
 @patch("book_store_assistant.pipeline.service.resolve_all")
-@patch("book_store_assistant.pipeline.service.fetch_all")
+@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
 def test_cli_main_reports_final_resolution_statuses(
-    mock_fetch_all,
+    mock_fetch_with_intermediate_stages,
     mock_resolve_all,
     tmp_path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n9780306406158\n", encoding="utf-8")
 
-    mock_fetch_all.return_value = [
+    mock_fetch_with_intermediate_stages.return_value = [
         FetchResult(
             isbn="9780306406157",
             record=SourceBookRecord(
