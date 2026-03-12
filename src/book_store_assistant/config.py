@@ -138,6 +138,12 @@ class AppConfig(BaseModel):
     publisher_page_cache_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_CACHE_ENABLED", True)
     )
+    publisher_page_negative_cache_ttl_seconds: float = Field(
+        default_factory=lambda: _env_float(
+            "BSA_PUBLISHER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",
+            21600.0,
+        )
+    )
     source_request_pause_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)
     )
@@ -163,6 +169,12 @@ class AppConfig(BaseModel):
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
     publisher_page_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 3.0)
+    )
+    publisher_page_max_retries: int = Field(
+        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_RETRIES", 2)
+    )
+    publisher_page_backoff_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_BACKOFF_SECONDS", 0.5)
     )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)

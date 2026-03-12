@@ -285,7 +285,10 @@ source_cache_enabled = true
 bne_lookup_enabled = true
 bne_sru_base_url = "https://catalogo.bne.es/view/sru/34BNE_INST"
 publisher_page_cache_enabled = true
+publisher_page_negative_cache_ttl_seconds = 21600
 publisher_page_timeout_seconds = 3.0
+publisher_page_max_retries = 2
+publisher_page_backoff_seconds = 0.5
 request_timeout_seconds = 10.0
 source_request_pause_seconds = 0.5
 open_library_batch_size = 25
@@ -324,7 +327,7 @@ Important:
 - process environment overrides `bsa.toml`
 - values stored in `.env` are ignored unless you export them into the shell yourself
 - if you do not use `bsa`, export `OPENAI_API_KEY` in the same shell or pass it inline when invoking the CLI
-- publisher-page lookup is always enabled; only its cache behavior and timeout are configurable
+- publisher-page lookup is always enabled; cache TTL, retry/backoff, and timeout are configurable
 
 ## Current Caveats
 

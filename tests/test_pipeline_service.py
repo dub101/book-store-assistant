@@ -189,6 +189,84 @@ def test_process_isbn_file_always_applies_publisher_page_lookup(
     mock_augment_publisher_pages.assert_called_once()
 
 
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
+def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unlock(
+    mock_augment_publisher_pages,
+    mock_augment_retailer_editorials,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    initial_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Example Title",
+                author="Example Author",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    retailer_augmented_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books + retailer_page:casa_del_libro",
+                isbn="9780306406157",
+                title="Example Title",
+                author="Example Author",
+                editorial="Planeta",
+                field_sources={"editorial": "retailer_page:casa_del_libro"},
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    final_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books + retailer_page:casa_del_libro + publisher_page:planeta",
+                isbn="9780306406157",
+                title="Example Title",
+                author="Example Author",
+                editorial="Planeta",
+                synopsis="Resumen del libro.",
+                subject="FICCION",
+                field_sources={
+                    "editorial": "retailer_page:casa_del_libro",
+                    "synopsis": "publisher_page:planeta",
+                    "subject": "publisher_page:planeta",
+                },
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    mock_augment_publisher_pages.side_effect = [initial_results, final_results]
+    mock_augment_retailer_editorials.return_value = retailer_augmented_results
+
+    process_isbn_file(
+        input_file,
+        source=DummySource(),
+        config=AppConfig(
+            execution_mode=ExecutionMode.RULES_ONLY,
+        ),
+    )
+
+    assert mock_augment_publisher_pages.call_count == 2
+    assert (
+        mock_augment_publisher_pages.call_args_list[1].kwargs["eligible_isbns"]
+        == {"9780306406157"}
+    )
+    assert mock_augment_publisher_pages.call_args_list[1].kwargs["ignore_negative_cache"] is True
+
+
 def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")

@@ -1,9 +1,11 @@
 import json
 import re
+import time
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
+from typing import TypeVar
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
@@ -48,6 +50,8 @@ HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 PublisherPageStatusCallback = Callable[[str], None]
 PUBLISHER_PAGE_CACHE_KEY = "publisher_page_lookup_v1"
 PUBLISHER_PAGE_ISBN_MISMATCH = "PUBLISHER_PAGE_ISBN_MISMATCH"
+RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -180,6 +184,71 @@ SUPPORTED_PUBLISHERS = (
         editorial_aliases=(
             "lectorum",
             "lectorum publications",
+        ),
+    ),
+    PublisherProfile(
+        key="harpercollins_iberica",
+        domains=("harpercollinsiberica.com",),
+        editorial_aliases=(
+            "harpercollins",
+            "harper collins",
+            "harpercollins iberica",
+            "harper collins iberica",
+            "harpercollins ibérica",
+            "harper collins ibérica",
+        ),
+    ),
+    PublisherProfile(
+        key="grupo_anaya",
+        domains=("anaya.es", "anayainfantilyjuvenil.com"),
+        editorial_aliases=(
+            "anaya",
+            "grupo anaya",
+            "alianza editorial",
+            "alianza",
+            "catedra",
+            "cátedra",
+            "piramide",
+            "pirámide",
+            "tecnos",
+            "oberon",
+            "xerais",
+        ),
+    ),
+    PublisherProfile(
+        key="rba",
+        domains=("rbalibros.com",),
+        editorial_aliases=(
+            "rba",
+            "rba libros",
+            "rba coleccionables",
+            "rba integral",
+            "rba bolsillo",
+            "gredos",
+        ),
+    ),
+    PublisherProfile(
+        key="oceano",
+        domains=("oceano.com",),
+        editorial_aliases=(
+            "oceano",
+            "océano",
+            "oceano gran travesia",
+            "océano gran travesía",
+            "gran travesia",
+            "gran travesía",
+        ),
+    ),
+    PublisherProfile(
+        key="sm",
+        domains=("grupo-sm.com", "literaturasm.com"),
+        editorial_aliases=(
+            "sm",
+            "ediciones sm",
+            "fundacion sm",
+            "fundación sm",
+            "el barco de vapor",
+            "gran angular",
         ),
     ),
 )
@@ -529,7 +598,12 @@ def _score_candidate_url(url: str, record: SourceBookRecord) -> tuple[int, int, 
             title_score = 2
         elif normalized_title:
             title_tokens = [token for token in normalized_title.split() if len(token) > 3]
-            title_score = 1 if title_tokens and all(token in normalized_url for token in title_tokens[:3]) else 0
+            title_score = (
+                1
+                if title_tokens
+                and all(token in normalized_url for token in title_tokens[:3])
+                else 0
+            )
 
     if record.author:
         primary_author = record.author.split(",", maxsplit=1)[0].strip()
@@ -683,6 +757,56 @@ def _merge_issue_codes(*values: list[str]) -> list[str]:
     return merged
 
 
+def _retry_delay_seconds(
+    attempt: int,
+    backoff_seconds: float,
+    exc: httpx.HTTPError,
+) -> float:
+    if isinstance(exc, httpx.HTTPStatusError):
+        retry_after = exc.response.headers.get("Retry-After")
+        if retry_after is not None:
+            try:
+                parsed_retry_after = float(retry_after)
+            except ValueError:
+                pass
+            else:
+                if parsed_retry_after >= 0:
+                    return parsed_retry_after
+
+    return backoff_seconds * (2**attempt)
+
+
+def _should_retry_http_error(exc: httpx.HTTPError, attempt: int, max_retries: int) -> bool:
+    if attempt >= max_retries:
+        return False
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRYABLE_HTTP_STATUS_CODES
+
+    return isinstance(exc, httpx.TransportError)
+
+
+def _run_with_retry(
+    operation: Callable[[], T],
+    source_name: str,
+    max_retries: int,
+    backoff_seconds: float,
+    sleep: Callable[[float], None],
+) -> tuple[T | None, list[str]]:
+    issue_codes: list[str] = []
+
+    for attempt in range(max_retries + 1):
+        try:
+            return operation(), issue_codes
+        except httpx.HTTPError as exc:
+            issue_codes = _merge_issue_codes(issue_codes, classify_http_issue(source_name, exc))
+            if not _should_retry_http_error(exc, attempt, max_retries):
+                return None, issue_codes
+            sleep(_retry_delay_seconds(attempt, backoff_seconds, exc))
+
+    return None, issue_codes
+
+
 def apply_publisher_page_record(
     existing_record: SourceBookRecord,
     publisher_record: SourceBookRecord,
@@ -755,6 +879,12 @@ def augment_fetch_results_with_publisher_pages(
     page_fetcher: PageContentFetcher | None = None,
     on_status_update: PublisherPageStatusCallback | None = None,
     cache: FetchResultCache | None = None,
+    cache_ttl_seconds: float | None = None,
+    max_retries: int = 2,
+    backoff_seconds: float = 0.5,
+    sleep: Callable[[float], None] = time.sleep,
+    eligible_isbns: set[str] | None = None,
+    ignore_negative_cache: bool = False,
 ) -> list[FetchResult]:
     active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds)
     active_page_fetcher = page_fetcher or _DefaultPageFetcher(timeout_seconds)
@@ -770,19 +900,42 @@ def augment_fetch_results_with_publisher_pages(
         if record is None:
             augmented_results.append(fetch_result)
             continue
+        if eligible_isbns is not None and record.isbn not in eligible_isbns:
+            augmented_results.append(fetch_result)
+            continue
 
         if not _needs_publisher_lookup(record):
             augmented_results.append(fetch_result)
             continue
 
-        cached_result = cache.get(record.isbn) if cache is not None else None
-        if cached_result is not None and cached_result.record is not None:
-            augmented_results.append(
-                fetch_result.model_copy(
-                    update={"record": apply_publisher_page_record(record, cached_result.record)}
-                )
+        cached_entry = cache.get_entry(record.isbn) if cache is not None else None
+        if cached_entry is not None:
+            cached_result = cached_entry.result
+            negative_cache_expired = (
+                cached_result.record is None
+                and cache_ttl_seconds is not None
+                and cache_ttl_seconds >= 0
+                and (time.time() - cached_entry.cached_at > cache_ttl_seconds)
             )
-            continue
+            if not negative_cache_expired and cached_result.record is not None:
+                augmented_results.append(
+                    fetch_result.model_copy(
+                        update={"record": apply_publisher_page_record(record, cached_result.record)}
+                    )
+                )
+                continue
+            if not negative_cache_expired and not ignore_negative_cache:
+                augmented_results.append(
+                    fetch_result.model_copy(
+                        update={
+                            "issue_codes": _merge_issue_codes(
+                                fetch_result.issue_codes,
+                                cached_result.issue_codes,
+                            )
+                        }
+                    )
+                )
+                continue
 
         candidate_profiles = _candidate_publisher_profiles(record)
         if not candidate_profiles:
@@ -797,12 +950,17 @@ def augment_fetch_results_with_publisher_pages(
                 f"Publisher lookup {index}/{len(fetch_results)}: {record.isbn}"
             )
         for profile in candidate_profiles:
-            try:
-                candidate_urls = active_searcher.search(query, profile.domains)
-            except httpx.HTTPError as exc:
+            candidate_urls, search_issue_codes = _run_with_retry(
+                lambda: active_searcher.search(query, profile.domains),
+                "publisher_page_search",
+                max_retries=max_retries,
+                backoff_seconds=backoff_seconds,
+                sleep=sleep,
+            )
+            if candidate_urls is None:
                 publisher_issue_codes = _merge_issue_codes(
                     publisher_issue_codes,
-                    classify_http_issue("publisher_page_search", exc),
+                    search_issue_codes,
                 )
                 continue
 
@@ -810,16 +968,18 @@ def augment_fetch_results_with_publisher_pages(
                 if not _is_allowed_domain(candidate_url, profile.domains):
                     continue
 
-                try:
-                    page_html = active_page_fetcher.fetch_text(candidate_url)
-                except httpx.HTTPError as exc:
+                page_html, fetch_issue_codes = _run_with_retry(
+                    lambda: active_page_fetcher.fetch_text(candidate_url),
+                    "publisher_page_fetch",
+                    max_retries=max_retries,
+                    backoff_seconds=backoff_seconds,
+                    sleep=sleep,
+                )
+                if page_html is None:
                     publisher_issue_codes = _merge_issue_codes(
                         publisher_issue_codes,
-                        classify_http_issue("publisher_page_fetch", exc),
+                        fetch_issue_codes,
                     )
-                    continue
-
-                if page_html is None:
                     continue
 
                 if normalize_isbn(record.isbn) not in _extract_isbn_candidates(page_html):
@@ -859,17 +1019,21 @@ def augment_fetch_results_with_publisher_pages(
                 break
 
         if page_url is None:
-            augmented_results.append(
-                fetch_result.model_copy(
-                    update={
-                        "issue_codes": _merge_issue_codes(
-                            fetch_result.issue_codes,
-                            publisher_issue_codes,
-                            [no_match_issue_code("publisher_page")],
-                        )
-                    }
-                )
+            failed_result = fetch_result.model_copy(
+                update={
+                    "issue_codes": _merge_issue_codes(
+                        fetch_result.issue_codes,
+                        publisher_issue_codes,
+                        [no_match_issue_code("publisher_page")],
+                    )
+                }
             )
+            if cache is not None:
+                cache.set(
+                    failed_result.model_copy(update={"record": None}),
+                    allow_empty=True,
+                )
+            augmented_results.append(failed_result)
 
     return augmented_results
 

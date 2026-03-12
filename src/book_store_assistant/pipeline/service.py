@@ -30,6 +30,9 @@ from book_store_assistant.sources.publisher_pages import (
     PUBLISHER_PAGE_CACHE_KEY,
     augment_fetch_results_with_publisher_pages,
 )
+from book_store_assistant.sources.retailer_pages import (
+    augment_fetch_results_with_retailer_editorials,
+)
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
     FetchStartCallback,
@@ -161,7 +164,43 @@ def process_isbn_file(
         timeout_seconds=app_config.publisher_page_timeout_seconds,
         on_status_update=on_status_update,
         cache=publisher_page_cache,
+        cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+        max_retries=app_config.publisher_page_max_retries,
+        backoff_seconds=app_config.publisher_page_backoff_seconds,
     )
+    retailer_editorial_before = {
+        result.isbn: result.record.editorial if result.record is not None else None
+        for result in fetch_results
+    }
+    fetch_results = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=app_config.publisher_page_timeout_seconds,
+        on_status_update=on_status_update,
+        max_retries=app_config.publisher_page_max_retries,
+        backoff_seconds=app_config.publisher_page_backoff_seconds,
+    )
+    retailer_unlocked_isbns = {
+        result.isbn
+        for result in fetch_results
+        if (
+            result.record is not None
+            and retailer_editorial_before.get(result.isbn) is None
+            and result.record.editorial is not None
+            and result.record.field_sources.get("editorial", "").startswith("retailer_page:")
+        )
+    }
+    if retailer_unlocked_isbns:
+        fetch_results = augment_fetch_results_with_publisher_pages(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_page_cache,
+            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
+            eligible_isbns=retailer_unlocked_isbns,
+            ignore_negative_cache=True,
+        )
     publisher_identity_results = resolve_publisher_identities(fetch_results)
     fetch_results = attach_publisher_identities(fetch_results, publisher_identity_results)
     enriched_fetch_results, enrichment_results = enrich_fetch_results(

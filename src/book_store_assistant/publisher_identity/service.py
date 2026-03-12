@@ -15,6 +15,11 @@ PUBLISHER_DISPLAY_NAMES = {
     "lectorum": "Lectorum",
     "norma_editorial": "Norma Editorial",
     "urano": "Urano",
+    "harpercollins_iberica": "HarperCollins Ibérica",
+    "grupo_anaya": "Grupo Anaya",
+    "rba": "RBA",
+    "oceano": "Océano",
+    "sm": "SM",
 }
 
 

@@ -7,6 +7,8 @@ def source_confidence(source_name: str) -> float:
 
     if "publisher_page" in normalized:
         return 1.0
+    if "retailer_page" in normalized:
+        return 0.55
     if normalized == "bne":
         return 1.0
     if normalized == "open_library":
