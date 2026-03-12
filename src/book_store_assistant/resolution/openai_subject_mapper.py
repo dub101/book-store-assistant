@@ -129,19 +129,23 @@ class OpenAISubjectMapper(SubjectMapper):
         record: SourceBookRecord,
         allowed_subject_entries: list[SubjectEntry],
     ) -> str | None:
-        response = httpx.post(
-            f"{self.base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "input": _build_messages(record, allowed_subject_entries),
-            },
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
+        try:
+            response = httpx.post(
+                f"{self.base_url}/responses",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "input": _build_messages(record, allowed_subject_entries),
+                },
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return None
+
         payload = response.json()
         output_text = _extract_output_text(payload)
         if not isinstance(output_text, str) or not output_text.strip():
