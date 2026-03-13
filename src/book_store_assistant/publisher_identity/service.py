@@ -27,6 +27,16 @@ PUBLISHER_DISPLAY_NAMES = {
     "flamboyant": "Editorial Flamboyant",
     "zorro_rojo": "Libros del Zorro Rojo",
     "siruela": "Siruela",
+    "acantilado_quaderns_crema": "Acantilado / Quaderns Crema",
+    "alba": "Alba",
+    "blackie_books": "Blackie Books",
+    "capitan_swing": "Capitán Swing",
+    "edelvives": "Edelvives",
+    "errata_naturae": "Errata Naturae",
+    "impedimenta": "Impedimenta",
+    "maeva": "Maeva",
+    "paginas_de_espuma": "Páginas de Espuma",
+    "sexto_piso": "Sexto Piso",
 }
 
 

@@ -5,6 +5,7 @@ from book_store_assistant.sources.retailer_pages import (
     apply_retailer_editorial_record,
     augment_fetch_results_with_retailer_editorials,
     build_retailer_search_query,
+    build_retailer_search_queries,
     extract_retailer_page_record,
 )
 
@@ -65,6 +66,24 @@ def test_build_retailer_search_query_uses_isbn_title_and_author() -> None:
     )
 
     assert query == '"9780306406157" "Libro de prueba" "Autora Ejemplo"'
+
+
+def test_build_retailer_search_queries_includes_fallback_variants() -> None:
+    queries = build_retailer_search_queries(
+        SourceBookRecord(
+            source_name="google_books",
+            isbn="9780306406157",
+            title="Libro de prueba",
+            author="Autora Ejemplo, Otra",
+        )
+    )
+
+    assert queries == [
+        '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
+        '"9780306406157"',
+        '"9780306406157" "Libro de prueba"',
+        '"9780306406157" "Autora Ejemplo"',
+    ]
 
 
 def test_extract_retailer_page_record_parses_editorial() -> None:

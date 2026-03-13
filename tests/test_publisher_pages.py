@@ -7,6 +7,7 @@ from book_store_assistant.sources.publisher_pages import (
     _rank_candidate_urls,
     apply_publisher_page_record,
     augment_fetch_results_with_publisher_pages,
+    build_publisher_search_queries,
     build_publisher_search_query,
     extract_publisher_page_record,
     match_publisher_profile,
@@ -123,6 +124,28 @@ class RaisingSearcher:
         limit: int = 3,
     ) -> list[str]:
         raise httpx.TimeoutException("search timed out")
+
+
+class QueryAwareSearcher:
+    def __init__(self, expected_domain: str, expected_query_fragment: str, links: list[str]) -> None:
+        self.expected_domain = expected_domain
+        self.expected_query_fragment = expected_query_fragment.casefold()
+        self.links = links
+        self.queries: list[tuple[str, tuple[str, ...]]] = []
+
+    def search(
+        self,
+        query: str,
+        allowed_domains: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]:
+        self.queries.append((query, allowed_domains))
+        if (
+            self.expected_domain in allowed_domains
+            and self.expected_query_fragment in query.casefold()
+        ):
+            return self.links[:limit]
+        return []
 
 
 def test_match_publisher_profile_supports_planeta_imprints() -> None:
@@ -287,6 +310,18 @@ def test_match_publisher_profile_supports_new_trade_and_childrens_publishers() -
         assert profile.domains == expected_domains
 
 
+def test_match_publisher_profile_supports_lookup_dictionary_aliases() -> None:
+    profile = match_publisher_profile("Ediciones Destino")
+
+    assert profile is not None
+    assert profile.key == "planeta"
+
+    profile = match_publisher_profile("Plaza y Janes")
+
+    assert profile is not None
+    assert profile.key == "penguin_random_house"
+
+
 def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> None:
     query = build_publisher_search_query(
         SourceBookRecord(
@@ -302,6 +337,26 @@ def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> No
         '"9780306406157" "El libro de prueba: edición especial" '
         '"El libro de prueba" "Autora Ejemplo" "Planeta"'
     )
+
+
+def test_build_publisher_search_queries_adds_publisher_hint_variants() -> None:
+    profile = match_publisher_profile("Planeta")
+    assert profile is not None
+
+    queries = build_publisher_search_queries(
+        SourceBookRecord(
+            source_name="google_books",
+            isbn="9780306406157",
+            title="El libro de prueba",
+            author="Autora Ejemplo, Otra Autora",
+        ),
+        profile=profile,
+    )
+
+    assert '"9780306406157" "el libro de prueba" "planeta"' in [
+        query.casefold() for query in queries
+    ]
+    assert '"9780306406157"' in queries
 
 
 def test_rank_candidate_urls_prefers_title_like_product_pages() -> None:
@@ -528,6 +583,44 @@ def test_publisher_pages_discovers_supported_publishers_when_editorial_is_missin
             ("planetadelibros.com",),
         ),
     ]
+
+
+def test_publisher_pages_uses_later_query_variant_when_initial_search_is_empty() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn="9780306406157",
+                title="El libro de prueba",
+                author="Autora Ejemplo",
+                language="en",
+            ),
+            errors=[],
+        )
+    ]
+    searcher = QueryAwareSearcher(
+        expected_domain="planetadelibros.com",
+        expected_query_fragment='"planeta"',
+        links=["https://www.planetadelibros.com/libro-de-prueba/123456"],
+    )
+    page_fetcher = StubPageFetcher(
+        {"https://www.planetadelibros.com/libro-de-prueba/123456": PLANETA_HTML}
+    )
+
+    augmented = augment_fetch_results_with_publisher_pages(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial == "Planeta"
+    assert any(
+        "planeta" in query.casefold() and "planetadelibros.com" in domains[0]
+        for query, domains in searcher.queries
+    )
 
 
 def test_publisher_pages_tries_best_ranked_candidate_first() -> None:

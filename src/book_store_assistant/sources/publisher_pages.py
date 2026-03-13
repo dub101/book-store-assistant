@@ -23,6 +23,7 @@ from book_store_assistant.sources.results import FetchResult
 
 BOOKISH_TYPES = {"book", "product", "creativework"}
 DUCKDUCKGO_HTML_SEARCH_URL = "https://html.duckduckgo.com/html/"
+SEARCH_RESULT_LIMIT = 5
 RESULT_LINK_PATTERN = re.compile(
     r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"',
     re.IGNORECASE,
@@ -311,6 +312,263 @@ SUPPORTED_PUBLISHERS = (
     ),
 )
 
+IMPRINT_TO_LOOKUP = {
+    "acantilado": "acantilado_quaderns_crema",
+    "alba editorial": "alba",
+    "anagrama": "anagrama",
+    "blackie books": "blackie_books",
+    "capitan swing": "capitan_swing",
+    "combel editorial": "combel",
+    "edelvives": "edelvives",
+    "errata naturae": "errata_naturae",
+    "editorial flamboyant": "flamboyant",
+    "galaxia gutenberg": "galaxia_gutenberg",
+    "adn": "grupo_anaya",
+    "algaida": "grupo_anaya",
+    "alianza editorial": "grupo_anaya",
+    "anaya": "grupo_anaya",
+    "anaya ele": "grupo_anaya",
+    "anaya infantil y juvenil": "grupo_anaya",
+    "bruno": "grupo_anaya",
+    "harlequin": "harpercollins_iberica",
+    "harpercollins iberica": "harpercollins_iberica",
+    "impedimenta": "impedimenta",
+    "kalandraka": "kalandraka",
+    "lectorum": "lectorum",
+    "libros del asteroide": "libros_del_asteroide",
+    "maeva": "maeva",
+    "maeva young": "maeva",
+    "nordica libros": "nordica",
+    "norma editorial": "norma_editorial",
+    "oceano": "oceano",
+    "oceano gran travesia": "oceano",
+    "oceano travesia": "oceano",
+    "paginas de espuma": "paginas_de_espuma",
+    "alfaguara": "penguin_random_house",
+    "debolsillo": "penguin_random_house",
+    "lumen": "penguin_random_house",
+    "plaza y janes": "penguin_random_house",
+    "reservoir books": "penguin_random_house",
+    "salamandra": "penguin_random_house",
+    "suma": "penguin_random_house",
+    "booket": "planeta",
+    "destino": "planeta",
+    "ediciones destino": "planeta",
+    "editorial planeta": "planeta",
+    "espasa": "planeta",
+    "seix barral": "planeta",
+    "tusquets editores": "planeta",
+    "gredos": "rba",
+    "integral": "rba",
+    "rba infantil": "rba",
+    "rba libros": "rba",
+    "serie negra": "rba",
+    "sexto piso": "sexto_piso",
+    "ediciones siruela": "siruela",
+    "literatura sm": "sm",
+    "sm": "sm",
+    "books4pocket": "urano",
+    "ediciones urano": "urano",
+    "empresa activa": "urano",
+    "puck": "urano",
+    "tendencias": "urano",
+    "titania": "urano",
+    "umbriel": "urano",
+    "libros del zorro rojo": "zorro_rojo",
+}
+
+LOOKUP_TO_DOMAINS = {
+    "acantilado_quaderns_crema": {
+        "canonical_domain": "acantilado.es",
+        "alternative_domains": (),
+    },
+    "alba": {
+        "canonical_domain": "albaeditorial.es",
+        "alternative_domains": (),
+    },
+    "anagrama": {
+        "canonical_domain": "anagrama-ed.es",
+        "alternative_domains": (),
+    },
+    "blackie_books": {
+        "canonical_domain": "blackiebooks.org",
+        "alternative_domains": (),
+    },
+    "capitan_swing": {
+        "canonical_domain": "capitanswing.com",
+        "alternative_domains": (),
+    },
+    "combel": {
+        "canonical_domain": "combeleditorial.com",
+        "alternative_domains": (),
+    },
+    "edelvives": {
+        "canonical_domain": "edelvives.com",
+        "alternative_domains": (),
+    },
+    "errata_naturae": {
+        "canonical_domain": "erratanaturae.com",
+        "alternative_domains": (),
+    },
+    "flamboyant": {
+        "canonical_domain": "editorialflamboyant.com",
+        "alternative_domains": (),
+    },
+    "galaxia_gutenberg": {
+        "canonical_domain": "galaxiagutenberg.com",
+        "alternative_domains": (),
+    },
+    "grupo_anaya": {
+        "canonical_domain": "anaya.es",
+        "alternative_domains": ("anayainfantilyjuvenil.com",),
+    },
+    "harpercollins_iberica": {
+        "canonical_domain": "harpercollinsiberica.com",
+        "alternative_domains": (),
+    },
+    "impedimenta": {
+        "canonical_domain": "impedimenta.es",
+        "alternative_domains": (),
+    },
+    "kalandraka": {
+        "canonical_domain": "kalandraka.com",
+        "alternative_domains": (),
+    },
+    "lectorum": {
+        "canonical_domain": "lectorum.com",
+        "alternative_domains": (),
+    },
+    "libros_del_asteroide": {
+        "canonical_domain": "librosdelasteroide.com",
+        "alternative_domains": (),
+    },
+    "maeva": {
+        "canonical_domain": "maeva.es",
+        "alternative_domains": (),
+    },
+    "nordica": {
+        "canonical_domain": "nordicalibros.com",
+        "alternative_domains": (),
+    },
+    "norma_editorial": {
+        "canonical_domain": "normaeditorial.com",
+        "alternative_domains": (),
+    },
+    "oceano": {
+        "canonical_domain": "oceano.com",
+        "alternative_domains": (),
+    },
+    "paginas_de_espuma": {
+        "canonical_domain": "paginasdeespuma.com",
+        "alternative_domains": (),
+    },
+    "penguin_random_house": {
+        "canonical_domain": "penguinlibros.com",
+        "alternative_domains": ("megustaleer.com",),
+    },
+    "planeta": {
+        "canonical_domain": "planetadelibros.com",
+        "alternative_domains": (),
+    },
+    "rba": {
+        "canonical_domain": "rbalibros.com",
+        "alternative_domains": (),
+    },
+    "sexto_piso": {
+        "canonical_domain": "sextopiso.es",
+        "alternative_domains": (),
+    },
+    "siruela": {
+        "canonical_domain": "siruela.com",
+        "alternative_domains": (),
+    },
+    "sm": {
+        "canonical_domain": "literaturasm.com",
+        "alternative_domains": ("grupo-sm.com",),
+    },
+    "urano": {
+        "canonical_domain": "edicionesurano.com",
+        "alternative_domains": (),
+    },
+    "zorro_rojo": {
+        "canonical_domain": "librosdelzorrorojo.com",
+        "alternative_domains": (),
+    },
+}
+
+
+def _merge_distinct(values: tuple[str, ...], extra_values: tuple[str, ...]) -> tuple[str, ...]:
+    merged: list[str] = list(values)
+    seen = {item.casefold() for item in values}
+
+    for value in extra_values:
+        if value.casefold() in seen:
+            continue
+        seen.add(value.casefold())
+        merged.append(value)
+
+    return tuple(merged)
+
+
+def _build_lookup_profiles() -> tuple[PublisherProfile, ...]:
+    aliases_by_lookup: dict[str, list[str]] = {}
+
+    for imprint, lookup_key in IMPRINT_TO_LOOKUP.items():
+        aliases_by_lookup.setdefault(lookup_key, []).append(imprint)
+
+    profiles: list[PublisherProfile] = []
+    for lookup_key, domain_config in LOOKUP_TO_DOMAINS.items():
+        profiles.append(
+            PublisherProfile(
+                key=lookup_key,
+                domains=(
+                    domain_config["canonical_domain"],
+                    *domain_config["alternative_domains"],
+                ),
+                editorial_aliases=tuple(aliases_by_lookup.get(lookup_key, ())),
+            )
+        )
+
+    return tuple(profiles)
+
+
+def _merge_publisher_profiles(
+    base_profiles: tuple[PublisherProfile, ...],
+    extra_profiles: tuple[PublisherProfile, ...],
+) -> tuple[PublisherProfile, ...]:
+    merged_profiles: list[PublisherProfile] = list(base_profiles)
+    index_by_key = {profile.key: index for index, profile in enumerate(merged_profiles)}
+
+    for profile in extra_profiles:
+        existing_index = index_by_key.get(profile.key)
+        if existing_index is None:
+            index_by_key[profile.key] = len(merged_profiles)
+            merged_profiles.append(profile)
+            continue
+
+        existing_profile = merged_profiles[existing_index]
+        merged_profiles[existing_index] = PublisherProfile(
+            key=existing_profile.key,
+            domains=_merge_distinct(existing_profile.domains, profile.domains),
+            editorial_aliases=_merge_distinct(
+                existing_profile.editorial_aliases,
+                profile.editorial_aliases,
+            ),
+        )
+
+    return tuple(merged_profiles)
+
+
+ACTIVE_LOOKUP_KEYS = frozenset(profile.key for profile in SUPPORTED_PUBLISHERS)
+
+SUPPORTED_PUBLISHERS = _merge_publisher_profiles(
+    SUPPORTED_PUBLISHERS,
+    tuple(
+        profile for profile in _build_lookup_profiles()
+        if profile.key in ACTIVE_LOOKUP_KEYS
+    ),
+)
+
 
 class PublisherPageSearcher:
     def search(
@@ -335,7 +593,7 @@ class DuckDuckGoHtmlSearcher(PublisherPageSearcher):
         self,
         query: str,
         allowed_domains: tuple[str, ...],
-        limit: int = 3,
+        limit: int = SEARCH_RESULT_LIMIT,
     ) -> list[str]:
         domain_query = " OR ".join(f"site:{domain}" for domain in allowed_domains)
         full_query = f"{query} ({domain_query})" if domain_query else query
@@ -641,6 +899,62 @@ def build_publisher_search_query(record: SourceBookRecord) -> str:
         query_parts.append(f'"{record.editorial}"')
 
     return " ".join(query_parts)
+
+
+def _deduplicate_queries(queries: list[str]) -> list[str]:
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+
+    for query in queries:
+        normalized_query = " ".join(query.split()).strip()
+        if not normalized_query or normalized_query in seen:
+            continue
+        seen.add(normalized_query)
+        deduplicated.append(normalized_query)
+
+    return deduplicated
+
+
+def build_publisher_search_queries(
+    record: SourceBookRecord,
+    profile: PublisherProfile | None = None,
+) -> list[str]:
+    queries = [build_publisher_search_query(record)]
+    query_parts = [f'"{record.isbn}"']
+    title_head: str | None = None
+
+    if record.title:
+        query_parts.append(f'"{record.title}"')
+        title_head = record.title.split(":", maxsplit=1)[0].strip()
+        if title_head and title_head != record.title:
+            queries.append(" ".join([f'\"{record.isbn}\"', f'"{title_head}"']))
+
+    if record.author:
+        primary_author = record.author.split(",", maxsplit=1)[0].strip()
+        if primary_author:
+            query_parts.append(f'"{primary_author}"')
+            queries.append(" ".join([f'\"{record.isbn}\"', f'"{primary_author}"']))
+
+    queries.append(" ".join(query_parts))
+    queries.append(f'"{record.isbn}"')
+
+    if profile is not None and not record.editorial:
+        publisher_hint = next(
+            (
+                alias
+                for alias in profile.editorial_aliases
+                if alias and len(alias.strip()) > 2
+            ),
+            profile.key.replace("_", " "),
+        )
+        hinted_parts = [f'"{record.isbn}"', f'"{publisher_hint}"']
+        if record.title:
+            hinted_parts.insert(1, f'"{record.title}"')
+        if title_head and title_head != record.title:
+            queries.append(" ".join([f'\"{record.isbn}\"', f'"{title_head}"', f'"{publisher_hint}"']))
+        queries.append(" ".join(hinted_parts))
+
+    return _deduplicate_queries(queries)
 
 
 def _score_candidate_url(url: str, record: SourceBookRecord) -> tuple[int, int, int]:
@@ -1002,24 +1316,36 @@ def augment_fetch_results_with_publisher_pages(
 
         page_url: str | None = None
         publisher_issue_codes: list[str] = []
-        query = build_publisher_search_query(record)
         if on_status_update is not None:
             on_status_update(
                 f"Publisher lookup {index}/{len(fetch_results)}: {record.isbn}"
             )
         for profile in candidate_profiles:
-            candidate_urls, search_issue_codes = _run_with_retry(
-                lambda: active_searcher.search(query, profile.domains),
-                "publisher_page_search",
-                max_retries=max_retries,
-                backoff_seconds=backoff_seconds,
-                sleep=sleep,
-            )
-            if candidate_urls is None:
-                publisher_issue_codes = _merge_issue_codes(
-                    publisher_issue_codes,
-                    search_issue_codes,
+            candidate_urls: list[str] = []
+            for query in build_publisher_search_queries(record, profile):
+                query_candidate_urls, search_issue_codes = _run_with_retry(
+                    lambda query=query, domains=profile.domains: active_searcher.search(
+                        query,
+                        domains,
+                        limit=SEARCH_RESULT_LIMIT,
+                    ),
+                    "publisher_page_search",
+                    max_retries=max_retries,
+                    backoff_seconds=backoff_seconds,
+                    sleep=sleep,
                 )
+                if query_candidate_urls is None:
+                    publisher_issue_codes = _merge_issue_codes(
+                        publisher_issue_codes,
+                        search_issue_codes,
+                    )
+                    continue
+
+                candidate_urls = _merge_issue_codes(candidate_urls, query_candidate_urls)
+                if candidate_urls:
+                    break
+
+            if not candidate_urls:
                 continue
 
             for candidate_url in _rank_candidate_urls(candidate_urls, record):

@@ -71,3 +71,12 @@ def test_resolve_subject_prefers_the_most_supported_controlled_match() -> None:
     )
 
     assert subject == "Narrativa"
+
+
+def test_resolve_subject_maps_bne_fiction_category_to_catalog_fiction() -> None:
+    subject = resolve_subject(
+        ['821.134.2-31"19"'],
+        [["FICCION", "Fiction", "Novel"], ["Historia", "Historical"]],
+    )
+
+    assert subject == "FICCION"

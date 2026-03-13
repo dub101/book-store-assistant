@@ -1,6 +1,19 @@
 from collections import Counter
+import re
 
 from book_store_assistant.subject_selection import select_subject
+
+BNE_FICTION_CATEGORY_PATTERN = re.compile(r"\b821(?:\.[0-9]+)*(?:\([^)]+\))?-31(?:\"[0-9]+\")?\b")
+
+
+def _derive_controlled_subject_candidates(candidates: list[str]) -> list[str]:
+    derived_candidates: list[str] = []
+
+    for candidate in candidates:
+        if BNE_FICTION_CATEGORY_PATTERN.search(candidate):
+            derived_candidates.append("FICCION")
+
+    return derived_candidates
 
 
 def _expand_candidates(candidate: str) -> list[str]:
@@ -35,7 +48,13 @@ def _score_subject_matches(
 
 
 def resolve_subject(candidates: list[str], allowed_subject_rows: list[list[str]]) -> str | None:
-    scores = _score_subject_matches(candidates, allowed_subject_rows)
+    scores = _score_subject_matches(
+        [
+            *candidates,
+            *_derive_controlled_subject_candidates(candidates),
+        ],
+        allowed_subject_rows,
+    )
     if scores:
         return scores.most_common(1)[0][0]
 

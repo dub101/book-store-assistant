@@ -9,6 +9,7 @@ from book_store_assistant.sources.issues import no_match_issue_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_pages import (
+    SEARCH_RESULT_LIMIT,
     DuckDuckGoHtmlSearcher,
     PageContentFetcher,
     PublisherPageSearcher,
@@ -134,6 +135,29 @@ def build_retailer_search_query(record: SourceBookRecord) -> str:
     return " ".join(query_parts)
 
 
+def build_retailer_search_queries(record: SourceBookRecord) -> list[str]:
+    queries = [build_retailer_search_query(record), f'"{record.isbn}"']
+
+    if record.title:
+        queries.append(" ".join([f'"{record.isbn}"', f'"{record.title}"']))
+
+    if record.author:
+        primary_author = record.author.split(",", maxsplit=1)[0].strip()
+        if primary_author:
+            queries.append(" ".join([f'"{record.isbn}"', f'"{primary_author}"']))
+
+    deduplicated: list[str] = []
+    seen: set[str] = set()
+    for query in queries:
+        normalized_query = " ".join(query.split()).strip()
+        if not normalized_query or normalized_query in seen:
+            continue
+        seen.add(normalized_query)
+        deduplicated.append(normalized_query)
+
+    return deduplicated
+
+
 def apply_retailer_editorial_record(
     existing_record: SourceBookRecord,
     retailer_record: SourceBookRecord,
@@ -179,7 +203,6 @@ def augment_fetch_results_with_retailer_editorials(
             augmented_results.append(fetch_result)
             continue
 
-        query = build_retailer_search_query(record)
         retailer_issue_codes: list[str] = []
         retailer_record: SourceBookRecord | None = None
 
@@ -189,17 +212,33 @@ def augment_fetch_results_with_retailer_editorials(
             )
 
         for profile in SUPPORTED_RETAILERS:
-            candidate_urls, search_issue_codes = _run_with_retry(
-                lambda: active_searcher.search(query, profile.domains),
-                "retailer_page_search",
-                max_retries=max_retries,
-                backoff_seconds=backoff_seconds,
-                sleep=sleep,
-            )
-            if candidate_urls is None:
-                retailer_issue_codes.extend(
-                    code for code in search_issue_codes if code not in retailer_issue_codes
+            candidate_urls: list[str] = []
+            for query in build_retailer_search_queries(record):
+                query_candidate_urls, search_issue_codes = _run_with_retry(
+                    lambda query=query, domains=profile.domains: active_searcher.search(
+                        query,
+                        domains,
+                        limit=SEARCH_RESULT_LIMIT,
+                    ),
+                    "retailer_page_search",
+                    max_retries=max_retries,
+                    backoff_seconds=backoff_seconds,
+                    sleep=sleep,
                 )
+                if query_candidate_urls is None:
+                    retailer_issue_codes.extend(
+                        code for code in search_issue_codes if code not in retailer_issue_codes
+                    )
+                    continue
+
+                for candidate_url in query_candidate_urls:
+                    if candidate_url not in candidate_urls:
+                        candidate_urls.append(candidate_url)
+
+                if candidate_urls:
+                    break
+
+            if not candidate_urls:
                 continue
 
             for candidate_url in _rank_candidate_urls(candidate_urls, record):
