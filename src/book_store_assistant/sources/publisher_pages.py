@@ -251,6 +251,64 @@ SUPPORTED_PUBLISHERS = (
             "gran angular",
         ),
     ),
+    PublisherProfile(
+        key="kalandraka",
+        domains=("kalandraka.com",),
+        editorial_aliases=(
+            "kalandraka",
+            "editorial kalandraka",
+        ),
+    ),
+    PublisherProfile(
+        key="combel",
+        domains=("combeleditorial.com",),
+        editorial_aliases=(
+            "combel",
+            "combel editorial",
+        ),
+    ),
+    PublisherProfile(
+        key="nordica",
+        domains=("nordicalibros.com",),
+        editorial_aliases=(
+            "nordica",
+            "nórdica",
+            "nordica libros",
+            "nórdica libros",
+        ),
+    ),
+    PublisherProfile(
+        key="libros_del_asteroide",
+        domains=("librosdelasteroide.com",),
+        editorial_aliases=(
+            "asteroide",
+            "libros del asteroide",
+        ),
+    ),
+    PublisherProfile(
+        key="flamboyant",
+        domains=("editorialflamboyant.com",),
+        editorial_aliases=(
+            "flamboyant",
+            "editorial flamboyant",
+        ),
+    ),
+    PublisherProfile(
+        key="zorro_rojo",
+        domains=("librosdelzorrorojo.com",),
+        editorial_aliases=(
+            "zorro rojo",
+            "libros del zorro rojo",
+        ),
+    ),
+    PublisherProfile(
+        key="siruela",
+        domains=("siruela.com",),
+        editorial_aliases=(
+            "siruela",
+            "editorial siruela",
+        ),
+    ),
 )
 
 

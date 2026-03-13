@@ -56,6 +56,27 @@ def test_resolve_publisher_identity_can_fall_back_to_source_url_domain() -> None
     assert result.resolution_method == "source_url_domain"
 
 
+def test_resolve_publisher_identity_maps_new_supported_publisher_domains() -> None:
+    fetch_result = FetchResult(
+        isbn="9780306406157",
+        record=SourceBookRecord(
+            source_name="publisher_page:kalandraka",
+            isbn="9780306406157",
+            source_url="https://kalandraka.com/cuando-a-matias-le-entraron-ganas-castellano.html",
+            field_sources={"source_url": "publisher_page:kalandraka"},
+        ),
+        errors=[],
+    )
+
+    result = resolve_publisher_identity(fetch_result)
+
+    assert result.publisher_name == "Kalandraka"
+    assert result.publisher_group_key == "kalandraka"
+    assert result.source_name == "publisher_page:kalandraka"
+    assert result.source_field == "source_url"
+    assert result.resolution_method == "source_url_domain"
+
+
 def test_attach_publisher_identities_adds_result_to_fetch_results() -> None:
     fetch_results = [
         FetchResult(

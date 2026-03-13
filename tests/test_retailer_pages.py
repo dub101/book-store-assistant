@@ -127,3 +127,47 @@ def test_augment_fetch_results_with_retailer_editorials_fills_missing_editorial(
     assert augmented[0].record is not None
     assert augmented[0].record.editorial == "Planeta"
     assert augmented[0].record.field_sources["editorial"] == "retailer_page:casa_del_libro"
+
+
+def test_augment_fetch_results_with_retailer_editorials_searches_new_retailer_domains() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher(
+        [
+            "https://www.agapea.com/libros/libro-de-prueba-9780306406157-i.htm",
+            "https://www.todostuslibros.com/libros/libro-de-prueba_9780306406157",
+        ]
+    )
+    page_fetcher = StubPageFetcher({})
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial is None
+    assert searcher.queries[-2:] == [
+        (
+            '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
+            ("agapea.com",),
+        ),
+        (
+            '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
+            ("todostuslibros.com",),
+        ),
+    ]

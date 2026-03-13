@@ -20,6 +20,13 @@ PUBLISHER_DISPLAY_NAMES = {
     "rba": "RBA",
     "oceano": "Océano",
     "sm": "SM",
+    "kalandraka": "Kalandraka",
+    "combel": "Combel",
+    "nordica": "Nórdica Libros",
+    "libros_del_asteroide": "Libros del Asteroide",
+    "flamboyant": "Editorial Flamboyant",
+    "zorro_rojo": "Libros del Zorro Rojo",
+    "siruela": "Siruela",
 }
 
 

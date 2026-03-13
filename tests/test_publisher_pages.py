@@ -268,6 +268,25 @@ def test_match_publisher_profile_supports_sm_imprints() -> None:
     assert profile.key == "sm"
 
 
+def test_match_publisher_profile_supports_new_trade_and_childrens_publishers() -> None:
+    cases = [
+        ("Kalandraka", "kalandraka", ("kalandraka.com",)),
+        ("Combel Editorial", "combel", ("combeleditorial.com",)),
+        ("Nórdica Libros", "nordica", ("nordicalibros.com",)),
+        ("Libros del Asteroide", "libros_del_asteroide", ("librosdelasteroide.com",)),
+        ("Editorial Flamboyant", "flamboyant", ("editorialflamboyant.com",)),
+        ("Libros del Zorro Rojo", "zorro_rojo", ("librosdelzorrorojo.com",)),
+        ("Editorial Siruela", "siruela", ("siruela.com",)),
+    ]
+
+    for editorial, expected_key, expected_domains in cases:
+        profile = match_publisher_profile(editorial)
+
+        assert profile is not None
+        assert profile.key == expected_key
+        assert profile.domains == expected_domains
+
+
 def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> None:
     query = build_publisher_search_query(
         SourceBookRecord(

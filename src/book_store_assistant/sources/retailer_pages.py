@@ -63,6 +63,14 @@ SUPPORTED_RETAILERS = (
         key="panamericana",
         domains=("panamericana.com.co",),
     ),
+    RetailerProfile(
+        key="agapea",
+        domains=("agapea.com",),
+    ),
+    RetailerProfile(
+        key="todostuslibros",
+        domains=("todostuslibros.com",),
+    ),
 )
 
 
