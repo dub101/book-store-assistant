@@ -31,10 +31,6 @@ def _load_config_file() -> dict[str, object]:
     return payload
 
 
-def clear_config_file_cache() -> None:
-    _load_config_file.cache_clear()
-
-
 def _config_value(name: str, default: object) -> object:
     return _load_config_file().get(name, default)
 

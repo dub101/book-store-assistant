@@ -8,14 +8,11 @@ from book_store_assistant.pipeline.service import (
     _attach_enrichment_results,
     _attach_publisher_identity_results,
     _select_best_resolution_results,
-    build_default_source,
     process_isbn_file,
 )
 from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.results import ResolutionResult
-from book_store_assistant.sources.cache import CachedMetadataSource
-from book_store_assistant.sources.defaults import DEFAULT_SOURCE_CACHE_KEY, build_default_sources
-from book_store_assistant.sources.fallback import FallbackMetadataSource
+from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -32,29 +29,6 @@ def test_build_default_sources_returns_sources_in_precedence_order() -> None:
     assert sources[0].source_name == "bne"
     assert sources[1].source_name == "open_library"
     assert sources[2].source_name == "google_books"
-
-
-def test_build_default_source_returns_fallback_metadata_source() -> None:
-    source = build_default_source(AppConfig(source_cache_enabled=False))
-
-    assert isinstance(source, FallbackMetadataSource)
-    assert len(source.sources) == 3
-    assert source.sources[0].source_name == "bne"
-    assert source.sources[1].source_name == "open_library"
-    assert source.sources[2].source_name == "google_books"
-
-
-def test_build_default_source_wraps_fallback_metadata_source_with_cache() -> None:
-    source = build_default_source(
-        AppConfig(
-            source_cache_enabled=True,
-            source_cache_dir=Path("/tmp/book-store-assistant-cache"),
-        )
-    )
-
-    assert isinstance(source, CachedMetadataSource)
-    assert source.source_key == DEFAULT_SOURCE_CACHE_KEY
-    assert isinstance(source.source, FallbackMetadataSource)
 
 
 def test_process_isbn_file_uses_injected_source(tmp_path: Path) -> None:

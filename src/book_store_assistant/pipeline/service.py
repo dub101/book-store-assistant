@@ -105,12 +105,6 @@ def _select_best_resolution_results(
     return selected_results
 
 
-def build_default_source(config: AppConfig | None = None) -> MetadataSource:
-    active_config = config or AppConfig()
-    base_source = FallbackMetadataSource(build_default_sources(active_config))
-    return wrap_with_default_cache(base_source, active_config)
-
-
 def process_isbn_file(
     input_path: Path,
     source: MetadataSource | None = None,

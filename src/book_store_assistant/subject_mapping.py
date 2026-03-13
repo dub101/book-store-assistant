@@ -68,10 +68,3 @@ def get_subjects(
         return [entry.description for entry in entries]
 
     return load_subjects(path)
-
-
-def has_subjects(
-    path: Path = DEFAULT_SUBJECTS_PATH,
-    allowed_subject_types: frozenset[str] | None = BOOK_SUBJECT_TYPES,
-) -> bool:
-    return len(get_subjects(path, allowed_subject_types)) > 0

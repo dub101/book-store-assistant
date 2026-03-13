@@ -1,11 +1,7 @@
 from pathlib import Path
 
-from book_store_assistant.config import (
-    AIProvider,
-    AppConfig,
-    ExecutionMode,
-    clear_config_file_cache,
-)
+import book_store_assistant.config as config_module
+from book_store_assistant.config import AIProvider, AppConfig, ExecutionMode
 
 
 def test_app_config_reads_non_secret_settings_from_config_file(
@@ -40,7 +36,7 @@ def test_app_config_reads_non_secret_settings_from_config_file(
         encoding="utf-8",
     )
     monkeypatch.setenv("BSA_CONFIG_FILE", str(config_file))
-    clear_config_file_cache()
+    config_module._load_config_file.cache_clear()
 
     config = AppConfig()
 
@@ -67,7 +63,7 @@ def test_app_config_reads_non_secret_settings_from_config_file(
 def test_app_config_uses_project_data_directories(monkeypatch) -> None:
     monkeypatch.delenv("BSA_CONFIG_FILE", raising=False)
     monkeypatch.delenv("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", raising=False)
-    clear_config_file_cache()
+    config_module._load_config_file.cache_clear()
     config = AppConfig()
 
     assert config.input_dir == Path("data/input")
@@ -92,7 +88,7 @@ def test_app_config_uses_project_data_directories(monkeypatch) -> None:
 
 def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> None:
     monkeypatch.delenv("BSA_CONFIG_FILE", raising=False)
-    clear_config_file_cache()
+    config_module._load_config_file.cache_clear()
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_MAX_RETRIES", "4")
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", "0.25")
     monkeypatch.setenv("BSA_BNE_LOOKUP_ENABLED", "0")
@@ -122,7 +118,7 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
 
 def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatch) -> None:
     monkeypatch.delenv("BSA_CONFIG_FILE", raising=False)
-    clear_config_file_cache()
+    config_module._load_config_file.cache_clear()
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_MAX_RETRIES", "not-an-int")
     monkeypatch.setenv("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", "not-a-float")
     monkeypatch.setenv("BSA_BNE_LOOKUP_ENABLED", "not-a-bool")
