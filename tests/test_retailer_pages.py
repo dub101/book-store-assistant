@@ -1,3 +1,4 @@
+from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.retailer_pages import (
@@ -50,8 +51,10 @@ class StubSearcher:
 class StubPageFetcher:
     def __init__(self, pages: dict[str, str]) -> None:
         self.pages = pages
+        self.calls: list[str] = []
 
     def fetch_text(self, url: str) -> str | None:
+        self.calls.append(url)
         return self.pages.get(url)
 
 
@@ -190,3 +193,115 @@ def test_augment_fetch_results_with_retailer_editorials_searches_new_retailer_do
             ("todostuslibros.com",),
         ),
     ]
+
+
+def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_result(
+    tmp_path,
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    cache = FetchResultCache(tmp_path / "retailer-cache", "retailer_editorial_lookup_v1")
+    cache.set(
+        FetchResult(
+            isbn="9780306406157",
+            record=None,
+            errors=[],
+            issue_codes=["RETAILER_PAGE_SEARCH_TIMEOUT", "RETAILER_PAGE_EDITORIAL_NO_MATCH"],
+        ),
+        allow_empty=True,
+    )
+    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=StubPageFetcher({}),
+        cache=cache,
+        cache_ttl_seconds=3600,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial is None
+    assert augmented[0].issue_codes == [
+        "RETAILER_PAGE_SEARCH_TIMEOUT",
+        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
+    ]
+    assert searcher.queries == []
+
+
+def test_augment_fetch_results_with_retailer_editorials_honors_search_budget() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher([])
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=StubPageFetcher({}),
+        max_retries=0,
+        max_search_attempts_per_record=1,
+    )
+
+    assert augmented[0].issue_codes == [
+        "RETAILER_PAGE_SEARCH_BUDGET_EXHAUSTED",
+        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
+    ]
+    assert len(searcher.queries) == 1
+
+
+def test_augment_fetch_results_with_retailer_editorials_honors_fetch_budget() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
+    page_fetcher = StubPageFetcher({"https://www.casadellibro.com/libro/123": "<html></html>"})
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+        max_fetch_attempts_per_record=0,
+    )
+
+    assert augmented[0].issue_codes == [
+        "RETAILER_PAGE_FETCH_BUDGET_EXHAUSTED",
+        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
+    ]
+    assert page_fetcher.calls == []

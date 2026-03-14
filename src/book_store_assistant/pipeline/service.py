@@ -29,6 +29,7 @@ from book_store_assistant.sources.publisher_pages import (
     augment_fetch_results_with_publisher_pages,
 )
 from book_store_assistant.sources.retailer_pages import (
+    RETAILER_EDITORIAL_CACHE_KEY,
     augment_fetch_results_with_retailer_editorials,
 )
 from book_store_assistant.sources.service import (
@@ -151,6 +152,11 @@ def process_isbn_file(
         if app_config.publisher_page_cache_enabled
         else None
     )
+    retailer_page_cache = (
+        FetchResultCache(app_config.retailer_page_cache_dir, RETAILER_EDITORIAL_CACHE_KEY)
+        if app_config.retailer_page_cache_enabled
+        else None
+    )
     retailer_editorial_before = {
         result.isbn: result.record.editorial if result.record is not None else None
         for result in fetch_results
@@ -158,10 +164,18 @@ def process_isbn_file(
     if app_config.retailer_page_lookup_enabled:
         fetch_results = augment_fetch_results_with_retailer_editorials(
             fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            timeout_seconds=app_config.retailer_page_timeout_seconds,
             on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
+            cache=retailer_page_cache,
+            cache_ttl_seconds=app_config.retailer_page_negative_cache_ttl_seconds,
+            max_retries=app_config.retailer_page_max_retries,
+            backoff_seconds=app_config.retailer_page_backoff_seconds,
+            max_search_attempts_per_record=(
+                app_config.retailer_page_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.retailer_page_max_fetch_attempts_per_record
+            ),
         )
     publisher_candidate_isbns = {
         result.isbn
@@ -182,6 +196,13 @@ def process_isbn_file(
             max_retries=app_config.publisher_page_max_retries,
             backoff_seconds=app_config.publisher_page_backoff_seconds,
             eligible_isbns=publisher_candidate_isbns,
+            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+            max_search_attempts_per_record=(
+                app_config.publisher_page_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.publisher_page_max_fetch_attempts_per_record
+            ),
         )
     retailer_unlocked_isbns = {
         result.isbn
@@ -204,6 +225,13 @@ def process_isbn_file(
             backoff_seconds=app_config.publisher_page_backoff_seconds,
             eligible_isbns=retailer_unlocked_isbns,
             ignore_negative_cache=True,
+            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+            max_search_attempts_per_record=(
+                app_config.publisher_page_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.publisher_page_max_fetch_attempts_per_record
+            ),
         )
     publisher_identity_results = resolve_publisher_identities(fetch_results)
     fetch_results = attach_publisher_identities(fetch_results, publisher_identity_results)

@@ -134,6 +134,14 @@ class AppConfig(BaseModel):
     publisher_page_cache_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_CACHE_ENABLED", True)
     )
+    retailer_page_cache_dir: Path = Field(
+        default_factory=lambda: Path(
+            _configured_str("retailer_page_cache_dir", "data/cache/retailer_pages")
+        )
+    )
+    retailer_page_cache_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_RETAILER_PAGE_CACHE_ENABLED", True)
+    )
     publisher_page_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", True)
     )
@@ -143,6 +151,12 @@ class AppConfig(BaseModel):
     publisher_page_negative_cache_ttl_seconds: float = Field(
         default_factory=lambda: _env_float(
             "BSA_PUBLISHER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",
+            21600.0,
+        )
+    )
+    retailer_page_negative_cache_ttl_seconds: float = Field(
+        default_factory=lambda: _env_float(
+            "BSA_RETAILER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",
             21600.0,
         )
     )
@@ -172,11 +186,47 @@ class AppConfig(BaseModel):
     publisher_page_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 3.0)
     )
+    retailer_page_timeout_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_TIMEOUT_SECONDS", 2.0)
+    )
     publisher_page_max_retries: int = Field(
-        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_RETRIES", 2)
+        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_RETRIES", 0)
+    )
+    retailer_page_max_retries: int = Field(
+        default_factory=lambda: _env_int("BSA_RETAILER_PAGE_MAX_RETRIES", 0)
     )
     publisher_page_backoff_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_BACKOFF_SECONDS", 0.5)
+    )
+    retailer_page_backoff_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_BACKOFF_SECONDS", 0.25)
+    )
+    publisher_page_max_profiles_per_record: int = Field(
+        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_PROFILES_PER_RECORD", 3)
+    )
+    publisher_page_max_search_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_PUBLISHER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
+            6,
+        )
+    )
+    publisher_page_max_fetch_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_PUBLISHER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
+            3,
+        )
+    )
+    retailer_page_max_search_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_RETAILER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
+            4,
+        )
+    )
+    retailer_page_max_fetch_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_RETAILER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
+            2,
+        )
     )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
