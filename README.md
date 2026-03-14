@@ -68,6 +68,95 @@ The main runtime flow is:
 
 The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
 
+## Pipeline Components
+
+The pipeline is easier to understand if it is viewed as a sequence of explicit components.
+Each component has a bounded responsibility and hands structured data to the next one.
+
+1. Input
+   - Responsibility: read CSV rows, normalize ISBNs, and separate valid from invalid inputs.
+   - Main files:
+     - `src/book_store_assistant/pipeline/input.py`
+     - `src/book_store_assistant/isbn.py`
+
+2. Staged Metadata Fetch
+   - Responsibility: fetch bibliographic metadata in source order using cache, BNE, Open Library, and Google Books.
+   - Main files:
+     - `src/book_store_assistant/sources/staged.py`
+     - `src/book_store_assistant/sources/bne.py`
+     - `src/book_store_assistant/sources/open_library.py`
+     - `src/book_store_assistant/sources/google_books.py`
+
+3. Intermediate Persistence and Source Cache
+   - Responsibility: persist staged fetch results and reuse successful prior fetches across runs.
+   - Main files:
+     - `src/book_store_assistant/sources/cache.py`
+     - `src/book_store_assistant/sources/intermediate.py`
+
+4. Page Augmentation
+   - Responsibility: improve fetched records using trusted publisher pages and retailer editorial fallback.
+   - Main files:
+     - `src/book_store_assistant/sources/publisher_pages.py`
+     - `src/book_store_assistant/sources/retailer_pages.py`
+
+5. Multi-Source Merge
+   - Responsibility: merge source records conservatively with field provenance and confidence.
+   - Main file:
+     - `src/book_store_assistant/sources/merge.py`
+
+6. Publisher Identity Resolution
+   - Responsibility: resolve publisher/imprint identity separately from edition metadata and attach that result to records.
+   - Main files:
+     - `src/book_store_assistant/publisher_identity/service.py`
+     - `src/book_store_assistant/publisher_identity/models.py`
+
+7. Enrichment
+   - Responsibility: collect grounded evidence and, in `ai-enriched`, optionally generate a standardized Spanish synopsis.
+   - Main files:
+     - `src/book_store_assistant/enrichment/service.py`
+     - `src/book_store_assistant/enrichment/evidence.py`
+     - `src/book_store_assistant/enrichment/openai_generator.py`
+
+8. Subject Catalog Loading and Mapping
+   - Responsibility: load the internal bookstore catalog and map source metadata into allowed bookstore subjects only.
+   - Main files:
+     - `src/book_store_assistant/subject_loader.py`
+     - `src/book_store_assistant/subject_mapping.py`
+     - `src/book_store_assistant/subject_selection.py`
+
+9. Resolution
+   - Responsibility: apply business rules to decide whether a row is safely resolved or must be sent to review.
+   - Main files:
+     - `src/book_store_assistant/resolution/service.py`
+     - `src/book_store_assistant/resolution/books.py`
+     - `src/book_store_assistant/resolution/subject_resolution.py`
+     - `src/book_store_assistant/resolution/synopsis_resolution.py`
+
+10. Review Split
+   - Responsibility: separate resolved output rows from unresolved rows that need manual review.
+   - Main files:
+     - `src/book_store_assistant/resolution/books.py`
+     - `src/book_store_assistant/pipeline/review.py`
+
+11. Export
+   - Responsibility: write the resolved workbook and the review workbook.
+   - Main files:
+     - `src/book_store_assistant/pipeline/export.py`
+     - `src/book_store_assistant/pipeline/review_export.py`
+     - `src/book_store_assistant/export/excel.py`
+     - `src/book_store_assistant/export/rows.py`
+     - `src/book_store_assistant/export/schema.py`
+
+12. Orchestration
+   - Responsibility: coordinate the full end-to-end flow and report status to the CLI.
+   - Main files:
+     - `src/book_store_assistant/pipeline/service.py`
+     - `src/book_store_assistant/cli.py`
+
+Compact mental model:
+
+`Input -> Staged Fetch -> Page Augmentation -> Merge -> Publisher Identity -> Enrichment -> Subject Mapping -> Resolution -> Review Split -> Export`
+
 ## Architecture
 
 The codebase follows a layered, pipeline-oriented structure.

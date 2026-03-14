@@ -151,16 +151,6 @@ def process_isbn_file(
         if app_config.publisher_page_cache_enabled
         else None
     )
-    if app_config.publisher_page_lookup_enabled:
-        fetch_results = augment_fetch_results_with_publisher_pages(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            cache=publisher_page_cache,
-            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
-        )
     retailer_editorial_before = {
         result.isbn: result.record.editorial if result.record is not None else None
         for result in fetch_results
@@ -172,6 +162,26 @@ def process_isbn_file(
             on_status_update=on_status_update,
             max_retries=app_config.publisher_page_max_retries,
             backoff_seconds=app_config.publisher_page_backoff_seconds,
+        )
+    publisher_candidate_isbns = {
+        result.isbn
+        for result in fetch_results
+        if (
+            result.record is not None
+            and result.record.editorial
+            and retailer_editorial_before.get(result.isbn) is not None
+        )
+    }
+    if app_config.publisher_page_lookup_enabled and publisher_candidate_isbns:
+        fetch_results = augment_fetch_results_with_publisher_pages(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_page_cache,
+            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
+            eligible_isbns=publisher_candidate_isbns,
         )
     retailer_unlocked_isbns = {
         result.isbn

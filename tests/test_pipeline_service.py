@@ -161,6 +161,9 @@ def test_process_isbn_file_always_applies_publisher_page_lookup(
     )
 
     mock_augment_publisher_pages.assert_called_once()
+    assert mock_augment_publisher_pages.call_args.kwargs["eligible_isbns"] == {
+        "9780306406157"
+    }
 
 
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
@@ -173,19 +176,6 @@ def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unl
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
 
-    initial_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
     retailer_augmented_results = [
         FetchResult(
             isbn="9780306406157",
@@ -222,7 +212,7 @@ def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unl
             issue_codes=[],
         )
     ]
-    mock_augment_publisher_pages.side_effect = [initial_results, final_results]
+    mock_augment_publisher_pages.return_value = final_results
     mock_augment_retailer_editorials.return_value = retailer_augmented_results
 
     process_isbn_file(
@@ -233,12 +223,47 @@ def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unl
         ),
     )
 
-    assert mock_augment_publisher_pages.call_count == 2
-    assert (
-        mock_augment_publisher_pages.call_args_list[1].kwargs["eligible_isbns"]
-        == {"9780306406157"}
+    assert mock_augment_publisher_pages.call_count == 1
+    assert mock_augment_publisher_pages.call_args.kwargs["eligible_isbns"] == {
+        "9780306406157"
+    }
+    assert mock_augment_publisher_pages.call_args.kwargs["ignore_negative_cache"] is True
+
+
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
+def test_process_isbn_file_skips_initial_publisher_lookup_without_editorial_hint(
+    mock_augment_publisher_pages,
+    mock_augment_retailer_editorials,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+
+    unchanged_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Example Title",
+                author="Example Author",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    mock_augment_retailer_editorials.return_value = unchanged_results
+
+    process_isbn_file(
+        input_file,
+        source=DummySource(),
+        config=AppConfig(
+            execution_mode=ExecutionMode.RULES_ONLY,
+        ),
     )
-    assert mock_augment_publisher_pages.call_args_list[1].kwargs["ignore_negative_cache"] is True
+
+    mock_augment_publisher_pages.assert_not_called()
 
 
 def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
