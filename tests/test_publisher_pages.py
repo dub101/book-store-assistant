@@ -127,7 +127,12 @@ class RaisingSearcher:
 
 
 class QueryAwareSearcher:
-    def __init__(self, expected_domain: str, expected_query_fragment: str, links: list[str]) -> None:
+    def __init__(
+        self,
+        expected_domain: str,
+        expected_query_fragment: str,
+        links: list[str],
+    ) -> None:
         self.expected_domain = expected_domain
         self.expected_query_fragment = expected_query_fragment.casefold()
         self.links = links

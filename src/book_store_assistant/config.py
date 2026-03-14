@@ -134,6 +134,12 @@ class AppConfig(BaseModel):
     publisher_page_cache_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_CACHE_ENABLED", True)
     )
+    publisher_page_lookup_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", True)
+    )
+    retailer_page_lookup_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_RETAILER_PAGE_LOOKUP_ENABLED", True)
+    )
     publisher_page_negative_cache_ttl_seconds: float = Field(
         default_factory=lambda: _env_float(
             "BSA_PUBLISHER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",

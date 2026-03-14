@@ -214,12 +214,15 @@ def augment_fetch_results_with_retailer_editorials(
         for profile in SUPPORTED_RETAILERS:
             candidate_urls: list[str] = []
             for query in build_retailer_search_queries(record):
-                query_candidate_urls, search_issue_codes = _run_with_retry(
-                    lambda query=query, domains=profile.domains: active_searcher.search(
+                def _search_retailer_pages() -> list[str]:
+                    return active_searcher.search(
                         query,
-                        domains,
+                        profile.domains,
                         limit=SEARCH_RESULT_LIMIT,
-                    ),
+                    )
+
+                query_candidate_urls, search_issue_codes = _run_with_retry(
+                    _search_retailer_pages,
                     "retailer_page_search",
                     max_retries=max_retries,
                     backoff_seconds=backoff_seconds,

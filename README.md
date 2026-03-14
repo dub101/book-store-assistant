@@ -56,13 +56,15 @@ The main runtime flow is:
 4. Query BNE for rows still missing required metadata when enabled.
 5. Batch query Open Library for rows still missing required metadata.
 6. Query Google Books one by one for rows still missing required metadata or synopsis support.
-7. Optionally query trusted publisher pages as a last metadata-acquisition step.
-8. Resolve publisher identity separately from edition metadata and attach provenance.
-9. Merge source records conservatively with field-level confidence and provenance.
-10. Optionally enrich synopsis data in `ai-enriched`.
-11. Resolve business-required fields.
-12. Split into resolved rows and review rows.
-13. Export workbook outputs.
+7. Query trusted publisher pages for ISBN-confirmed metadata upgrades when helpful.
+8. Query trusted retailer pages for missing `editorial` when core sources still leave it blank.
+9. Re-run publisher-page lookup for rows whose `editorial` was unlocked by retailer fallback.
+10. Resolve publisher identity separately from edition metadata and attach provenance.
+11. Merge source records conservatively with field-level confidence and provenance.
+12. Optionally enrich synopsis data in `ai-enriched`.
+13. Resolve business-required fields.
+14. Split into resolved rows and review rows.
+15. Export workbook outputs.
 
 The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
 
@@ -137,14 +139,17 @@ Implemented:
 - CSV ingestion
 - structured pipeline result models
 - BNE, Google Books, and Open Library source adapters
-- staged fetch flow: cache -> BNE -> Open Library -> Google Books -> publisher pages
+- staged fetch flow: cache -> BNE -> Open Library -> Google Books -> publisher pages -> retailer editorial fallback -> targeted publisher re-pass
 - JSONL intermediates for staged fetch results
 - successful fetch-result caching
 - separate publisher identity resolution with provenance and confidence
 - conservative multi-source merge with field provenance and field-level confidence
 - structured fetch issue codes
 - Google Books retry/backoff for HTTP `429`
-- optional publisher-page lookup with ISBN-confirmed page parsing
+- publisher-page lookup with ISBN-confirmed page parsing
+- negative caching and retry/backoff for publisher-page search/fetch
+- retailer-page fallback for missing `editorial`
+- targeted second publisher-page pass after retailer `editorial` recovery
 - deterministic resolution and unresolved/review routing
 - dual execution modes: `rules-only` and `ai-enriched`
 - grounded evidence collection for AI synopsis generation
@@ -285,6 +290,8 @@ source_cache_enabled = true
 bne_lookup_enabled = true
 bne_sru_base_url = "https://catalogo.bne.es/view/sru/34BNE_INST"
 publisher_page_cache_enabled = true
+publisher_page_lookup_enabled = true
+retailer_page_lookup_enabled = true
 publisher_page_negative_cache_ttl_seconds = 21600
 publisher_page_timeout_seconds = 3.0
 publisher_page_max_retries = 2
@@ -327,13 +334,17 @@ Important:
 - process environment overrides `bsa.toml`
 - values stored in `.env` are ignored unless you export them into the shell yourself
 - if you do not use `bsa`, export `OPENAI_API_KEY` in the same shell or pass it inline when invoking the CLI
-- publisher-page lookup is always enabled; cache TTL, retry/backoff, and timeout are configurable
+- publisher-page and retailer-page lookup are enabled by default in normal runs
+- page lookup can be disabled with `BSA_PUBLISHER_PAGE_LOOKUP_ENABLED=0` and `BSA_RETAILER_PAGE_LOOKUP_ENABLED=0`
+- cache TTL, retry/backoff, and timeout remain configurable independently of those lookup toggles
 
 ## Current Caveats
 
-- BNE, Open Library, Google Books, and publisher search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
+- BNE, Open Library, Google Books, publisher search, and retailer search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
 - publisher discovery is intentionally conservative and only trusts pages that explicitly contain the target ISBN
+- retailer fallback currently exists to recover missing `editorial`; it is not yet a broad metadata fallback for title/author/synopsis
 - DuckDuckGo HTML search is currently opportunistic, not a guaranteed backbone source
+- page-lookup runtime can still be dominated by repeated external search failures before the pipeline even reaches a product page URL
 - output file names passed to the CLI should generally be unsuffixed, for example `sample_3_books.xlsx`
 - running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
 - using the `bsa` helper avoids that mismatch
@@ -397,6 +408,8 @@ Current source-reliability note:
 - Google Books fetches now retry on HTTP 429 responses with exponential backoff
 - if Google Books eventually succeeds after retries, the run still reports the rate-limit issue code in the CLI summary so operators can see upstream degradation
 - rules-only mode now continues to Google Books when synopsis is still missing, even if Open Library already supplied title/author/editorial/categories
+- when `editorial` is still missing after core sources and the first publisher pass, the pipeline now tries selected retailer pages and then re-runs publisher lookup for just the newly unlocked rows
+- retailer-derived `editorial` is kept as lower-confidence provenance than official publisher-page data
 - source review rows now retain raw upstream payload text for audit and debugging
 
 ## Demo Run

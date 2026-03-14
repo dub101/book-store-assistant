@@ -4,8 +4,8 @@ from book_store_assistant.sources.retailer_pages import (
     RetailerProfile,
     apply_retailer_editorial_record,
     augment_fetch_results_with_retailer_editorials,
-    build_retailer_search_query,
     build_retailer_search_queries,
+    build_retailer_search_query,
     extract_retailer_page_record,
 )
 

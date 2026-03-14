@@ -24,8 +24,6 @@ from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.cache import FetchResultCache
-from book_store_assistant.sources.defaults import build_default_sources, wrap_with_default_cache
-from book_store_assistant.sources.fallback import FallbackMetadataSource
 from book_store_assistant.sources.publisher_pages import (
     PUBLISHER_PAGE_CACHE_KEY,
     augment_fetch_results_with_publisher_pages,
@@ -153,26 +151,28 @@ def process_isbn_file(
         if app_config.publisher_page_cache_enabled
         else None
     )
-    fetch_results = augment_fetch_results_with_publisher_pages(
-        fetch_results,
-        timeout_seconds=app_config.publisher_page_timeout_seconds,
-        on_status_update=on_status_update,
-        cache=publisher_page_cache,
-        cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
-        max_retries=app_config.publisher_page_max_retries,
-        backoff_seconds=app_config.publisher_page_backoff_seconds,
-    )
+    if app_config.publisher_page_lookup_enabled:
+        fetch_results = augment_fetch_results_with_publisher_pages(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_page_cache,
+            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
+        )
     retailer_editorial_before = {
         result.isbn: result.record.editorial if result.record is not None else None
         for result in fetch_results
     }
-    fetch_results = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=app_config.publisher_page_timeout_seconds,
-        on_status_update=on_status_update,
-        max_retries=app_config.publisher_page_max_retries,
-        backoff_seconds=app_config.publisher_page_backoff_seconds,
-    )
+    if app_config.retailer_page_lookup_enabled:
+        fetch_results = augment_fetch_results_with_retailer_editorials(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
+        )
     retailer_unlocked_isbns = {
         result.isbn
         for result in fetch_results
@@ -183,7 +183,7 @@ def process_isbn_file(
             and result.record.field_sources.get("editorial", "").startswith("retailer_page:")
         )
     }
-    if retailer_unlocked_isbns:
+    if app_config.publisher_page_lookup_enabled and retailer_unlocked_isbns:
         fetch_results = augment_fetch_results_with_publisher_pages(
             fetch_results,
             timeout_seconds=app_config.publisher_page_timeout_seconds,

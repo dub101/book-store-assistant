@@ -20,6 +20,7 @@ runner = CliRunner()
 def _cli_env() -> dict[str, str]:
     env = dict(os.environ)
     env["BSA_PUBLISHER_PAGE_LOOKUP_ENABLED"] = "0"
+    env["BSA_RETAILER_PAGE_LOOKUP_ENABLED"] = "0"
     return env
 
 

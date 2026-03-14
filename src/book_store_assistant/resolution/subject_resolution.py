@@ -1,5 +1,5 @@
-from collections import Counter
 import re
+from collections import Counter
 
 from book_store_assistant.subject_selection import select_subject
 

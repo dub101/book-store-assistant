@@ -5,7 +5,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
-from typing import TypeVar
+from typing import TypedDict, TypeVar
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
@@ -62,7 +62,7 @@ class PublisherProfile:
     editorial_aliases: tuple[str, ...]
 
 
-SUPPORTED_PUBLISHERS = (
+SUPPORTED_PUBLISHERS_BASE: tuple[PublisherProfile, ...] = (
     PublisherProfile(
         key="penguin_random_house",
         domains=("penguinlibros.com", "megustaleer.com"),
@@ -377,7 +377,12 @@ IMPRINT_TO_LOOKUP = {
     "libros del zorro rojo": "zorro_rojo",
 }
 
-LOOKUP_TO_DOMAINS = {
+class LookupDomainConfig(TypedDict):
+    canonical_domain: str
+    alternative_domains: tuple[str, ...]
+
+
+LOOKUP_TO_DOMAINS: dict[str, LookupDomainConfig] = {
     "acantilado_quaderns_crema": {
         "canonical_domain": "acantilado.es",
         "alternative_domains": (),
@@ -559,10 +564,10 @@ def _merge_publisher_profiles(
     return tuple(merged_profiles)
 
 
-ACTIVE_LOOKUP_KEYS = frozenset(profile.key for profile in SUPPORTED_PUBLISHERS)
+ACTIVE_LOOKUP_KEYS = frozenset(profile.key for profile in SUPPORTED_PUBLISHERS_BASE)
 
-SUPPORTED_PUBLISHERS = _merge_publisher_profiles(
-    SUPPORTED_PUBLISHERS,
+SUPPORTED_PUBLISHERS: tuple[PublisherProfile, ...] = _merge_publisher_profiles(
+    SUPPORTED_PUBLISHERS_BASE,
     tuple(
         profile for profile in _build_lookup_profiles()
         if profile.key in ACTIVE_LOOKUP_KEYS
@@ -951,7 +956,11 @@ def build_publisher_search_queries(
         if record.title:
             hinted_parts.insert(1, f'"{record.title}"')
         if title_head and title_head != record.title:
-            queries.append(" ".join([f'\"{record.isbn}\"', f'"{title_head}"', f'"{publisher_hint}"']))
+            queries.append(
+                " ".join(
+                    [f'"{record.isbn}"', f'"{title_head}"', f'"{publisher_hint}"']
+                )
+            )
         queries.append(" ".join(hinted_parts))
 
     return _deduplicate_queries(queries)
@@ -1323,12 +1332,15 @@ def augment_fetch_results_with_publisher_pages(
         for profile in candidate_profiles:
             candidate_urls: list[str] = []
             for query in build_publisher_search_queries(record, profile):
-                query_candidate_urls, search_issue_codes = _run_with_retry(
-                    lambda query=query, domains=profile.domains: active_searcher.search(
+                def _search_publisher_pages() -> list[str]:
+                    return active_searcher.search(
                         query,
-                        domains,
+                        profile.domains,
                         limit=SEARCH_RESULT_LIMIT,
-                    ),
+                    )
+
+                query_candidate_urls, search_issue_codes = _run_with_retry(
+                    _search_publisher_pages,
                     "publisher_page_search",
                     max_retries=max_retries,
                     backoff_seconds=backoff_seconds,
