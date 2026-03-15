@@ -4,6 +4,7 @@ from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.retailer_pages import (
+    RETAILER_EDITORIAL_CACHE_KEY,
     RetailerProfile,
     apply_retailer_editorial_record,
     augment_fetch_results_with_retailer_editorials,
@@ -30,6 +31,22 @@ CASA_HTML = """
   <body>
     <p>ISBN | 9780306406157</p>
     <p>Editorial | Planeta</p>
+  </body>
+</html>
+"""
+
+AGAPEA_HTML = """
+<html>
+  <head>
+    <title>VICTORIA - 9788408295853</title>
+    <meta
+      name="description"
+      content="Comprar el libro Victoria. Premio Planeta 2024 de Paloma
+      Sanchez-Garnica, Editorial Planeta (9788408295853) con ENVIO GRATIS."
+    />
+  </head>
+  <body>
+    <p>ISBN 9788408295853</p>
   </body>
 </html>
 """
@@ -113,6 +130,19 @@ def test_extract_retailer_page_record_parses_editorial() -> None:
     assert record.author == "Autora Ejemplo"
 
 
+def test_extract_retailer_page_record_parses_agapea_editorial_from_meta_description() -> None:
+    record = extract_retailer_page_record(
+        AGAPEA_HTML,
+        "https://www.agapea.com/buscador/buscador.php?texto=9788408295853",
+        "9788408295853",
+        profile=RetailerProfile("agapea", ("agapea.com",)),
+    )
+
+    assert record is not None
+    assert record.author == "Paloma Sanchez-Garnica"
+    assert record.editorial == "Editorial Planeta"
+
+
 def test_apply_retailer_editorial_record_fills_missing_editorial() -> None:
     existing = SourceBookRecord(
         source_name="google_books",
@@ -130,6 +160,37 @@ def test_apply_retailer_editorial_record_fills_missing_editorial() -> None:
 
     assert merged.editorial == "Planeta"
     assert merged.field_sources["editorial"] == "retailer_page:casa_del_libro"
+
+
+def test_augment_fetch_results_with_retailer_editorials_fills_missing_author_when_editorial_exists(
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                editorial="Planeta",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
+    page_fetcher = StubPageFetcher({"https://www.casadellibro.com/libro/123": CASA_HTML})
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.author == "Autora Ejemplo"
+    assert augmented[0].record.field_sources["author"] == "retailer_page:casa_del_libro"
 
 
 def test_augment_fetch_results_with_retailer_editorials_fills_missing_editorial() -> None:
@@ -160,6 +221,39 @@ def test_augment_fetch_results_with_retailer_editorials_fills_missing_editorial(
     assert augmented[0].record is not None
     assert augmented[0].record.editorial == "Planeta"
     assert augmented[0].record.field_sources["editorial"] == "retailer_page:casa_del_libro"
+
+
+def test_augment_fetch_results_with_retailer_editorials_uses_direct_agapea_lookup_before_search(
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9788408295853",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9788408295853",
+                title="Victoria. Premio Planeta 2024",
+                author="Paloma Sanchez-Garnica",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = StubSearcher([])
+    page_fetcher = StubPageFetcher(
+        {"https://www.agapea.com/buscador/buscador.php?texto=9788408295853": AGAPEA_HTML}
+    )
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial == "Editorial Planeta"
+    assert searcher.queries == []
 
 
 def test_augment_fetch_results_with_retailer_editorials_searches_new_retailer_domains() -> None:
@@ -231,7 +325,7 @@ def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_r
             issue_codes=[],
         )
     ]
-    cache = FetchResultCache(tmp_path / "retailer-cache", "retailer_editorial_lookup_v2")
+    cache = FetchResultCache(tmp_path / "retailer-cache", RETAILER_EDITORIAL_CACHE_KEY)
     cache.set(
         FetchResult(
             isbn="9780306406157",

@@ -19,9 +19,13 @@ from book_store_assistant.publisher_identity.service import (
     resolve_publisher_identities,
 )
 from book_store_assistant.resolution.base import SubjectMapper
-from book_store_assistant.resolution.providers import build_default_subject_mapper
+from book_store_assistant.resolution.providers import (
+    build_default_record_quality_validator,
+    build_default_subject_mapper,
+)
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
+from book_store_assistant.resolution.validation import apply_record_quality_validation
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.publisher_pages import (
@@ -129,6 +133,7 @@ def process_isbn_file(
         if active_mode is ExecutionMode.AI_ENRICHED
         else None
     )
+    record_quality_validator = build_default_record_quality_validator(app_config)
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     if source is None:
         fetch_results = fetch_with_intermediate_stages(
@@ -257,6 +262,10 @@ def process_isbn_file(
     else:
         resolution_results = resolve_all(enriched_fetch_results)
 
+    resolution_results = apply_record_quality_validation(
+        resolution_results,
+        validator=record_quality_validator,
+    )
     resolution_results = _attach_enrichment_results(
         resolution_results,
         enrichment_results,

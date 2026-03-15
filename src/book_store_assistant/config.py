@@ -238,6 +238,12 @@ class AppConfig(BaseModel):
     llm_subject_mapping_min_confidence: float = Field(
         default_factory=lambda: _env_float("BSA_LLM_SUBJECT_MAPPING_MIN_CONFIDENCE", 0.85)
     )
+    llm_record_validation_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_LLM_RECORD_VALIDATION_ENABLED", True)
+    )
+    llm_record_validation_min_confidence: float = Field(
+        default_factory=lambda: _env_float("BSA_LLM_RECORD_VALIDATION_MIN_CONFIDENCE", 0.8)
+    )
     ai_provider: AIProvider = AIProvider.OPENAI
     openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     openai_api_base_url: str = Field(

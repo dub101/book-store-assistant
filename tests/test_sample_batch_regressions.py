@@ -252,9 +252,9 @@ def test_sample_2_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     assert len(result.input_result.valid_inputs) == 49
     assert result.input_result.invalid_values == ["9788449333830"]
     assert sum(1 for item in result.fetch_results if item.record is not None) == 44
-    assert resolved_count == 24
-    assert unresolved_count == 25
-    assert applied_count == 10
+    assert resolved_count == 34
+    assert unresolved_count == 15
+    assert applied_count == 20
 
     resolved_output = tmp_path / "sample_2_books.xlsx"
     review_output = tmp_path / "sample_2_review.xlsx"
@@ -264,5 +264,5 @@ def test_sample_2_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     resolved_sheet = openpyxl.load_workbook(resolved_output).active
     review_sheet = openpyxl.load_workbook(review_output).active
 
-    assert resolved_sheet.max_row == 25
-    assert review_sheet.max_row == 26
+    assert resolved_sheet.max_row == 35
+    assert review_sheet.max_row == 16

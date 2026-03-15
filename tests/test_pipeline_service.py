@@ -54,6 +54,22 @@ class StubSubjectMapper:
         return "FICCION"
 
 
+class RejectingRecordValidator:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def validate(self, source_record: SourceBookRecord, candidate_record: BookRecord):
+        from book_store_assistant.resolution.models import RecordValidationAssessment
+
+        self.calls += 1
+        return RecordValidationAssessment(
+            accepted=False,
+            confidence=0.95,
+            issues=["synopsis_not_customer_facing"],
+            explanation="Synopsis is bibliography-only.",
+        )
+
+
 class DummyResolvedSource:
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(
@@ -97,6 +113,23 @@ def test_process_isbn_file_defaults_to_rules_only_mode(tmp_path: Path) -> None:
         result.resolution_results[0].publisher_identity
         == result.publisher_identity_results[0]
     )
+
+
+@patch("book_store_assistant.pipeline.service.build_default_record_quality_validator")
+def test_process_isbn_file_applies_record_quality_validator(
+    mock_build_record_quality_validator,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    validator = RejectingRecordValidator()
+    mock_build_record_quality_validator.return_value = validator
+
+    result = process_isbn_file(input_file, source=DummyResolvedSource())
+
+    assert result.resolution_results[0].record is None
+    assert "LLM_VALIDATION_FAILED" in result.resolution_results[0].reason_codes
+    assert validator.calls == 1
 
 
 def test_attach_publisher_identity_results_attaches_identity_to_resolution_results() -> None:
