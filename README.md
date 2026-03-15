@@ -430,9 +430,10 @@ Important:
 ## Current Caveats
 
 - BNE, Open Library, Google Books, publisher search, and retailer search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
-- publisher discovery is intentionally conservative and only trusts pages that explicitly contain the target ISBN
-- retailer fallback currently exists to recover missing `editorial`; it is not yet a broad metadata fallback for title/author/synopsis
-- DuckDuckGo HTML search is currently opportunistic, not a guaranteed backbone source
+- publisher and retailer discovery now run in strict exact-ISBN mode only
+- publisher-page lookup only runs once a publisher/imprint has been identified from trusted metadata or an exact-ISBN retailer hit
+- publisher pages are trusted only when the fetched HTML explicitly contains the target ISBN
+- retailer fallback exists only to recover exact-ISBN `editorial` data; it is not used as a fuzzy metadata fallback for title/author/synopsis
 - page-lookup runtime can still be dominated by repeated external search failures before the pipeline even reaches a product page URL
 - output file names passed to the CLI should generally be unsuffixed, for example `sample_3_books.xlsx`
 - running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
@@ -497,7 +498,7 @@ Current source-reliability note:
 - Google Books fetches now retry on HTTP 429 responses with exponential backoff
 - if Google Books eventually succeeds after retries, the run still reports the rate-limit issue code in the CLI summary so operators can see upstream degradation
 - rules-only mode now continues to Google Books when synopsis is still missing, even if Open Library already supplied title/author/editorial/categories
-- when `editorial` is still missing after core sources and the first publisher pass, the pipeline now tries selected retailer pages and then re-runs publisher lookup for just the newly unlocked rows
+- when `editorial` is still missing after core sources, the pipeline now tries selected retailer domains with exact-ISBN-only search and then runs a publisher-domain-only exact-ISBN lookup for newly unlocked rows
 - retailer-derived `editorial` is kept as lower-confidence provenance than official publisher-page data
 - source review rows now retain raw upstream payload text for audit and debugging
 
@@ -551,7 +552,7 @@ To add a new metadata source:
 - create a new adapter in `src/book_store_assistant/sources/`
 - keep provider-specific parsing inside that adapter or its parser module
 - return structured `FetchResult` data, including issue codes on failures
-- add the source in `src/book_store_assistant/sources/defaults.py`
+- wire the source into the staged fetch flow in `src/book_store_assistant/sources/staged.py`
 - cover it with focused adapter/parser tests
 
 To change business rules:

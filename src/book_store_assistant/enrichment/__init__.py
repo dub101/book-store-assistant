@@ -22,12 +22,10 @@ from book_store_assistant.enrichment.models import (
 from book_store_assistant.enrichment.openai_generator import OpenAISynopsisGenerator
 from book_store_assistant.enrichment.page_fetch import (
     HttpPageContentFetcher,
-    extract_description_from_html,
 )
 from book_store_assistant.enrichment.providers import build_default_synopsis_generator
 from book_store_assistant.enrichment.service import (
     DefaultSourceRecordEnricher,
-    NoOpSourceRecordEnricher,
     enrich_fetch_results,
 )
 
@@ -47,10 +45,8 @@ __all__ = [
     "SOURCE_PAGE_STRUCTURED_EVIDENCE",
     "MIN_EVIDENCE_CHARACTERS",
     "MIN_GENERATED_SYNOPSIS_CHARACTERS",
-    "NoOpSourceRecordEnricher",
     "build_default_synopsis_generator",
     "collect_descriptive_evidence",
-    "extract_description_from_html",
     "has_sufficient_evidence",
     "enrich_fetch_results",
     "validate_generated_synopsis",

@@ -1,3 +1,5 @@
+import httpx
+
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
@@ -58,7 +60,21 @@ class StubPageFetcher:
         return self.pages.get(url)
 
 
-def test_build_retailer_search_query_uses_isbn_title_and_author() -> None:
+class RaisingSearcher:
+    def __init__(self) -> None:
+        self.queries: list[tuple[str, tuple[str, ...]]] = []
+
+    def search(
+        self,
+        query: str,
+        allowed_domains: tuple[str, ...],
+        limit: int = 3,
+    ) -> list[str]:
+        self.queries.append((query, allowed_domains))
+        raise httpx.TimeoutException("search timed out")
+
+
+def test_build_retailer_search_query_uses_exact_isbn_only() -> None:
     query = build_retailer_search_query(
         SourceBookRecord(
             source_name="google_books",
@@ -68,10 +84,10 @@ def test_build_retailer_search_query_uses_isbn_title_and_author() -> None:
         )
     )
 
-    assert query == '"9780306406157" "Libro de prueba" "Autora Ejemplo"'
+    assert query == '"9780306406157"'
 
 
-def test_build_retailer_search_queries_includes_fallback_variants() -> None:
+def test_build_retailer_search_queries_use_exact_isbn_only() -> None:
     queries = build_retailer_search_queries(
         SourceBookRecord(
             source_name="google_books",
@@ -81,12 +97,7 @@ def test_build_retailer_search_queries_includes_fallback_variants() -> None:
         )
     )
 
-    assert queries == [
-        '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
-        '"9780306406157"',
-        '"9780306406157" "Libro de prueba"',
-        '"9780306406157" "Autora Ejemplo"',
-    ]
+    assert queries == ['"9780306406157"']
 
 
 def test_extract_retailer_page_record_parses_editorial() -> None:
@@ -183,16 +194,25 @@ def test_augment_fetch_results_with_retailer_editorials_searches_new_retailer_do
 
     assert augmented[0].record is not None
     assert augmented[0].record.editorial is None
-    assert searcher.queries[-2:] == [
+    assert searcher.queries[0] == (
+        '"9780306406157"',
+        ("agapea.com",),
+    )
+    assert searcher.queries[1] == (
+        '"9780306406157"',
         (
-            '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
-            ("agapea.com",),
+            "buscalibre.com",
+            "buscalibre.cl",
+            "buscalibre.com.co",
+            "buscalibre.com.mx",
+            "buscalibre.pe",
+            "buscalibre.us",
         ),
-        (
-            '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
-            ("todostuslibros.com",),
-        ),
-    ]
+    )
+    assert searcher.queries[-1] == (
+        '"9780306406157"',
+        ("todostuslibros.com",),
+    )
 
 
 def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_result(
@@ -211,7 +231,7 @@ def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_r
             issue_codes=[],
         )
     ]
-    cache = FetchResultCache(tmp_path / "retailer-cache", "retailer_editorial_lookup_v1")
+    cache = FetchResultCache(tmp_path / "retailer-cache", "retailer_editorial_lookup_v2")
     cache.set(
         FetchResult(
             isbn="9780306406157",
@@ -272,6 +292,38 @@ def test_augment_fetch_results_with_retailer_editorials_honors_search_budget() -
         "RETAILER_PAGE_EDITORIAL_NO_MATCH",
     ]
     assert len(searcher.queries) == 1
+
+
+def test_augment_fetch_results_with_retailer_editorials_does_not_spend_budget_on_search_timeouts(
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                title="Libro de prueba",
+                author="Autora Ejemplo",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    searcher = RaisingSearcher()
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=StubPageFetcher({}),
+        max_retries=0,
+        max_search_attempts_per_record=1,
+    )
+
+    assert "RETAILER_PAGE_SEARCH_BUDGET_EXHAUSTED" not in augmented[0].issue_codes
+    assert "RETAILER_PAGE_SEARCH_TIMEOUT" in augmented[0].issue_codes
+    assert "RETAILER_PAGE_EDITORIAL_NO_MATCH" in augmented[0].issue_codes
+    assert len(searcher.queries) > 1
 
 
 def test_augment_fetch_results_with_retailer_editorials_honors_fetch_budget() -> None:

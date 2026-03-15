@@ -244,16 +244,6 @@ def extract_description_candidates_from_html(
     _collect_source_specific_candidates(html, source_url, candidates, seen)
 
     return candidates
-
-
-def extract_description_from_html(html: str, source_url: str | None = None) -> str | None:
-    candidates = extract_description_candidates_from_html(html, source_url=source_url)
-    if not candidates:
-        return None
-
-    return candidates[0][1]
-
-
 class HttpPageContentFetcher:
     def __init__(self, timeout_seconds: float) -> None:
         self.timeout_seconds = timeout_seconds

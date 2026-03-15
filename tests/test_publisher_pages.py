@@ -338,13 +338,10 @@ def test_build_publisher_search_query_uses_isbn_title_and_primary_author() -> No
         )
     )
 
-    assert query == (
-        '"9780306406157" "El libro de prueba: edición especial" '
-        '"El libro de prueba" "Autora Ejemplo" "Planeta"'
-    )
+    assert query == '"9780306406157"'
 
 
-def test_build_publisher_search_queries_adds_publisher_hint_variants() -> None:
+def test_build_publisher_search_queries_are_exact_isbn_only() -> None:
     profile = match_publisher_profile("Planeta")
     assert profile is not None
 
@@ -358,13 +355,10 @@ def test_build_publisher_search_queries_adds_publisher_hint_variants() -> None:
         profile=profile,
     )
 
-    assert '"9780306406157" "el libro de prueba" "planeta"' in [
-        query.casefold() for query in queries
-    ]
-    assert '"9780306406157"' in queries
+    assert queries == ['"9780306406157"']
 
 
-def test_rank_candidate_urls_prefers_title_like_product_pages() -> None:
+def test_rank_candidate_urls_prefers_exact_isbn_urls() -> None:
     record = SourceBookRecord(
         source_name="google_books",
         isbn="9780306406157",
@@ -375,13 +369,13 @@ def test_rank_candidate_urls_prefers_title_like_product_pages() -> None:
     ranked = _rank_candidate_urls(
         [
             "https://www.planetadelibros.com/autor/autora-ejemplo/00001",
-            "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456",
+            "https://www.planetadelibros.com/libro/9780306406157/123456",
             "https://www.planetadelibros.com/blog/noticias-del-mes/99999",
         ],
         record,
     )
 
-    assert ranked[0] == "https://www.planetadelibros.com/libro/el-libro-de-prueba/123456"
+    assert ranked[0] == "https://www.planetadelibros.com/libro/9780306406157/123456"
 
 
 def test_extract_publisher_page_record_parses_book_metadata_from_html() -> None:
@@ -508,7 +502,7 @@ def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers
     assert "planetadelibros.com" in str(augmented[0].record.source_url)
     assert searcher.queries == [
         (
-            '"9780306406157" "El libro de prueba" "Autora Ejemplo" "Planeta"',
+            '"9780306406157"',
             ("planetadelibros.com",),
         )
     ]
@@ -591,7 +585,7 @@ def test_publisher_pages_uses_editorial_hint_for_known_publishers() -> None:
     ]
     searcher = QueryAwareSearcher(
         expected_domain="planetadelibros.com",
-        expected_query_fragment='"el libro de prueba" "autora ejemplo" "planeta"',
+        expected_query_fragment='"9780306406157"',
         links=["https://www.planetadelibros.com/libro-de-prueba/123456"],
     )
     page_fetcher = StubPageFetcher(
@@ -608,7 +602,7 @@ def test_publisher_pages_uses_editorial_hint_for_known_publishers() -> None:
     assert augmented[0].record is not None
     assert augmented[0].record.editorial == "Planeta"
     assert any(
-        "planeta" in query.casefold() and "planetadelibros.com" in domains[0]
+        query == '"9780306406157"' and "planetadelibros.com" in domains[0]
         for query, domains in searcher.queries
     )
 
@@ -736,10 +730,7 @@ def test_publisher_pages_honors_profile_and_search_budgets() -> None:
         max_search_attempts_per_record=1,
     )
 
-    assert augmented[0].issue_codes == [
-        "PUBLISHER_PAGE_SEARCH_BUDGET_EXHAUSTED",
-        "PUBLISHER_PAGE_NO_MATCH",
-    ]
+    assert augmented[0].issue_codes == ["PUBLISHER_PAGE_NO_MATCH"]
     assert len(searcher.queries) == 1
 
 
@@ -958,7 +949,7 @@ def test_publisher_pages_retries_after_expired_negative_cache(tmp_path) -> None:
     assert augmented[0].record.synopsis is not None
     assert searcher.queries == [
         (
-            '"9780306406157" "El libro de prueba" "Autora Ejemplo" "Planeta"',
+            '"9780306406157"',
             ("planetadelibros.com",),
         )
     ]

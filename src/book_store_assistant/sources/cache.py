@@ -3,7 +3,6 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.results import FetchResult
 
 CACHE_VERSION = 2
@@ -57,24 +56,3 @@ class FetchResultCache:
         cache_path = self._cache_path(result.isbn)
         cached = CachedFetchResult(source_key=self.source_key, result=result)
         cache_path.write_text(cached.model_dump_json(indent=2), encoding="utf-8")
-
-
-class CachedMetadataSource:
-    def __init__(
-        self,
-        source: MetadataSource,
-        cache_dir: Path,
-        source_key: str,
-    ) -> None:
-        self.source = source
-        self.source_key = source_key
-        self.cache = FetchResultCache(cache_dir, source_key)
-
-    def fetch(self, isbn: str) -> FetchResult:
-        cached_result = self.cache.get(isbn)
-        if cached_result is not None:
-            return cached_result
-
-        result = self.source.fetch(isbn)
-        self.cache.set(result)
-        return result

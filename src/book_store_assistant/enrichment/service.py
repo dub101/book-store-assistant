@@ -19,25 +19,6 @@ from book_store_assistant.sources.results import FetchResult
 AI_SYNOPSIS_SOURCE = "ai_enriched"
 EnrichmentStartCallback = Callable[[int, int, str], None]
 EnrichmentCompleteCallback = Callable[[int, int, EnrichmentResult], None]
-
-
-class NoOpSourceRecordEnricher:
-    def __init__(self, page_fetcher: PageContentFetcher | None = None) -> None:
-        self.page_fetcher = page_fetcher
-
-    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
-        evidence = collect_descriptive_evidence(record, page_fetcher=self.page_fetcher)
-        skipped_reason = "existing_synopsis_present" if evidence else "insufficient_evidence"
-
-        return EnrichmentResult(
-            isbn=record.isbn,
-            source_name=record.source_name,
-            applied=False,
-            skipped_reason=skipped_reason,
-            evidence=evidence,
-        )
-
-
 class DefaultSourceRecordEnricher:
     def __init__(
         self,

@@ -12,7 +12,6 @@ from book_store_assistant.pipeline.service import (
 )
 from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.results import ResolutionResult
-from book_store_assistant.sources.defaults import build_default_sources
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -20,17 +19,6 @@ from book_store_assistant.sources.results import FetchResult
 class DummySource:
     def fetch(self, isbn: str) -> FetchResult:
         return FetchResult(isbn=isbn, record=None, errors=["No match"])
-
-
-def test_build_default_sources_returns_sources_in_precedence_order() -> None:
-    sources = build_default_sources()
-
-    assert len(sources) == 3
-    assert sources[0].source_name == "bne"
-    assert sources[1].source_name == "open_library"
-    assert sources[2].source_name == "google_books"
-
-
 def test_process_isbn_file_uses_injected_source(tmp_path: Path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\ninvalid\n", encoding="utf-8")

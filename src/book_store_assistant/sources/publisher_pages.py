@@ -891,113 +891,19 @@ def match_publisher_profile(editorial: str | None) -> PublisherProfile | None:
 
 
 def build_publisher_search_query(record: SourceBookRecord) -> str:
-    query_parts = [f'"{record.isbn}"']
-
-    if record.title:
-        query_parts.append(f'"{record.title}"')
-        title_head = record.title.split(":", maxsplit=1)[0].strip()
-        if title_head and title_head != record.title:
-            query_parts.append(f'"{title_head}"')
-
-    if record.author:
-        primary_author = record.author.split(",", maxsplit=1)[0].strip()
-        if primary_author:
-            query_parts.append(f'"{primary_author}"')
-
-    if record.editorial:
-        query_parts.append(f'"{record.editorial}"')
-
-    return " ".join(query_parts)
-
-
-def _deduplicate_queries(queries: list[str]) -> list[str]:
-    deduplicated: list[str] = []
-    seen: set[str] = set()
-
-    for query in queries:
-        normalized_query = " ".join(query.split()).strip()
-        if not normalized_query or normalized_query in seen:
-            continue
-        seen.add(normalized_query)
-        deduplicated.append(normalized_query)
-
-    return deduplicated
+    return f'"{record.isbn}"'
 
 
 def build_publisher_search_queries(
     record: SourceBookRecord,
     profile: PublisherProfile | None = None,
 ) -> list[str]:
-    queries = [build_publisher_search_query(record)]
-    query_parts = [f'"{record.isbn}"']
-    title_head: str | None = None
-
-    if record.title:
-        query_parts.append(f'"{record.title}"')
-        title_head = record.title.split(":", maxsplit=1)[0].strip()
-        if title_head and title_head != record.title:
-            queries.append(" ".join([f'\"{record.isbn}\"', f'"{title_head}"']))
-
-    if record.author:
-        primary_author = record.author.split(",", maxsplit=1)[0].strip()
-        if primary_author:
-            query_parts.append(f'"{primary_author}"')
-            queries.append(" ".join([f'\"{record.isbn}\"', f'"{primary_author}"']))
-
-    queries.append(" ".join(query_parts))
-    queries.append(f'"{record.isbn}"')
-
-    if profile is not None and not record.editorial:
-        publisher_hint = next(
-            (
-                alias
-                for alias in profile.editorial_aliases
-                if alias and len(alias.strip()) > 2
-            ),
-            profile.key.replace("_", " "),
-        )
-        hinted_parts = [f'"{record.isbn}"', f'"{publisher_hint}"']
-        if record.title:
-            hinted_parts.insert(1, f'"{record.title}"')
-        if title_head and title_head != record.title:
-            queries.append(
-                " ".join(
-                    [f'"{record.isbn}"', f'"{title_head}"', f'"{publisher_hint}"']
-                )
-            )
-        queries.append(" ".join(hinted_parts))
-
-    return _deduplicate_queries(queries)
+    del profile
+    return [build_publisher_search_query(record)]
 
 
 def _score_candidate_url(url: str, record: SourceBookRecord) -> tuple[int, int, int]:
-    normalized_url = _normalize_text(url)
-    title_score = 0
-    author_score = 0
-    isbn_score = 1 if record.isbn in url else 0
-
-    if record.title:
-        title_head = record.title.split(":", maxsplit=1)[0].strip()
-        normalized_title = _normalize_text(title_head or record.title)
-        if normalized_title and normalized_title in normalized_url:
-            title_score = 2
-        elif normalized_title:
-            title_tokens = [token for token in normalized_title.split() if len(token) > 3]
-            title_score = (
-                1
-                if title_tokens
-                and all(token in normalized_url for token in title_tokens[:3])
-                else 0
-            )
-
-    if record.author:
-        primary_author = record.author.split(",", maxsplit=1)[0].strip()
-        normalized_author = _normalize_text(primary_author)
-        author_tokens = [token for token in normalized_author.split() if len(token) > 2]
-        if author_tokens and any(token in normalized_url for token in author_tokens):
-            author_score = 1
-
-    return (isbn_score, title_score, author_score)
+    return (1 if record.isbn in url else 0, 0, 0)
 
 
 def _rank_candidate_urls(candidate_urls: list[str], record: SourceBookRecord) -> list[str]:
@@ -1217,10 +1123,6 @@ def apply_publisher_page_record(
     return merged_record.model_copy(update=updates)
 
 
-def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
-    return not record.editorial
-
-
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
     if not record.editorial:
         return False
@@ -1241,23 +1143,7 @@ def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
 
 def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:
     matched_profile = match_publisher_profile(record.editorial)
-    if not _needs_publisher_discovery(record):
-        return [matched_profile] if matched_profile is not None else []
-
-    candidate_profiles: list[PublisherProfile] = []
-    seen_profile_keys: set[str] = set()
-
-    if matched_profile is not None:
-        candidate_profiles.append(matched_profile)
-        seen_profile_keys.add(matched_profile.key)
-
-    for profile in SUPPORTED_PUBLISHERS:
-        if profile.key in seen_profile_keys:
-            continue
-        seen_profile_keys.add(profile.key)
-        candidate_profiles.append(profile)
-
-    return candidate_profiles
+    return [matched_profile] if matched_profile is not None else []
 
 
 def augment_fetch_results_with_publisher_pages(
@@ -1312,7 +1198,12 @@ def augment_fetch_results_with_publisher_pages(
                 if not negative_cache_expired and cached_result.record is not None:
                     augmented_results.append(
                         fetch_result.model_copy(
-                            update={"record": apply_publisher_page_record(record, cached_result.record)}
+                            update={
+                                "record": apply_publisher_page_record(
+                                    record,
+                                    cached_result.record,
+                                )
+                            }
                         )
                     )
                     continue

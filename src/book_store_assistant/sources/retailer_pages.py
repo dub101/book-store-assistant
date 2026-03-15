@@ -26,7 +26,7 @@ from book_store_assistant.sources.publisher_pages import (
 from book_store_assistant.sources.results import FetchResult
 
 RetailerStatusCallback = Callable[[str], None]
-RETAILER_EDITORIAL_CACHE_KEY = "retailer_editorial_lookup_v1"
+RETAILER_EDITORIAL_CACHE_KEY = "retailer_editorial_lookup_v2"
 
 AUTHOR_LABEL_PATTERN = re.compile(
     r"(?:autor(?:es)?|author)\s*[:|]\s*([^\n|]+)",
@@ -46,8 +46,23 @@ class RetailerProfile:
 
 SUPPORTED_RETAILERS = (
     RetailerProfile(
+        key="agapea",
+        domains=("agapea.com",),
+    ),
+    RetailerProfile(
+        key="buscalibre",
+        domains=(
+            "buscalibre.com",
+            "buscalibre.cl",
+            "buscalibre.com.co",
+            "buscalibre.com.mx",
+            "buscalibre.pe",
+            "buscalibre.us",
+        ),
+    ),
+    RetailerProfile(
         key="casa_del_libro",
-        domains=("casadellibro.com",),
+        domains=("casadellibro.com", "casadellibro.com.co"),
     ),
     RetailerProfile(
         key="libreria_nacional",
@@ -58,16 +73,8 @@ SUPPORTED_RETAILERS = (
         domains=("fnac.es",),
     ),
     RetailerProfile(
-        key="buscalibre",
-        domains=("buscalibre.com",),
-    ),
-    RetailerProfile(
         key="panamericana",
         domains=("panamericana.com.co",),
-    ),
-    RetailerProfile(
-        key="agapea",
-        domains=("agapea.com",),
     ),
     RetailerProfile(
         key="todostuslibros",
@@ -126,37 +133,11 @@ def _needs_retailer_editorial_lookup(record: SourceBookRecord) -> bool:
 
 
 def build_retailer_search_query(record: SourceBookRecord) -> str:
-    query_parts = [f'"{record.isbn}"']
-    if record.title:
-        query_parts.append(f'"{record.title}"')
-    if record.author:
-        primary_author = record.author.split(",", maxsplit=1)[0].strip()
-        if primary_author:
-            query_parts.append(f'"{primary_author}"')
-    return " ".join(query_parts)
+    return f'"{record.isbn}"'
 
 
 def build_retailer_search_queries(record: SourceBookRecord) -> list[str]:
-    queries = [build_retailer_search_query(record), f'"{record.isbn}"']
-
-    if record.title:
-        queries.append(" ".join([f'"{record.isbn}"', f'"{record.title}"']))
-
-    if record.author:
-        primary_author = record.author.split(",", maxsplit=1)[0].strip()
-        if primary_author:
-            queries.append(" ".join([f'"{record.isbn}"', f'"{primary_author}"']))
-
-    deduplicated: list[str] = []
-    seen: set[str] = set()
-    for query in queries:
-        normalized_query = " ".join(query.split()).strip()
-        if not normalized_query or normalized_query in seen:
-            continue
-        seen.add(normalized_query)
-        deduplicated.append(normalized_query)
-
-    return deduplicated
+    return [build_retailer_search_query(record)]
 
 
 def apply_retailer_editorial_record(
@@ -195,7 +176,10 @@ def augment_fetch_results_with_retailer_editorials(
 ) -> list[FetchResult]:
     with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
         active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds, client=client)
-        active_page_fetcher = page_fetcher or _DefaultRetailerPageFetcher(timeout_seconds, client=client)
+        active_page_fetcher = page_fetcher or _DefaultRetailerPageFetcher(
+            timeout_seconds,
+            client=client,
+        )
         augmented_results: list[FetchResult] = []
 
         if on_status_update is not None:
@@ -272,8 +256,6 @@ def augment_fetch_results_with_retailer_editorials(
                         )
                         break
 
-                    search_attempts += 1
-
                     def _search_retailer_pages() -> list[str]:
                         return active_searcher.search(
                             query,
@@ -293,6 +275,8 @@ def augment_fetch_results_with_retailer_editorials(
                             code for code in search_issue_codes if code not in retailer_issue_codes
                         )
                         continue
+
+                    search_attempts += 1
 
                     for candidate_url in query_candidate_urls:
                         if candidate_url not in candidate_urls:

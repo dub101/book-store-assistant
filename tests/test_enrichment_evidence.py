@@ -14,7 +14,6 @@ from book_store_assistant.enrichment.evidence import (
 )
 from book_store_assistant.enrichment.page_fetch import (
     extract_description_candidates_from_html,
-    extract_description_from_html,
 )
 from book_store_assistant.sources.models import SourceBookRecord
 
@@ -25,19 +24,6 @@ class StubPageFetcher:
 
     def fetch_text(self, url: str) -> str | None:
         return self.html
-
-
-def test_extract_description_from_html_reads_meta_description() -> None:
-    html = (
-        "<html><head><meta name=\"description\" "
-        "content=\"Example description with enough detail for evidence extraction.\"></head></html>"
-    )
-
-    assert extract_description_from_html(html) == (
-        "Example description with enough detail for evidence extraction."
-    )
-
-
 def test_extract_description_candidates_from_html_reads_meta_description() -> None:
     html = (
         "<html><head><meta name=\"description\" "
