@@ -9,7 +9,7 @@ from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.staged import fetch_with_intermediate_stages
 
 
-def test_fetch_with_intermediate_stages_skips_downstream_sources_for_complete_cached_records(
+def test_fetch_with_intermediate_stages_skips_upstream_fetches_for_complete_cached_records(
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "sample.csv"
@@ -83,11 +83,12 @@ def test_fetch_with_intermediate_stages_skips_downstream_sources_for_complete_ca
             config,
         )
 
-    mock_bne.assert_called_once_with("9780306406158")
+    assert [item.args[0] for item in mock_bne.call_args_list] == ["9780306406158"]
     assert mock_batch.call_args.args[0] == ["9780306406158"]
-    mock_google.assert_called_once_with("9780306406158")
+    assert [item.args[0] for item in mock_google.call_args_list] == ["9780306406158"]
     assert results[0].record is not None
     assert results[0].record.title == "Cached Title"
+    assert results[0].record.field_candidates["title"][0].value == "Cached Title"
     assert results[1].record is not None
     assert results[1].record.title == "BNE Title"
     assert results[1].record.author == "Google Author"

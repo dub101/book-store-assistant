@@ -28,6 +28,22 @@ class StubRecordValidator:
         )
 
 
+class SoftRejectingRecordValidator:
+    def validate(
+        self,
+        source_record: SourceBookRecord,
+        candidate_record: BookRecord,
+    ) -> RecordValidationAssessment | None:
+        return RecordValidationAssessment(
+            accepted=False,
+            confidence=0.95,
+            issues=["synopsis_too_promotional", "subject_too_vague"],
+            explanation=(
+                "The synopsis could be more neutral and the subject could be more specific."
+            ),
+        )
+
+
 def test_apply_record_quality_validation_keeps_accepted_record() -> None:
     validator = StubRecordValidator(accepted=True)
     source_record = SourceBookRecord(
@@ -93,3 +109,44 @@ def test_apply_record_quality_validation_rejects_record() -> None:
     assert LLM_VALIDATION_FAILED_CODE in validated[0].reason_codes
     assert "Synopsis is bibliography-only." in validated[0].review_details
     assert "Validation issues: synopsis_not_customer_facing" in validated[0].review_details
+
+
+def test_apply_record_quality_validation_keeps_faithful_normalization_on_soft_rejection() -> None:
+    source_record = SourceBookRecord(
+        source_name="bne + open_library",
+        isbn="9780306406157",
+        title="La ciencia desde la fe",
+        author="Alister E. McGrath, Albino Santos Mosquera",
+        editorial="Barcelona, Espasa",
+        synopsis=(
+            "Este libro es una invitacion a emprender un viaje apasionante y a pensar la "
+            "relacion entre ciencia y religion."
+        ),
+        language="es",
+    )
+    resolution_results = [
+        ResolutionResult(
+            record=BookRecord(
+                isbn="9780306406157",
+                title="La ciencia desde la fe",
+                author="Alister E. McGrath, Albino Santos Mosquera",
+                editorial="Barcelona, Espasa",
+                synopsis=(
+                    "Este libro es una invitacion a emprender un viaje apasionante y a pensar "
+                    "la relacion entre ciencia y religion."
+                ),
+                subject="CIENCIA",
+            ),
+            source_record=source_record,
+            errors=[],
+        )
+    ]
+
+    validated = apply_record_quality_validation(
+        resolution_results,
+        validator=SoftRejectingRecordValidator(),
+    )
+
+    assert validated[0].record is not None
+    assert validated[0].validation_assessment is not None
+    assert validated[0].reason_codes == []

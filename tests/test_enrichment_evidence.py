@@ -173,6 +173,40 @@ def test_collect_descriptive_evidence_uses_source_synopsis_first() -> None:
     assert evidence[0].extraction_method == "source_synopsis_field"
 
 
+def test_collect_descriptive_evidence_includes_all_synopsis_candidates() -> None:
+    record = SourceBookRecord(
+        source_name="bne + publisher_page",
+        isbn="9780306406157",
+        synopsis="Resumen corto.",
+        language="es",
+        field_candidates={
+            "synopsis": [
+                {
+                    "field_name": "synopsis",
+                    "value": "Resumen corto.",
+                    "source_name": "bne",
+                    "confidence": 1.0,
+                    "language": "es",
+                },
+                {
+                    "field_name": "synopsis",
+                    "value": "Resumen editorial mas rico y descriptivo.",
+                    "source_name": "publisher_page",
+                    "confidence": 0.95,
+                    "language": "es",
+                },
+            ]
+        },
+    )
+
+    evidence = collect_descriptive_evidence(record)
+
+    assert [item.text for item in evidence] == [
+        "Resumen corto.",
+        "Resumen editorial mas rico y descriptivo.",
+    ]
+
+
 def test_collect_descriptive_evidence_includes_direct_bibliographic_fields() -> None:
     record = SourceBookRecord(
         source_name="google_books",

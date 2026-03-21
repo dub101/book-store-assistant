@@ -20,6 +20,7 @@ from book_store_assistant.publisher_identity.service import (
 )
 from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.providers import (
+    build_default_record_field_selector,
     build_default_record_quality_validator,
     build_default_subject_mapper,
 )
@@ -28,6 +29,10 @@ from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.resolution.validation import apply_record_quality_validation
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.cache import FetchResultCache
+from book_store_assistant.sources.publisher_discovery import (
+    PUBLISHER_DISCOVERY_CACHE_KEY,
+    augment_fetch_results_with_publisher_discovery,
+)
 from book_store_assistant.sources.publisher_pages import (
     PUBLISHER_PAGE_CACHE_KEY,
     augment_fetch_results_with_publisher_pages,
@@ -133,7 +138,16 @@ def process_isbn_file(
         if active_mode is ExecutionMode.AI_ENRICHED
         else None
     )
-    record_quality_validator = build_default_record_quality_validator(app_config)
+    active_record_selector = (
+        build_default_record_field_selector(app_config)
+        if active_mode is ExecutionMode.AI_ENRICHED
+        else None
+    )
+    record_quality_validator = (
+        build_default_record_quality_validator(app_config)
+        if active_mode is ExecutionMode.AI_ENRICHED
+        else None
+    )
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     if source is None:
         fetch_results = fetch_with_intermediate_stages(
@@ -154,6 +168,14 @@ def process_isbn_file(
         )
     publisher_page_cache = (
         FetchResultCache(app_config.publisher_page_cache_dir, PUBLISHER_PAGE_CACHE_KEY)
+        if app_config.publisher_page_cache_enabled
+        else None
+    )
+    publisher_discovery_cache = (
+        FetchResultCache(
+            app_config.publisher_page_cache_dir / "discovery",
+            PUBLISHER_DISCOVERY_CACHE_KEY,
+        )
         if app_config.publisher_page_cache_enabled
         else None
     )
@@ -188,27 +210,8 @@ def process_isbn_file(
         if (
             result.record is not None
             and result.record.editorial
-            and retailer_editorial_before.get(result.isbn) is not None
         )
     }
-    if app_config.publisher_page_lookup_enabled and publisher_candidate_isbns:
-        fetch_results = augment_fetch_results_with_publisher_pages(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            cache=publisher_page_cache,
-            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
-            eligible_isbns=publisher_candidate_isbns,
-            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
-            max_search_attempts_per_record=(
-                app_config.publisher_page_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.publisher_page_max_fetch_attempts_per_record
-            ),
-        )
     retailer_unlocked_isbns = {
         result.isbn
         for result in fetch_results
@@ -219,6 +222,25 @@ def process_isbn_file(
             and result.record.field_sources.get("editorial", "").startswith("retailer_page:")
         )
     }
+    initial_publisher_candidate_isbns = publisher_candidate_isbns - retailer_unlocked_isbns
+    if app_config.publisher_page_lookup_enabled and initial_publisher_candidate_isbns:
+        fetch_results = augment_fetch_results_with_publisher_pages(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_page_cache,
+            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
+            eligible_isbns=initial_publisher_candidate_isbns,
+            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+            max_search_attempts_per_record=(
+                app_config.publisher_page_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.publisher_page_max_fetch_attempts_per_record
+            ),
+        )
     if app_config.publisher_page_lookup_enabled and retailer_unlocked_isbns:
         fetch_results = augment_fetch_results_with_publisher_pages(
             fetch_results,
@@ -231,6 +253,22 @@ def process_isbn_file(
             eligible_isbns=retailer_unlocked_isbns,
             ignore_negative_cache=True,
             max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+            max_search_attempts_per_record=(
+                app_config.publisher_page_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.publisher_page_max_fetch_attempts_per_record
+            ),
+        )
+    if app_config.publisher_page_lookup_enabled:
+        fetch_results = augment_fetch_results_with_publisher_discovery(
+            fetch_results,
+            timeout_seconds=app_config.publisher_page_timeout_seconds,
+            on_status_update=on_status_update,
+            cache=publisher_discovery_cache,
+            cache_ttl_seconds=app_config.publisher_page_negative_cache_ttl_seconds,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.publisher_page_backoff_seconds,
             max_search_attempts_per_record=(
                 app_config.publisher_page_max_search_attempts_per_record
             ),
@@ -254,6 +292,7 @@ def process_isbn_file(
         enriched_resolution_results = resolve_all(
             enriched_fetch_results,
             subject_mapper=active_subject_mapper,
+            record_selector=active_record_selector,
         )
         resolution_results = _select_best_resolution_results(
             baseline_resolution_results,

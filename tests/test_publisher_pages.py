@@ -466,6 +466,37 @@ def test_apply_publisher_page_record_prefers_official_source_url_and_spanish_syn
     assert merged.field_sources["source_url"] == "publisher_page:planeta"
 
 
+def test_apply_publisher_page_record_replaces_short_spanish_teaser_with_official_synopsis(
+) -> None:
+    existing = SourceBookRecord(
+        source_name="google_books",
+        isbn="9788401027970",
+        title="El nino que perdio la guerra",
+        synopsis='"Madrid, invierno de 1938.',
+        language="es",
+        field_sources={
+            "synopsis": "google_books",
+            "language": "google_books",
+        },
+    )
+    publisher = SourceBookRecord(
+        source_name="publisher_page:penguin_random_house",
+        isbn="9788401027970",
+        synopsis=(
+            "Madrid, invierno de 1938. Clotilde intenta evitar que su hijo sea "
+            "enviado a Moscu mientras la guerra se derrumba."
+        ),
+        language="es",
+        source_url="https://www.penguinlibros.com/es/narrativa/123456",
+    )
+
+    merged = apply_publisher_page_record(existing, publisher)
+
+    assert merged.synopsis == publisher.synopsis
+    assert merged.field_sources["synopsis"] == "publisher_page:penguin_random_house"
+    assert merged.field_sources["language"] == "publisher_page:penguin_random_house"
+
+
 def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers() -> None:
     fetch_results = [
         FetchResult(
@@ -508,7 +539,7 @@ def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers
     ]
 
 
-def test_publisher_pages_skips_lookup_for_records_with_complete_metadata() -> None:
+def test_publisher_pages_still_checks_complete_records_for_additional_evidence() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -535,8 +566,16 @@ def test_publisher_pages_skips_lookup_for_records_with_complete_metadata() -> No
         page_fetcher=StubPageFetcher({}),
     )
 
-    assert augmented == fetch_results
-    assert searcher.queries == []
+    assert len(augmented) == 1
+    assert augmented[0].record is not None
+    assert augmented[0].record.title == "El libro de prueba"
+    assert augmented[0].issue_codes == ["PUBLISHER_PAGE_NO_MATCH"]
+    assert searcher.queries == [
+        (
+            '"9780306406157"',
+            ("planetadelibros.com",),
+        )
+    ]
 
 
 def test_publisher_pages_skips_lookup_when_editorial_is_missing() -> None:

@@ -254,7 +254,7 @@ def test_sample_2_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     assert sum(1 for item in result.fetch_results if item.record is not None) == 44
     assert resolved_count == 34
     assert unresolved_count == 15
-    assert applied_count == 20
+    assert applied_count == 10
 
     resolved_output = tmp_path / "sample_2_books.xlsx"
     review_output = tmp_path / "sample_2_review.xlsx"

@@ -13,7 +13,6 @@ from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
-from book_store_assistant.resolution.synopsis_resolution import is_spanish_language
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
@@ -50,6 +49,10 @@ EDITORIAL_LABEL_PATTERN = re.compile(
 )
 AUTHOR_LABEL_PATTERN = re.compile(
     r"(?:autor(?:es)?|author)\s*[:|]\s*([^\n|]+)",
+    re.IGNORECASE,
+)
+SUBJECT_LABEL_PATTERN = re.compile(
+    r"(?:tem[aá]ticas?|tem[aá]tica|materia(?:s)?|categor[ií]as?|g[eé]nero)\s*[:|]\s*([^\n|]+)",
     re.IGNORECASE,
 )
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
@@ -753,6 +756,58 @@ def _extract_person_names(value: object) -> str | None:
     return None
 
 
+def _split_category_text(value: str) -> list[str]:
+    parts = re.split(r"[|;,>/]+", value)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _clean_category_values(values: list[str]) -> list[str]:
+    cleaned_values: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        cleaned = _clean_text(value)
+        if not cleaned:
+            continue
+
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        cleaned_values.append(cleaned)
+
+    return cleaned_values
+
+
+def _extract_category_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        return _clean_category_values(_split_category_text(value))
+
+    if isinstance(value, dict):
+        extracted = _extract_string(value)
+        if extracted is None:
+            return []
+        return _clean_category_values(_split_category_text(extracted))
+
+    if isinstance(value, list):
+        collected: list[str] = []
+        for item in value:
+            collected.extend(_extract_category_values(item))
+        return _clean_category_values(collected)
+
+    return []
+
+
+def _extract_subject_candidates_from_text(html: str) -> list[str]:
+    text = _clean_text(html)
+    match = SUBJECT_LABEL_PATTERN.search(text)
+    if match is None:
+        return []
+
+    return _clean_category_values(_split_category_text(match.group(1)))
+
+
 def _extract_image_url(value: object) -> str | None:
     if isinstance(value, str):
         return value
@@ -852,6 +907,13 @@ def _extract_json_ld_record(html: str, isbn: str) -> SourceBookRecord | None:
                     author=_extract_person_names(bookish.get("author")),
                     editorial=_extract_person_names(bookish.get("publisher")),
                     synopsis=_extract_string(bookish.get("description")),
+                    categories=_clean_category_values(
+                        [
+                            *_extract_category_values(bookish.get("genre")),
+                            *_extract_category_values(bookish.get("keywords")),
+                            *_extract_category_values(bookish.get("about")),
+                        ]
+                    ),
                     cover_url=_coerce_http_url(_extract_image_url(bookish.get("image"))),
                 )
             )
@@ -1000,6 +1062,7 @@ def extract_publisher_page_record(
     json_ld_record = _extract_json_ld_record(html, isbn)
     descriptions = extract_description_candidates_from_html(html, source_url=page_url)
     synopsis = descriptions[0][1] if descriptions else None
+    text_categories = _extract_subject_candidates_from_text(html)
 
     if json_ld_record is not None:
         field_sources = _seed_field_sources(json_ld_record)
@@ -1010,6 +1073,7 @@ def extract_publisher_page_record(
                 "source_url": _coerce_http_url(page_url),
                 "synopsis": json_ld_record.synopsis or synopsis,
                 "editorial": json_ld_record.editorial or _extract_editorial_from_text(html),
+                "categories": _merge_categories(json_ld_record.categories, text_categories),
                 "language": _extract_html_language(html),
                 "field_sources": field_sources,
             }
@@ -1030,6 +1094,7 @@ def extract_publisher_page_record(
         author=_extract_author_from_text(html),
         editorial=_extract_editorial_from_text(html),
         synopsis=synopsis,
+        categories=text_categories,
         cover_url=_coerce_http_url(cover_url),
         language=_extract_html_language(html),
     )
@@ -1043,6 +1108,15 @@ def _should_replace_synopsis(
         return False
 
     if existing_record.synopsis is None:
+        return True
+
+    existing_synopsis = existing_record.synopsis.strip()
+    publisher_synopsis = publisher_record.synopsis.strip()
+    if not existing_synopsis:
+        return True
+
+    # Replace clipped teaser text with a materially richer official synopsis.
+    if len(existing_synopsis) < 140 and len(publisher_synopsis) > len(existing_synopsis) + 40:
         return True
 
     if existing_record.language == "es":
@@ -1160,21 +1234,7 @@ def apply_publisher_page_record(
 
 
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
-    if not record.editorial:
-        return False
-
-    synopsis_needs_support = (
-        not record.synopsis
-        or record.language is None
-        or not is_spanish_language(record.language)
-    )
-    return not (
-        record.title
-        and record.author
-        and record.editorial
-        and (record.subject or record.categories)
-        and not synopsis_needs_support
-    )
+    return bool(record.editorial)
 
 
 def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:

@@ -31,7 +31,7 @@ from book_store_assistant.sources.publisher_pages import (
 from book_store_assistant.sources.results import FetchResult
 
 RetailerStatusCallback = Callable[[str], None]
-RETAILER_EDITORIAL_CACHE_KEY = "retailer_metadata_lookup_v4"
+RETAILER_EDITORIAL_CACHE_KEY = "retailer_metadata_lookup_v5"
 
 AUTHOR_LABEL_PATTERN = re.compile(
     r"(?:autor(?:es)?|author)\s*[:|]\s*([^\n|]+)",
@@ -61,9 +61,22 @@ INLINE_AUTHOR_PATTERN = re.compile(
     r"(?:autor(?:es)?|author)\s+(.+?)(?:\.\s+[A-ZÁÉÍÓÚÜÑ]|,\s*(?:editorial|publisher)|\s*$)",
     re.IGNORECASE,
 )
+SUBJECT_LABEL_PATTERN = re.compile(
+    r"(?:tem[aá]ticas?|tem[aá]tica|materia(?:s)?|categor[ií]as?|g[eé]nero)\s*[:|]\s*([^\n|]+)",
+    re.IGNORECASE,
+)
 JSON_SCRIPT_PATTERN = re.compile(
     r"<script[^>]*>\s*(\{.*?\}|\[.*?\])\s*</script>",
     re.IGNORECASE | re.DOTALL,
+)
+GARBAGE_METADATA_TOKENS = (
+    '{"id"',
+    '"nombreweb"',
+    '"seoprice"',
+    '"seocurrentprice"',
+    "top más leídos",
+    "promociones",
+    "comprar libros",
 )
 
 
@@ -181,6 +194,56 @@ def _extract_inline_author(html: str) -> str | None:
     return author or None
 
 
+def _clean_retailer_metadata_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    cleaned = _clean_text(value)
+    if not cleaned:
+        return None
+    lowered = cleaned.casefold()
+    if any(token in lowered for token in GARBAGE_METADATA_TOKENS):
+        return None
+    if "{" in cleaned or "}" in cleaned:
+        return None
+    if len(cleaned) > 180:
+        return None
+    return cleaned
+
+
+def _split_category_text(value: str) -> list[str]:
+    parts = re.split(r"[|;,>/]+", value)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _clean_retailer_categories(values: list[str]) -> list[str]:
+    cleaned_values: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        cleaned = _clean_retailer_metadata_value(value)
+        if cleaned is None:
+            continue
+
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        cleaned_values.append(cleaned)
+
+    return cleaned_values
+
+
+def _extract_subject_candidates_from_text(html: str) -> list[str]:
+    text = _clean_text(html)
+    match = SUBJECT_LABEL_PATTERN.search(text)
+    if match is None:
+        return []
+
+    return _clean_retailer_categories(_split_category_text(match.group(1)))
+
+
 def _extract_json_objects(html: str) -> list[object]:
     payloads: list[object] = []
 
@@ -255,6 +318,43 @@ def _extract_author_from_json_payload(html: str, isbn: str) -> str | None:
     return None
 
 
+def _extract_category_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        return _clean_retailer_categories(_split_category_text(_clean_text(value)))
+
+    if isinstance(value, dict):
+        for key in ("name", "value", "@value"):
+            nested = value.get(key)
+            if isinstance(nested, str):
+                return _clean_retailer_categories(_split_category_text(_clean_text(nested)))
+        return []
+
+    if isinstance(value, list):
+        collected: list[str] = []
+        for item in value:
+            collected.extend(_extract_category_values(item))
+        return _clean_retailer_categories(collected)
+
+    return []
+
+
+def _extract_categories_from_json_payload(html: str, isbn: str) -> list[str]:
+    normalized_isbn = normalize_isbn(isbn)
+    for payload in _extract_json_objects(html):
+        for record in _collect_matching_json_records(payload, normalized_isbn):
+            categories = _clean_retailer_categories(
+                [
+                    *_extract_category_values(record.get("genre")),
+                    *_extract_category_values(record.get("keywords")),
+                    *_extract_category_values(record.get("about")),
+                ]
+            )
+            if categories:
+                return categories
+
+    return []
+
+
 def _extract_editorial_from_json_payload(html: str, isbn: str) -> str | None:
     normalized_isbn = normalize_isbn(isbn)
     for payload in _extract_json_objects(html):
@@ -274,6 +374,25 @@ def _extract_editorial_from_json_payload(html: str, isbn: str) -> str | None:
                 return _clean_text(publisher)
 
     return None
+
+
+def _sanitize_retailer_record(record: SourceBookRecord) -> SourceBookRecord | None:
+    title = _clean_retailer_metadata_value(record.title)
+    author = _clean_retailer_metadata_value(record.author)
+    editorial = _clean_retailer_metadata_value(record.editorial)
+    categories = _clean_retailer_categories(record.categories)
+
+    if editorial is None and author is None and not categories:
+        return None
+
+    return record.model_copy(
+        update={
+            "title": title,
+            "author": author,
+            "editorial": editorial,
+            "categories": categories,
+        }
+    )
 
 
 def _build_direct_query_urls(record: SourceBookRecord, profile: RetailerProfile) -> list[str]:
@@ -299,6 +418,9 @@ def extract_retailer_page_record(
         return None
 
     json_ld_record = _extract_json_ld_record(html, isbn)
+    text_categories = _extract_subject_candidates_from_text(html)
+    json_categories = _extract_categories_from_json_payload(html, isbn)
+    categories = _clean_retailer_categories([*json_categories, *text_categories])
     if json_ld_record is not None and (json_ld_record.editorial or json_ld_record.author):
         return SourceBookRecord(
             source_name=f"retailer_page:{profile.key}",
@@ -308,6 +430,7 @@ def extract_retailer_page_record(
             author=json_ld_record.author,
             editorial=json_ld_record.editorial,
             synopsis=json_ld_record.synopsis,
+            categories=_clean_retailer_categories([*json_ld_record.categories, *categories]),
             cover_url=json_ld_record.cover_url,
         )
 
@@ -324,6 +447,9 @@ def extract_retailer_page_record(
         or _extract_agapea_editorial(html, isbn)
         or _extract_inline_editorial(html)
     )
+    title = _clean_retailer_metadata_value(title)
+    author = _clean_retailer_metadata_value(author)
+    editorial = _clean_retailer_metadata_value(editorial)
     if editorial is None and author is None:
         return None
 
@@ -334,6 +460,7 @@ def extract_retailer_page_record(
         title=title,
         author=author,
         editorial=editorial,
+        categories=categories,
     )
 
 
@@ -411,25 +538,30 @@ def augment_fetch_results_with_retailer_editorials(
             cached_entry = cache.get_entry(record.isbn) if cache is not None else None
             if cached_entry is not None:
                 cached_result = cached_entry.result
+                cached_record = (
+                    _sanitize_retailer_record(cached_result.record)
+                    if cached_result.record is not None
+                    else None
+                )
                 negative_cache_expired = (
                     cached_result.record is None
                     and cache_ttl_seconds is not None
                     and cache_ttl_seconds >= 0
                     and (time.time() - cached_entry.cached_at > cache_ttl_seconds)
                 )
-                if not negative_cache_expired and cached_result.record is not None:
+                if not negative_cache_expired and cached_record is not None:
                     augmented_results.append(
                         fetch_result.model_copy(
                             update={
                                 "record": apply_retailer_editorial_record(
                                     record,
-                                    cached_result.record,
+                                    cached_record,
                                 )
                             }
                         )
                     )
                     continue
-                if not negative_cache_expired:
+                if not negative_cache_expired and cached_result.record is None:
                     augmented_results.append(
                         fetch_result.model_copy(
                             update={
@@ -477,6 +609,11 @@ def augment_fetch_results_with_retailer_editorials(
                 _retailer_lookup_issue_code(code)
                 for code in raw_issue_codes
             ]
+            retailer_record = (
+                _sanitize_retailer_record(retailer_record)
+                if retailer_record is not None
+                else None
+            )
 
             if retailer_record is None:
                 failed_result = fetch_result.model_copy(

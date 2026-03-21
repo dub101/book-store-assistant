@@ -1,5 +1,9 @@
 from typing import TypeVar
 
+from book_store_assistant.sources.candidates import (
+    build_seeded_candidates,
+    merge_field_candidate_maps,
+)
 from book_store_assistant.sources.confidence import source_confidence
 from book_store_assistant.sources.models import SourceBookRecord
 
@@ -126,12 +130,22 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
     merged = records[0].model_copy(deep=True)
     field_sources = _seed_field_sources(merged)
     field_confidence = _seed_field_confidence(merged, field_sources)
+    field_candidates = build_seeded_candidates(merged)
+    merged = merged.model_copy(
+        update={
+            "field_sources": field_sources,
+            "field_confidence": field_confidence,
+            "field_candidates": field_candidates,
+        }
+    )
 
     for record in records[1:]:
         record_field_sources = _seed_field_sources(record)
         record_field_confidence = _seed_field_confidence(record, record_field_sources)
+        record_field_candidates = build_seeded_candidates(record)
 
         source_name = _merge_source_names(merged.source_name, record.source_name)
+        field_candidates = merge_field_candidate_maps(field_candidates, record_field_candidates)
         categories = _merge_string_lists(merged.categories, record.categories)
         title = _merge_scalar_field(
             merged,
@@ -255,6 +269,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
             language=language,
             field_sources=field_sources,
             field_confidence=field_confidence,
+            field_candidates=field_candidates,
         )
 
     return merged

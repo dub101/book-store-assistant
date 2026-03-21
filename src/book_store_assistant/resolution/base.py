@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from book_store_assistant.models import BookRecord
-from book_store_assistant.resolution.models import RecordValidationAssessment
+from book_store_assistant.resolution.models import RecordValidationAssessment, SelectedFieldValues
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.subjects import SubjectEntry
 
@@ -22,3 +22,11 @@ class RecordQualityValidator(Protocol):
         candidate_record: BookRecord,
     ) -> RecordValidationAssessment | None:
         """Return a validation assessment or None when validation cannot be completed."""
+
+
+class RecordFieldSelector(Protocol):
+    def select_fields(
+        self,
+        record: SourceBookRecord,
+    ) -> SelectedFieldValues | None:
+        """Return selected title, author, and editorial values or None."""

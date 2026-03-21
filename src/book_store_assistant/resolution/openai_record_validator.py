@@ -38,11 +38,16 @@ def _build_messages(
     ]
     system_prompt = (
         "You validate Spanish bookstore catalog records. "
-        "Reject records when the metadata is clearly corrupted, not customer-facing, "
-        "or not good enough for a bookstore listing. "
-        "A synopsis is invalid if it is only bibliography, index notes, references, "
-        "cover notes, or similarly non-descriptive boilerplate. "
-        "Reject authors or editorials that look like scraped navigation, JSON fragments, "
+        "Reject records only when there is clear evidence that the candidate metadata is "
+        "corrupted, hallucinated, unsupported by the source evidence, not customer-facing, "
+        "or obviously unsuitable for bookstore export. "
+        "Do not reject a record just because it could be written better, is somewhat promotional, "
+        "or could use a more specific subject. "
+        "If the candidate is a faithful normalization or cleanup of the source-backed metadata, "
+        "accept it. "
+        "A synopsis is invalid only if it is bibliography, index notes, references, cover copy "
+        "without descriptive substance, or unrelated boilerplate. "
+        "Reject authors or editorials only if they look like scraped navigation, JSON fragments, "
         "or unrelated site text. "
         "Return only valid JSON with keys accepted, confidence, issues, and explanation."
     )
@@ -54,7 +59,10 @@ def _build_messages(
             "Source evidence:",
             *source_lines,
             "",
-            "Accept only if the record is suitable for bookstore export as-is.",
+            (
+                "Accept the record unless there is a clear, concrete reason it is unsafe or "
+                "unsupported for bookstore export."
+            ),
         ]
     )
     return [

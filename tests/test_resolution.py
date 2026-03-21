@@ -5,6 +5,7 @@ from book_store_assistant.resolution.books import (
     SUBJECT_MISSING_CODE,
     resolve_book_record,
 )
+from book_store_assistant.resolution.models import SelectedFieldValues
 from book_store_assistant.resolution.synopsis_resolution import (
     NON_SPANISH_SYNOPSIS_REVIEW_ERROR,
 )
@@ -17,6 +18,18 @@ class StubSubjectMapper:
 
     def map_subject(self, record, allowed_subject_entries) -> str | None:
         return self.subject
+
+
+class StubRecordSelector:
+    def __init__(self, title: str | None, author: str | None, editorial: str | None) -> None:
+        self.selection = SelectedFieldValues(
+            title=title,
+            author=author,
+            editorial=editorial,
+        )
+
+    def select_fields(self, record) -> SelectedFieldValues | None:
+        return self.selection
 
 
 def test_resolve_book_record_returns_book_when_required_fields_are_present(tmp_path: Path) -> None:
@@ -264,3 +277,78 @@ def test_resolve_book_record_marks_non_spanish_synopsis_for_review(tmp_path: Pat
     assert result.reason_codes == [NON_SPANISH_SYNOPSIS_CODE]
     assert result.review_details == ["Synopsis came from google_books with language 'en'."]
     assert NON_SPANISH_SYNOPSIS_REVIEW_ERROR in result.errors
+
+
+def test_resolve_book_record_uses_ai_selected_bibliographic_candidates(tmp_path: Path) -> None:
+    subject_file = tmp_path / "subjects.txt"
+    subject_file.write_text("Narrativa\n", encoding="utf-8")
+
+    source_record = SourceBookRecord(
+        source_name="bne + publisher_page",
+        isbn="9780306406157",
+        title="Titulo corto",
+        author="Autor abreviado",
+        editorial="Editorial base",
+        synopsis="Resumen del libro.",
+        language="es",
+        subject="Narrativa",
+        field_candidates={
+            "title": [
+                {
+                    "field_name": "title",
+                    "value": "Titulo corto",
+                    "source_name": "bne",
+                    "confidence": 1.0,
+                },
+                {
+                    "field_name": "title",
+                    "value": "Titulo completo definitivo",
+                    "source_name": "publisher_page",
+                    "confidence": 0.95,
+                },
+            ],
+            "author": [
+                {
+                    "field_name": "author",
+                    "value": "Autor abreviado",
+                    "source_name": "bne",
+                    "confidence": 1.0,
+                },
+                {
+                    "field_name": "author",
+                    "value": "Autor Nombre Completo",
+                    "source_name": "publisher_page",
+                    "confidence": 0.95,
+                },
+            ],
+            "editorial": [
+                {
+                    "field_name": "editorial",
+                    "value": "Editorial base",
+                    "source_name": "bne",
+                    "confidence": 1.0,
+                },
+                {
+                    "field_name": "editorial",
+                    "value": "Editorial Definitiva",
+                    "source_name": "publisher_page",
+                    "confidence": 0.95,
+                },
+            ],
+        },
+    )
+
+    result = resolve_book_record(
+        source_record,
+        subjects_path=subject_file,
+        record_selector=StubRecordSelector(
+            "Titulo completo definitivo",
+            "Autor Nombre Completo",
+            "Editorial Definitiva",
+        ),
+    )
+
+    assert result.record is not None
+    assert result.record.title == "Titulo completo definitivo"
+    assert result.record.author == "Autor Nombre Completo"
+    assert result.record.editorial == "Editorial Definitiva"

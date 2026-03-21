@@ -1,6 +1,16 @@
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class FieldCandidate(BaseModel):
+    field_name: str
+    value: str
+    source_name: str
+    confidence: float = 0.0
+    language: str | None = None
+    source_url: HttpUrl | None = None
+    extraction_method: str | None = None
+
+
 class SourceBookRecord(BaseModel):
     source_name: str
     isbn: str
@@ -17,3 +27,4 @@ class SourceBookRecord(BaseModel):
     language: str | None = None
     field_sources: dict[str, str] = Field(default_factory=dict)
     field_confidence: dict[str, float] = Field(default_factory=dict)
+    field_candidates: dict[str, list[FieldCandidate]] = Field(default_factory=dict)

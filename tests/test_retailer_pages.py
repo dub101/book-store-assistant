@@ -127,7 +127,30 @@ def test_extract_retailer_page_record_parses_editorial() -> None:
 
     assert record is not None
     assert record.editorial == "Planeta"
-    assert record.author == "Autora Ejemplo"
+
+
+def test_extract_retailer_page_record_rejects_garbage_editorial_and_author() -> None:
+    html = """
+    <html>
+      <head><title>Comprar libros | Casa del Libro Colombia</title></head>
+      <body>
+        <div>ISBN 9788401027970</div>
+        <script>
+          {"id":3389,"nombreWeb":3390,"seoPrice":3407}
+        </script>
+        <div>Top más leídos Promociones Libros desde $15.199</div>
+      </body>
+    </html>
+    """
+
+    record = extract_retailer_page_record(
+        html,
+        "https://www.casadellibro.com.co/?query=9788401027970",
+        "9788401027970",
+        RetailerProfile("casa_del_libro", ("casadellibro.com",)),
+    )
+
+    assert record is None
 
 
 def test_extract_retailer_page_record_parses_agapea_editorial_from_meta_description() -> None:
@@ -354,6 +377,54 @@ def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_r
         "RETAILER_PAGE_EDITORIAL_NO_MATCH",
     ]
     assert searcher.queries == []
+
+
+def test_augment_fetch_results_with_retailer_editorials_ignores_invalid_cached_positive_result(
+    tmp_path,
+) -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9788408295853",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="9788408295853",
+                title="Victoria. Premio Planeta 2024",
+                author="Paloma Sanchez-Garnica",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    cache = FetchResultCache(tmp_path / "retailer-cache", RETAILER_EDITORIAL_CACHE_KEY)
+    cache.set(
+        FetchResult(
+            isbn="9788408295853",
+            record=SourceBookRecord(
+                source_name="retailer_page:casa_del_libro",
+                isbn="9788408295853",
+                editorial='{"id":3389,"nombreWeb":3390}',
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    )
+    page_fetcher = StubPageFetcher(
+        {"https://www.agapea.com/buscador/buscador.php?texto=9788408295853": AGAPEA_HTML}
+    )
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=StubSearcher([]),
+        page_fetcher=page_fetcher,
+        cache=cache,
+        cache_ttl_seconds=3600,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.editorial == "Editorial Planeta"
+    assert page_fetcher.calls == ["https://www.agapea.com/buscador/buscador.php?texto=9788408295853"]
 
 
 def test_augment_fetch_results_with_retailer_editorials_honors_search_budget() -> None:

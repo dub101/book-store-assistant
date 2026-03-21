@@ -91,7 +91,10 @@ def test_process_isbn_file_defaults_to_rules_only_mode(tmp_path: Path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
 
-    result = process_isbn_file(input_file, source=DummyResolvedSource())
+    result = process_isbn_file(
+        input_file,
+        source=DummyResolvedSource(),
+    )
 
     assert result.enrichment_results == [
         EnrichmentResult(isbn="9780306406157", skipped_reason="rules_only_mode")
@@ -125,7 +128,11 @@ def test_process_isbn_file_applies_record_quality_validator(
     validator = RejectingRecordValidator()
     mock_build_record_quality_validator.return_value = validator
 
-    result = process_isbn_file(input_file, source=DummyResolvedSource())
+    result = process_isbn_file(
+        input_file,
+        source=DummyResolvedSource(),
+        mode=ExecutionMode.AI_ENRICHED,
+    )
 
     assert result.resolution_results[0].record is None
     assert "LLM_VALIDATION_FAILED" in result.resolution_results[0].reason_codes
