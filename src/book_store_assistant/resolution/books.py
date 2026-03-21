@@ -1,14 +1,13 @@
 from pathlib import Path
 
 from book_store_assistant.models import BookRecord
-from book_store_assistant.resolution.base import RecordFieldSelector, SubjectMapper
+from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.subject_resolution import resolve_subject
 from book_store_assistant.resolution.synopsis_resolution import (
     get_synopsis_review_error,
     resolve_synopsis,
 )
-from book_store_assistant.sources.candidates import get_field_candidates
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.subject_mapping import (
     find_subject_entry_by_description,
@@ -94,66 +93,21 @@ def _resolve_catalog_subject(
         if resolved_direct_subject is not None:
             return resolved_direct_subject
 
-    return resolve_subject(source_record.categories, allowed_subject_rows)
-
-
-def _apply_selected_field(
-    record: SourceBookRecord,
-    field_name: str,
-    selected_value: str | None,
-) -> SourceBookRecord:
-    if not selected_value:
-        return record
-
-    candidate = next(
-        (
-            item
-            for item in get_field_candidates(record, field_name)
-            if item.value == selected_value
-        ),
-        None,
-    )
-    if candidate is None:
-        return record.model_copy(update={field_name: selected_value})
-
-    field_sources = dict(record.field_sources)
-    field_confidence = dict(record.field_confidence)
-    field_sources[field_name] = candidate.source_name
-    field_confidence[field_name] = candidate.confidence
-
-    return record.model_copy(
-        update={
-            field_name: candidate.value,
-            "field_sources": field_sources,
-            "field_confidence": field_confidence,
-        }
-    )
-
-
-def _select_record_fields(
-    source_record: SourceBookRecord,
-    record_selector: RecordFieldSelector | None,
-) -> SourceBookRecord:
-    if record_selector is None:
-        return source_record
-
-    selection = record_selector.select_fields(source_record)
-    if selection is None:
-        return source_record
-
-    selected_record = _apply_selected_field(source_record, "title", selection.title)
-    selected_record = _apply_selected_field(selected_record, "author", selection.author)
-    selected_record = _apply_selected_field(selected_record, "editorial", selection.editorial)
-    return selected_record
+    text_candidates = [
+        source_record.title or "",
+        source_record.subtitle or "",
+        source_record.synopsis or "",
+    ]
+    text_candidates.extend(source_record.categories)
+    return resolve_subject(text_candidates, allowed_subject_rows)
 
 
 def resolve_book_record(
     source_record: SourceBookRecord,
     subjects_path: Path | None = None,
     subject_mapper: SubjectMapper | None = None,
-    record_selector: RecordFieldSelector | None = None,
 ) -> ResolutionResult:
-    effective_record = _select_record_fields(source_record, record_selector)
+    effective_record = source_record
     reason_codes: list[str] = []
     review_details: list[str] = []
     errors: list[str] = []

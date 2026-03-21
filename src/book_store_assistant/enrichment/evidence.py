@@ -1,7 +1,6 @@
 from book_store_assistant.enrichment.base import PageContentFetcher
 from book_store_assistant.enrichment.models import DescriptiveEvidence
 from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
-from book_store_assistant.sources.candidates import get_field_candidates
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.synopsis import has_synopsis
 
@@ -49,36 +48,32 @@ def collect_descriptive_evidence(
     evidence: list[DescriptiveEvidence] = []
     seen_evidence_keys: set[tuple[str, str]] = set()
 
-    for candidate in get_field_candidates(record, "synopsis"):
-        if not has_synopsis(candidate.value):
-            continue
-
+    synopsis_text = record.synopsis or ""
+    if has_synopsis(synopsis_text):
         quality_flags = ["trusted_source_synopsis"]
-        if candidate.language == "es":
+        if record.language == "es":
             quality_flags.append("spanish_language")
-        elif candidate.language:
+        elif record.language:
             quality_flags.append("non_spanish_language")
         else:
             quality_flags.append("unknown_language")
-
         evidence_item = DescriptiveEvidence(
-            source_name=candidate.source_name,
+            source_name=record.field_sources.get("synopsis", record.source_name),
             evidence_type=SOURCE_SYNOPSIS_EVIDENCE,
             evidence_origin=DIRECT_SOURCE_RECORD_EVIDENCE,
-            text=candidate.value.strip(),
-            source_url=str(candidate.source_url) if candidate.source_url is not None else None,
-            language=candidate.language,
-            extraction_method=candidate.extraction_method or "source_synopsis_field",
+            text=synopsis_text.strip(),
+            source_url=str(record.source_url) if record.source_url is not None else None,
+            language=record.language,
+            extraction_method="source_synopsis_field",
             quality_flags=quality_flags,
         )
         key = (
             evidence_item.evidence_type,
             evidence_item.text.casefold(),
         )
-        if key in seen_evidence_keys:
-            continue
-        seen_evidence_keys.add(key)
-        evidence.append(evidence_item)
+        if key not in seen_evidence_keys:
+            seen_evidence_keys.add(key)
+            evidence.append(evidence_item)
 
     direct_field_evidence_types = {
         "title": SOURCE_TITLE_EVIDENCE,
@@ -88,25 +83,28 @@ def collect_descriptive_evidence(
     }
 
     for field_name, evidence_type in direct_field_evidence_types.items():
-        for candidate in get_field_candidates(record, field_name):
-            evidence_item = DescriptiveEvidence(
-                source_name=candidate.source_name,
-                evidence_type=evidence_type,
-                evidence_origin=DIRECT_SOURCE_RECORD_EVIDENCE,
-                text=candidate.value,
-                source_url=str(candidate.source_url) if candidate.source_url is not None else None,
-                language=candidate.language,
-                extraction_method=candidate.extraction_method or f"source_{field_name}_field",
-                quality_flags=["trusted_source_bibliographic_field", field_name],
-            )
-            key = (
-                evidence_item.evidence_type,
-                evidence_item.text.casefold(),
-            )
-            if key in seen_evidence_keys:
-                continue
-            seen_evidence_keys.add(key)
-            evidence.append(evidence_item)
+        field_value = getattr(record, field_name)
+        if not isinstance(field_value, str) or not field_value.strip():
+            continue
+
+        evidence_item = DescriptiveEvidence(
+            source_name=record.field_sources.get(field_name, record.source_name),
+            evidence_type=evidence_type,
+            evidence_origin=DIRECT_SOURCE_RECORD_EVIDENCE,
+            text=field_value,
+            source_url=str(record.source_url) if record.source_url is not None else None,
+            language=record.language if field_name == "subtitle" else None,
+            extraction_method=f"source_{field_name}_field",
+            quality_flags=["trusted_source_bibliographic_field", field_name],
+        )
+        key = (
+            evidence_item.evidence_type,
+            evidence_item.text.casefold(),
+        )
+        if key in seen_evidence_keys:
+            continue
+        seen_evidence_keys.add(key)
+        evidence.append(evidence_item)
 
     has_descriptive_evidence = any(
         item.evidence_type != SOURCE_TITLE_EVIDENCE

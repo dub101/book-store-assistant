@@ -29,7 +29,8 @@ PUBLISHER_DISCOVERY_CACHE_KEY = "publisher_discovery_v1"
 
 def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
     synopsis = (record.synopsis or "").strip()
-    return not record.editorial or len(synopsis) < 140
+    has_subject_signal = bool(record.subject) or bool(record.categories)
+    return not record.editorial or not synopsis or not has_subject_signal
 
 
 def _run_with_retry(

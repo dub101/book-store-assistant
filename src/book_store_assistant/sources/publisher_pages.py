@@ -1234,7 +1234,9 @@ def apply_publisher_page_record(
 
 
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
-    return bool(record.editorial)
+    synopsis = (record.synopsis or "").strip()
+    has_subject_signal = bool(record.subject) or bool(record.categories)
+    return bool(record.editorial) and (not synopsis or not has_subject_signal)
 
 
 def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:

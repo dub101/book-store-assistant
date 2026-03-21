@@ -539,7 +539,7 @@ def test_augment_fetch_results_with_publisher_pages_updates_supported_publishers
     ]
 
 
-def test_publisher_pages_still_checks_complete_records_for_additional_evidence() -> None:
+def test_publisher_pages_skip_complete_records() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -569,13 +569,8 @@ def test_publisher_pages_still_checks_complete_records_for_additional_evidence()
     assert len(augmented) == 1
     assert augmented[0].record is not None
     assert augmented[0].record.title == "El libro de prueba"
-    assert augmented[0].issue_codes == ["PUBLISHER_PAGE_NO_MATCH"]
-    assert searcher.queries == [
-        (
-            '"9780306406157"',
-            ("planetadelibros.com",),
-        )
-    ]
+    assert augmented[0].issue_codes == []
+    assert searcher.queries == []
 
 
 def test_publisher_pages_skips_lookup_when_editorial_is_missing() -> None:

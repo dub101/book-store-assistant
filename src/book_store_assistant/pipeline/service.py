@@ -20,13 +20,10 @@ from book_store_assistant.publisher_identity.service import (
 )
 from book_store_assistant.resolution.base import SubjectMapper
 from book_store_assistant.resolution.providers import (
-    build_default_record_field_selector,
-    build_default_record_quality_validator,
     build_default_subject_mapper,
 )
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.resolution.service import resolve_all
-from book_store_assistant.resolution.validation import apply_record_quality_validation
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.publisher_discovery import (
@@ -37,6 +34,7 @@ from book_store_assistant.sources.publisher_pages import (
     PUBLISHER_PAGE_CACHE_KEY,
     augment_fetch_results_with_publisher_pages,
 )
+from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.retailer_pages import (
     RETAILER_EDITORIAL_CACHE_KEY,
     augment_fetch_results_with_retailer_editorials,
@@ -49,6 +47,31 @@ from book_store_assistant.sources.service import (
 from book_store_assistant.sources.staged import fetch_with_intermediate_stages
 
 StatusUpdateCallback = Callable[[str], None]
+
+
+def _has_subject_signal(result: FetchResult) -> bool:
+    if result.record is None:
+        return False
+    return bool(result.record.subject) or bool(result.record.categories)
+
+
+def _needs_publisher_page_lookup(result: FetchResult) -> bool:
+    if result.record is None or not result.record.editorial:
+        return False
+    synopsis = (result.record.synopsis or "").strip()
+    return not synopsis or not _has_subject_signal(result)
+
+
+def _retailer_unlocked_publisher_lookup(
+    result: FetchResult,
+    previous_editorial: str | None,
+) -> bool:
+    return (
+        _needs_publisher_page_lookup(result)
+        and result.record is not None
+        and previous_editorial is None
+        and result.record.field_sources.get("editorial", "").startswith("retailer_page:")
+    )
 
 
 def _attach_enrichment_results(
@@ -138,16 +161,6 @@ def process_isbn_file(
         if active_mode is ExecutionMode.AI_ENRICHED
         else None
     )
-    active_record_selector = (
-        build_default_record_field_selector(app_config)
-        if active_mode is ExecutionMode.AI_ENRICHED
-        else None
-    )
-    record_quality_validator = (
-        build_default_record_quality_validator(app_config)
-        if active_mode is ExecutionMode.AI_ENRICHED
-        else None
-    )
     page_fetcher = HttpPageContentFetcher(app_config.request_timeout_seconds)
     if source is None:
         fetch_results = fetch_with_intermediate_stages(
@@ -207,19 +220,14 @@ def process_isbn_file(
     publisher_candidate_isbns = {
         result.isbn
         for result in fetch_results
-        if (
-            result.record is not None
-            and result.record.editorial
-        )
+        if _needs_publisher_page_lookup(result)
     }
     retailer_unlocked_isbns = {
         result.isbn
         for result in fetch_results
-        if (
-            result.record is not None
-            and retailer_editorial_before.get(result.isbn) is None
-            and result.record.editorial is not None
-            and result.record.field_sources.get("editorial", "").startswith("retailer_page:")
+        if _retailer_unlocked_publisher_lookup(
+            result,
+            retailer_editorial_before.get(result.isbn),
         )
     }
     initial_publisher_candidate_isbns = publisher_candidate_isbns - retailer_unlocked_isbns
@@ -292,7 +300,6 @@ def process_isbn_file(
         enriched_resolution_results = resolve_all(
             enriched_fetch_results,
             subject_mapper=active_subject_mapper,
-            record_selector=active_record_selector,
         )
         resolution_results = _select_best_resolution_results(
             baseline_resolution_results,
@@ -300,11 +307,6 @@ def process_isbn_file(
         )
     else:
         resolution_results = resolve_all(enriched_fetch_results)
-
-    resolution_results = apply_record_quality_validation(
-        resolution_results,
-        validator=record_quality_validator,
-    )
     resolution_results = _attach_enrichment_results(
         resolution_results,
         enrichment_results,

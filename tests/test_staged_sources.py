@@ -88,7 +88,6 @@ def test_fetch_with_intermediate_stages_skips_upstream_fetches_for_complete_cach
     assert [item.args[0] for item in mock_google.call_args_list] == ["9780306406158"]
     assert results[0].record is not None
     assert results[0].record.title == "Cached Title"
-    assert results[0].record.field_candidates["title"][0].value == "Cached Title"
     assert results[1].record is not None
     assert results[1].record.title == "BNE Title"
     assert results[1].record.author == "Google Author"

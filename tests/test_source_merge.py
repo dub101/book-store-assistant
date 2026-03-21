@@ -168,33 +168,3 @@ def test_merge_source_records_prefers_higher_confidence_values() -> None:
     assert merged.field_sources["editorial"] == "bne"
     assert merged.field_confidence["title"] == 1.0
     assert merged.field_confidence["editorial"] == 1.0
-
-
-def test_merge_source_records_preserves_all_field_candidates() -> None:
-    merged = merge_source_records(
-        [
-            SourceBookRecord(
-                source_name="bne",
-                isbn="9780306406157",
-                author="Autor Breve",
-                synopsis="Resumen corto.",
-                language="es",
-            ),
-            SourceBookRecord(
-                source_name="publisher_page",
-                isbn="9780306406157",
-                author="Autor Completo",
-                synopsis="Resumen editorial mas rico y descriptivo.",
-                language="es",
-            ),
-        ]
-    )
-
-    assert [item.value for item in merged.field_candidates["author"]] == [
-        "Autor Breve",
-        "Autor Completo",
-    ]
-    assert [item.value for item in merged.field_candidates["synopsis"]] == [
-        "Resumen corto.",
-        "Resumen editorial mas rico y descriptivo.",
-    ]
