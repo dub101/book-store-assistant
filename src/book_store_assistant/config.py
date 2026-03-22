@@ -7,11 +7,6 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 
-class ExecutionMode(str, Enum):
-    RULES_ONLY = "rules-only"
-    AI_ENRICHED = "ai-enriched"
-
-
 class AIProvider(str, Enum):
     OPENAI = "openai"
 
@@ -91,23 +86,6 @@ def _env_bool(name: str, default: bool) -> bool:
         return False
 
     return default
-
-
-def _env_execution_mode() -> ExecutionMode:
-    raw_value = os.getenv("BSA_EXECUTION_MODE")
-    if raw_value is None:
-        file_value = _config_value("execution_mode", ExecutionMode.RULES_ONLY.value)
-        if isinstance(file_value, str):
-            try:
-                return ExecutionMode(file_value)
-            except ValueError:
-                return ExecutionMode.RULES_ONLY
-        return ExecutionMode.RULES_ONLY
-
-    try:
-        return ExecutionMode(raw_value)
-    except ValueError:
-        return ExecutionMode.RULES_ONLY
 
 
 class AppConfig(BaseModel):
@@ -193,13 +171,6 @@ class AppConfig(BaseModel):
     )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
-    )
-    execution_mode: ExecutionMode = Field(default_factory=_env_execution_mode)
-    llm_subject_mapping_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_LLM_SUBJECT_MAPPING_ENABLED", True)
-    )
-    llm_subject_mapping_min_confidence: float = Field(
-        default_factory=lambda: _env_float("BSA_LLM_SUBJECT_MAPPING_MIN_CONFIDENCE", 0.85)
     )
     llm_record_validation_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_LLM_RECORD_VALIDATION_ENABLED", True)

@@ -4,7 +4,6 @@ import re
 import httpx
 
 from book_store_assistant.bibliographic.models import BibliographicRecord
-from book_store_assistant.models import BookRecord
 from book_store_assistant.resolution.base import RecordQualityValidator
 from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.sources.models import SourceBookRecord
@@ -148,11 +147,8 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
     def validate(
         self,
         source_record: SourceBookRecord,
-        candidate_record: BookRecord | BibliographicRecord,
+        candidate_record: BibliographicRecord,
     ) -> RecordValidationAssessment | None:
-        if not isinstance(candidate_record, BibliographicRecord):
-            return None
-
         try:
             response = httpx.post(
                 f"{self.base_url}/responses",

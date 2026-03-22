@@ -3,10 +3,12 @@ from unittest.mock import patch
 
 import openpyxl
 
+from book_store_assistant.bibliographic.export import (
+    export_review_rows,
+    export_upload_records,
+)
 from book_store_assistant.config import AppConfig
-from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.pipeline.input import read_isbn_inputs
-from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
 from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.sources.models import SourceBookRecord
@@ -143,12 +145,11 @@ def test_sample_1_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
     assert sum(1 for item in result.fetch_results if item.record is not None) == 9
     assert resolved_count == 9
     assert unresolved_count == 1
-    assert result.enrichment_results == []
 
     resolved_output = tmp_path / "sample_1_books.xlsx"
     review_output = tmp_path / "sample_1_review.xlsx"
-    export_resolved_records(result.resolution_results, resolved_output)
-    export_unresolved_results(result.resolution_results, review_output)
+    export_upload_records(result.resolution_results, resolved_output)
+    export_review_rows(result.resolution_results, review_output)
 
     resolved_sheet = openpyxl.load_workbook(resolved_output).active
     review_sheet = openpyxl.load_workbook(review_output).active
@@ -181,12 +182,11 @@ def test_sample_2_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
     assert sum(1 for item in result.fetch_results if item.record is not None) == 44
     assert resolved_count == 34
     assert unresolved_count == 15
-    assert result.enrichment_results == []
 
     resolved_output = tmp_path / "sample_2_books.xlsx"
     review_output = tmp_path / "sample_2_review.xlsx"
-    export_resolved_records(result.resolution_results, resolved_output)
-    export_unresolved_results(result.resolution_results, review_output)
+    export_upload_records(result.resolution_results, resolved_output)
+    export_review_rows(result.resolution_results, review_output)
 
     resolved_sheet = openpyxl.load_workbook(resolved_output).active
     review_sheet = openpyxl.load_workbook(review_output).active

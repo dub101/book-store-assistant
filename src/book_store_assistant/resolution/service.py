@@ -1,5 +1,5 @@
 from book_store_assistant.bibliographic.resolution import resolve_bibliographic_record
-from book_store_assistant.resolution.base import RecordQualityValidator, SubjectMapper
+from book_store_assistant.resolution.base import RecordQualityValidator
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.issues import format_issue_detail
 from book_store_assistant.sources.models import SourceBookRecord
@@ -24,10 +24,8 @@ def _merge_unique(*values: list[str]) -> list[str]:
 
 def resolve_all(
     fetch_results: list[FetchResult],
-    subject_mapper: SubjectMapper | None = None,
     validator: RecordQualityValidator | None = None,
 ) -> list[ResolutionResult]:
-    del subject_mapper
     resolution_results: list[ResolutionResult] = []
 
     for fetch_result in fetch_results:

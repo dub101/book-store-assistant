@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import book_store_assistant.config as config_module
-from book_store_assistant.config import AIProvider, AppConfig, ExecutionMode
+from book_store_assistant.config import AIProvider, AppConfig
 
 
 def test_app_config_reads_non_secret_settings_from_config_file(
@@ -33,9 +33,10 @@ def test_app_config_reads_non_secret_settings_from_config_file(
                 "open_library_batch_size = 12",
                 "bne_lookup_enabled = false",
                 'bne_sru_base_url = "https://catalogo.bne.test/view/sru/34BNE_INST"',
-                'execution_mode = "ai-enriched"',
-                "llm_subject_mapping_enabled = false",
-                "llm_subject_mapping_min_confidence = 0.9",
+                "web_search_fallback_enabled = false",
+                "web_search_timeout_seconds = 4.5",
+                "web_search_max_search_attempts_per_record = 5",
+                "web_search_max_fetch_attempts_per_record = 4",
             ]
         ),
         encoding="utf-8",
@@ -71,9 +72,10 @@ def test_app_config_reads_non_secret_settings_from_config_file(
     assert config.open_library_batch_size == 12
     assert config.bne_lookup_enabled is False
     assert config.bne_sru_base_url == "https://catalogo.bne.test/view/sru/34BNE_INST"
-    assert config.execution_mode == ExecutionMode.AI_ENRICHED
-    assert config.llm_subject_mapping_enabled is False
-    assert config.llm_subject_mapping_min_confidence == 0.9
+    assert config.web_search_fallback_enabled is False
+    assert config.web_search_timeout_seconds == 4.5
+    assert config.web_search_max_search_attempts_per_record == 5
+    assert config.web_search_max_fetch_attempts_per_record == 4
 
 
 def test_app_config_uses_project_data_directories(monkeypatch) -> None:
@@ -107,7 +109,10 @@ def test_app_config_uses_project_data_directories(monkeypatch) -> None:
     assert config.publisher_page_max_fetch_attempts_per_record == 3
     assert config.retailer_page_max_search_attempts_per_record == 4
     assert config.retailer_page_max_fetch_attempts_per_record == 2
-    assert config.execution_mode == ExecutionMode.RULES_ONLY
+    assert config.web_search_fallback_enabled is True
+    assert config.web_search_timeout_seconds == 6.0
+    assert config.web_search_max_search_attempts_per_record == 3
+    assert config.web_search_max_fetch_attempts_per_record == 2
     assert config.ai_provider == AIProvider.OPENAI
     assert config.openai_api_base_url == "https://api.openai.com/v1"
     assert config.openai_model == "gpt-4o-mini"
@@ -133,7 +138,10 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
     monkeypatch.setenv("BSA_RETAILER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD", "3")
     monkeypatch.setenv("BSA_RETAILER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD", "1")
     monkeypatch.setenv("BSA_REQUEST_TIMEOUT_SECONDS", "3.5")
-    monkeypatch.setenv("BSA_EXECUTION_MODE", "ai-enriched")
+    monkeypatch.setenv("BSA_WEB_SEARCH_FALLBACK_ENABLED", "0")
+    monkeypatch.setenv("BSA_WEB_SEARCH_TIMEOUT_SECONDS", "5.5")
+    monkeypatch.setenv("BSA_WEB_SEARCH_MAX_SEARCH_ATTEMPTS_PER_RECORD", "6")
+    monkeypatch.setenv("BSA_WEB_SEARCH_MAX_FETCH_ATTEMPTS_PER_RECORD", "4")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
 
     config = AppConfig()
@@ -157,7 +165,10 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
     assert config.retailer_page_max_search_attempts_per_record == 3
     assert config.retailer_page_max_fetch_attempts_per_record == 1
     assert config.request_timeout_seconds == 3.5
-    assert config.execution_mode == ExecutionMode.AI_ENRICHED
+    assert config.web_search_fallback_enabled is False
+    assert config.web_search_timeout_seconds == 5.5
+    assert config.web_search_max_search_attempts_per_record == 6
+    assert config.web_search_max_fetch_attempts_per_record == 4
     assert config.openai_model == "gpt-4.1-mini"
 
 
@@ -181,7 +192,10 @@ def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatc
     monkeypatch.setenv("BSA_RETAILER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD", "still-not-an-int")
     monkeypatch.setenv("BSA_RETAILER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD", "still-not-an-int")
     monkeypatch.setenv("BSA_REQUEST_TIMEOUT_SECONDS", "still-not-a-float")
-    monkeypatch.setenv("BSA_EXECUTION_MODE", "not-a-real-mode")
+    monkeypatch.setenv("BSA_WEB_SEARCH_FALLBACK_ENABLED", "not-a-bool")
+    monkeypatch.setenv("BSA_WEB_SEARCH_TIMEOUT_SECONDS", "still-not-a-float")
+    monkeypatch.setenv("BSA_WEB_SEARCH_MAX_SEARCH_ATTEMPTS_PER_RECORD", "still-not-an-int")
+    monkeypatch.setenv("BSA_WEB_SEARCH_MAX_FETCH_ATTEMPTS_PER_RECORD", "still-not-an-int")
 
     config = AppConfig()
 
@@ -204,4 +218,7 @@ def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatc
     assert config.retailer_page_max_search_attempts_per_record == 4
     assert config.retailer_page_max_fetch_attempts_per_record == 2
     assert config.request_timeout_seconds == 10.0
-    assert config.execution_mode == ExecutionMode.RULES_ONLY
+    assert config.web_search_fallback_enabled is True
+    assert config.web_search_timeout_seconds == 6.0
+    assert config.web_search_max_search_attempts_per_record == 3
+    assert config.web_search_max_fetch_attempts_per_record == 2

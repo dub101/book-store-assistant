@@ -116,3 +116,41 @@ def test_fetch_with_stages_skips_bne_when_disabled(tmp_path: Path) -> None:
     mock_bne.assert_not_called()
     assert results[0].record is not None
     assert results[0].record.title == "Open Library Title"
+
+
+def test_fetch_with_stages_skips_google_once_bibliographic_fields_are_complete(
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "sample.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10)
+
+    with (
+        patch("book_store_assistant.sources.staged.BneSruSource.fetch") as mock_bne,
+        patch("book_store_assistant.sources.staged.OpenLibrarySource.fetch_batch") as mock_batch,
+        patch("book_store_assistant.sources.staged.GoogleBooksSource.fetch") as mock_google,
+    ):
+        mock_bne.return_value = FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="bne",
+                isbn="9780306406157",
+                title="Complete Title",
+                author="Complete Author",
+                editorial="Complete Editorial",
+            ),
+            errors=[],
+        )
+        mock_batch.return_value = []
+
+        results = fetch_with_stages(
+            input_file,
+            [ISBNInput(isbn="9780306406157")],
+            config,
+        )
+
+    mock_bne.assert_called_once_with("9780306406157")
+    mock_batch.assert_not_called()
+    mock_google.assert_not_called()
+    assert results[0].record is not None
+    assert results[0].record.title == "Complete Title"

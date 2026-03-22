@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 
-from book_store_assistant.enrichment.models import EnrichmentResult
 from book_store_assistant.pipeline.results import InputReadResult
 from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.results import ResolutionResult
@@ -11,5 +10,4 @@ class ProcessResult(BaseModel):
     input_result: InputReadResult
     fetch_results: list[FetchResult]
     publisher_identity_results: list[PublisherIdentityResult] = Field(default_factory=list)
-    enrichment_results: list[EnrichmentResult] = Field(default_factory=list)
     resolution_results: list[ResolutionResult]

@@ -217,6 +217,5 @@ def process_isbn_file(
         input_result=input_result,
         fetch_results=fetch_results,
         publisher_identity_results=publisher_identity_results,
-        enrichment_results=[],
         resolution_results=resolution_results,
     )

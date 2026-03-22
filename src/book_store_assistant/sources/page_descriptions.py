@@ -3,8 +3,6 @@ import re
 from html import unescape
 from urllib.parse import urlparse
 
-import httpx
-
 DESCRIPTION_PATTERNS = (
     re.compile(
         r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\'](.*?)["\']',
@@ -244,15 +242,3 @@ def extract_description_candidates_from_html(
     _collect_source_specific_candidates(html, source_url, candidates, seen)
 
     return candidates
-class HttpPageContentFetcher:
-    def __init__(self, timeout_seconds: float) -> None:
-        self.timeout_seconds = timeout_seconds
-
-    def fetch_text(self, url: str) -> str | None:
-        try:
-            response = httpx.get(url, timeout=self.timeout_seconds, follow_redirects=True)
-            response.raise_for_status()
-        except httpx.HTTPError:
-            return None
-
-        return response.text

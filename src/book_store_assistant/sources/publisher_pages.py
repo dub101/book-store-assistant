@@ -11,13 +11,15 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 from pydantic import HttpUrl, TypeAdapter
 
-from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
 from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
+from book_store_assistant.sources.page_descriptions import (
+    extract_description_candidates_from_html,
+)
 from book_store_assistant.sources.results import FetchResult
 
 BOOKISH_TYPES = {"book", "product", "creativework"}

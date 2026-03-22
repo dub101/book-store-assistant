@@ -7,7 +7,6 @@ from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.sources.bne import BneSruSource
 from book_store_assistant.sources.google_books import GoogleBooksSource
 from book_store_assistant.sources.merge import merge_source_records
-from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.open_library import OpenLibrarySource
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
@@ -73,13 +72,6 @@ def _has_text(value: str | None) -> bool:
     return value is not None and bool(value.strip())
 
 
-def _has_subject_signal(record: SourceBookRecord) -> bool:
-    if record.subject is not None and record.subject.strip():
-        return True
-
-    return any(category.strip() for category in record.categories)
-
-
 def _needs_additional_metadata(result: FetchResult | None) -> bool:
     if result is None or result.record is None:
         return True
@@ -89,8 +81,6 @@ def _needs_additional_metadata(result: FetchResult | None) -> bool:
         _has_text(record.title)
         and _has_text(record.author)
         and _has_text(record.editorial)
-        and _has_text(record.synopsis)
-        and _has_subject_signal(record)
     )
 
 
