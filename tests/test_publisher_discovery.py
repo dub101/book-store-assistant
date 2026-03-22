@@ -1,6 +1,7 @@
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_discovery import (
     augment_fetch_results_with_publisher_discovery,
+    build_publisher_discovery_search_queries,
 )
 from book_store_assistant.sources.results import FetchResult
 
@@ -31,8 +32,10 @@ PENGUIN_HTML = """
 class StubSearcher:
     def __init__(self, links: list[str]) -> None:
         self.links = links
+        self.queries: list[tuple[str, tuple[str, ...]]] = []
 
     def search(self, query: str, allowed_domains: tuple[str, ...], limit: int = 5) -> list[str]:
+        self.queries.append((query, allowed_domains))
         return self.links[:limit]
 
 
@@ -80,3 +83,19 @@ def test_publisher_discovery_finds_bibliographic_fields_without_editorial() -> N
     assert augmented[0].record is not None
     assert augmented[0].record.author == "Julia Navarro"
     assert augmented[0].record.editorial == "Plaza & Janes"
+    assert searcher.queries[0][0] == '"9788401027970" "El nino que perdio la guerra"'
+
+
+def test_publisher_discovery_queries_use_collected_record_context() -> None:
+    assert build_publisher_discovery_search_queries(
+        SourceBookRecord(
+            source_name="google_books + bne",
+            isbn="9788401027970",
+            title="El nino que perdio la guerra [Texto impreso]",
+            author="Julia Navarro",
+            editorial="Barcelona, Plaza & Janes",
+        )
+    ) == [
+        '"9788401027970" "El nino que perdio la guerra" "Julia Navarro"',
+        '"9788401027970"',
+    ]

@@ -71,6 +71,22 @@ def test_match_publisher_profile_supports_planeta_imprints() -> None:
     assert profile.key == "planeta"
 
 
+def test_match_publisher_profile_supports_missing_planeta_aliases() -> None:
+    for editorial in (
+        "GeoPlaneta",
+        "Editorial Ariel",
+        "Ediciones Paidós",
+        "Planeta Cómic",
+        "Gestión 2000",
+        "Planeta Audio",
+        "Ediciones Temas de Hoy",
+        "Lunwerg Editores",
+    ):
+        profile = match_publisher_profile(editorial)
+        assert profile is not None
+        assert profile.key == "planeta"
+
+
 def test_build_publisher_search_query_uses_exact_isbn() -> None:
     query = build_publisher_search_query(
         SourceBookRecord(

@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -13,6 +13,7 @@ from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_rec
 from book_store_assistant.sources.issues import no_match_issue_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
+from book_store_assistant.sources.diagnostics import changed_record_fields, with_diagnostic
 from book_store_assistant.sources.publisher_pages import (
     SEARCH_RESULT_LIMIT,
     DuckDuckGoHtmlSearcher,
@@ -28,6 +29,11 @@ from book_store_assistant.sources.publisher_pages import (
     _run_with_retry,
 )
 from book_store_assistant.sources.results import FetchResult
+from book_store_assistant.sources.search_queries import (
+    append_query,
+    clean_query_text,
+    editorial_query_terms,
+)
 
 RetailerStatusCallback = Callable[[str], None]
 
@@ -471,7 +477,24 @@ def build_retailer_search_query(record: SourceBookRecord) -> str:
 
 
 def build_retailer_search_queries(record: SourceBookRecord) -> list[str]:
-    return [build_retailer_search_query(record)]
+    title = clean_query_text(record.title)
+    author = clean_query_text(record.author)
+    editorial_terms = editorial_query_terms(record.editorial)
+
+    queries: list[str] = []
+    append_query(queries, record.isbn, title, author)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, title, editorial_terms[0])
+    if not queries:
+        append_query(queries, record.isbn, title)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, author, editorial_terms[0])
+    if not queries:
+        append_query(queries, record.isbn, author)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, editorial_terms[0])
+    append_query(queries, record.isbn)
+    return queries
 
 
 def apply_retailer_editorial_record(
@@ -511,6 +534,7 @@ def augment_fetch_results_with_retailer_editorials(
     sleep: Callable[[float], None] = time.sleep,
     max_search_attempts_per_record: int | None = None,
     max_fetch_attempts_per_record: int | None = None,
+    force_lookup_isbns: set[str] | None = None,
 ) -> list[FetchResult]:
     with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
         active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds, client=client)
@@ -527,7 +551,12 @@ def augment_fetch_results_with_retailer_editorials(
 
         for index, fetch_result in enumerate(fetch_results, start=1):
             record = fetch_result.record
-            if record is None or not _needs_retailer_metadata_lookup(record):
+            if record is None:
+                augmented_results.append(fetch_result)
+                continue
+
+            force_lookup = force_lookup_isbns is not None and record.isbn in force_lookup_isbns
+            if not force_lookup and not _needs_retailer_metadata_lookup(record):
                 augmented_results.append(fetch_result)
                 continue
 
@@ -535,6 +564,20 @@ def augment_fetch_results_with_retailer_editorials(
                 on_status_update(
                     f"Retailer editorial lookup {index}/{len(fetch_results)}: {record.isbn}"
                 )
+
+            attempted_fetch_urls: list[str] = []
+            fetched_domains: list[str] = []
+            direct_query_urls_by_profile = {
+                profile.key: set(_build_direct_query_urls(record, profile))
+                for profile in SUPPORTED_RETAILERS
+            }
+
+            def _fetch_with_trace(url: str) -> str | None:
+                attempted_fetch_urls.append(url)
+                hostname = (urlparse(url).hostname or "").casefold()
+                if hostname and hostname not in fetched_domains:
+                    fetched_domains.append(hostname)
+                return active_page_fetcher.fetch_text(url)
 
             retailer_record, raw_issue_codes = lookup_exact_page_record(
                 record,
@@ -545,7 +588,7 @@ def augment_fetch_results_with_retailer_editorials(
                 direct_query_urls=_build_direct_query_urls,
                 extract_record=extract_retailer_page_record,
                 search=active_searcher.search,
-                fetch_text=active_page_fetcher.fetch_text,
+                fetch_text=_fetch_with_trace,
                 run_with_retry=_run_with_retry,
                 rank_candidate_urls=_rank_candidate_urls,
                 is_allowed_domain=_is_allowed_domain,
@@ -567,9 +610,30 @@ def augment_fetch_results_with_retailer_editorials(
                 if retailer_record is not None
                 else None
             )
+            successful_profile = (
+                retailer_record.source_name.split(":", 1)[1]
+                if retailer_record is not None and ":" in retailer_record.source_name
+                else None
+            )
+            source_url = str(retailer_record.source_url) if retailer_record and retailer_record.source_url else None
+            agapea_direct_success = bool(
+                successful_profile == "agapea"
+                and source_url is not None
+                and source_url in direct_query_urls_by_profile["agapea"]
+            )
 
             if retailer_record is None:
-                failed_result = fetch_result.model_copy(
+                failed_result = with_diagnostic(
+                    fetch_result,
+                    "retailer_lookup",
+                    "completed",
+                    forced=force_lookup,
+                    retailer_domains_fetched=fetched_domains,
+                    retailer_fetch_count=len(attempted_fetch_urls),
+                    retailer_match=False,
+                    agapea_direct_success=False,
+                    issue_codes=retailer_issue_codes,
+                ).model_copy(
                     update={
                         "issue_codes": [
                             *fetch_result.issue_codes,
@@ -592,11 +656,24 @@ def augment_fetch_results_with_retailer_editorials(
                 augmented_results.append(failed_result)
                 continue
 
+            merged_record = apply_retailer_editorial_record(record, retailer_record)
+            changed_fields = changed_record_fields(record, merged_record)
             augmented_results.append(
-                fetch_result.model_copy(
-                    update={
-                        "record": apply_retailer_editorial_record(record, retailer_record)
-                    }
+                with_diagnostic(
+                    fetch_result,
+                    "retailer_lookup",
+                    "completed",
+                    forced=force_lookup,
+                    retailer_domains_fetched=fetched_domains,
+                    retailer_fetch_count=len(attempted_fetch_urls),
+                    retailer_match=True,
+                    retailer_source=retailer_record.source_name,
+                    retailer_editorial=retailer_record.editorial,
+                    retailer_source_url=source_url,
+                    changed_fields=changed_fields,
+                    agapea_direct_success=agapea_direct_success,
+                ).model_copy(
+                    update={"record": merged_record}
                 )
             )
 

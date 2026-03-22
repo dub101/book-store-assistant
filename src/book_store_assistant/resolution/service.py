@@ -47,6 +47,7 @@ def resolve_all(
                         ],
                         *fetch_result.errors,
                     ],
+                    diagnostics=fetch_result.diagnostics,
                 )
             )
             continue
@@ -78,10 +79,13 @@ def resolve_all(
                     source_issue_codes=fetch_result.issue_codes,
                     reason_codes=merged_reason_codes,
                     review_details=merged_review_details,
+                    diagnostics=fetch_result.diagnostics,
                 )
             )
             continue
 
-        resolution_results.append(resolved_result)
+        resolution_results.append(
+            resolved_result.model_copy(update={"diagnostics": fetch_result.diagnostics})
+        )
 
     return resolution_results

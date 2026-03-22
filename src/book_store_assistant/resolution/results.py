@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from book_store_assistant.bibliographic.models import BibliographicRecord
@@ -16,3 +18,4 @@ class ResolutionResult(BaseModel):
     source_issue_codes: list[str] = Field(default_factory=list)
     reason_codes: list[str] = Field(default_factory=list)
     review_details: list[str] = Field(default_factory=list)
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)

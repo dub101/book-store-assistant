@@ -21,6 +21,11 @@ from book_store_assistant.sources.publisher_pages import (
     extract_publisher_page_record,
 )
 from book_store_assistant.sources.results import FetchResult
+from book_store_assistant.sources.search_queries import (
+    append_query,
+    clean_query_text,
+    editorial_query_terms,
+)
 
 PublisherDiscoveryStatusCallback = Callable[[str], None]
 
@@ -109,6 +114,27 @@ def _merge_issue_codes(*groups: list[str]) -> list[str]:
     return merged
 
 
+def build_publisher_discovery_search_queries(record: SourceBookRecord) -> list[str]:
+    title = clean_query_text(record.title)
+    author = clean_query_text(record.author)
+    editorial_terms = editorial_query_terms(record.editorial)
+
+    queries: list[str] = []
+    append_query(queries, record.isbn, title, author)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, title, editorial_terms[0])
+    if not queries:
+        append_query(queries, record.isbn, title)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, author, editorial_terms[0])
+    if not queries:
+        append_query(queries, record.isbn, author)
+    if not queries and editorial_terms:
+        append_query(queries, record.isbn, editorial_terms[0])
+    append_query(queries, record.isbn)
+    return queries
+
+
 def _apply_publisher_discovery_record(
     existing_record: SourceBookRecord,
     publisher_record: SourceBookRecord,
@@ -144,6 +170,7 @@ def augment_fetch_results_with_publisher_discovery(
     max_search_attempts_per_record: int | None = None,
     max_fetch_attempts_per_record: int | None = None,
     search_result_limit: int = 5,
+    force_lookup_isbns: set[str] | None = None,
 ) -> list[FetchResult]:
     with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
         active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds, client=client)
@@ -160,7 +187,12 @@ def augment_fetch_results_with_publisher_discovery(
 
         for index, fetch_result in enumerate(fetch_results, start=1):
             record = fetch_result.record
-            if record is None or not _needs_publisher_discovery(record):
+            if record is None:
+                augmented_results.append(fetch_result)
+                continue
+
+            force_lookup = force_lookup_isbns is not None and record.isbn in force_lookup_isbns
+            if not force_lookup and not _needs_publisher_discovery(record):
                 augmented_results.append(fetch_result)
                 continue
 
@@ -173,8 +205,9 @@ def augment_fetch_results_with_publisher_discovery(
             fetch_attempts = 0
             candidate_urls: list[str] = []
             search_issue_codes: list[str] = []
+            queries = build_publisher_discovery_search_queries(record)
             for allowed_domains in search_domain_groups:
-                for query in (f'"{record.isbn}"', f'"{record.isbn}" "{record.title or ""}"'):
+                for query in queries:
                     if (
                         max_search_attempts_per_record is not None
                         and max_search_attempts_per_record >= 0

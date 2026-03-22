@@ -12,6 +12,7 @@ from book_store_assistant.bibliographic.evidence import (
     WebSearchBibliographicExtraction,
     WebSearchEvidenceDocument,
 )
+from book_store_assistant.sources.diagnostics import changed_record_fields, with_diagnostic
 from book_store_assistant.sources.issues import no_match_issue_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
@@ -27,12 +28,18 @@ from book_store_assistant.sources.publisher_pages import (
     _extract_isbn_candidates,
     _extract_json_ld_record,
     _is_allowed_domain,
+    _normalize_text,
     _rank_candidate_urls,
     _run_with_retry,
     match_publisher_profile,
 )
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.retailer_pages import SUPPORTED_RETAILERS
+from book_store_assistant.sources.search_queries import (
+    build_contextual_isbn_queries,
+    clean_query_text,
+    editorial_query_terms,
+)
 
 WebSearchStatusCallback = Callable[[str], None]
 
@@ -142,7 +149,71 @@ def _search_domain_groups(record: SourceBookRecord | None) -> list[tuple[str, ..
 
 
 def _search_queries(record: SourceBookRecord) -> list[str]:
-    return [f'"{record.isbn}"']
+    return build_contextual_isbn_queries(record)
+
+
+def _normalized_context_value(value: str | None) -> str | None:
+    cleaned = clean_query_text(value)
+    if cleaned is None:
+        return None
+
+    normalized = _normalize_text(cleaned)
+    return normalized or None
+
+
+def _contextual_page_match_score(
+    html: str,
+    page_url: str,
+    source_record: SourceBookRecord,
+) -> int:
+    page_title = _normalize_text(_extract_html_title(html) or "")
+    page_text = _normalize_text(_clean_text(html))
+    page_url_text = _normalize_text(page_url)
+    score = 0
+
+    title = _normalized_context_value(source_record.title)
+    author = _normalized_context_value(source_record.author)
+    editorial_terms = [
+        _normalize_text(term)
+        for term in editorial_query_terms(source_record.editorial)[:2]
+        if _normalize_text(term)
+    ]
+
+    if title is not None:
+        if title in page_title:
+            score += 3
+        elif title in page_text or title in page_url_text:
+            score += 2
+
+    if author is not None and (
+        author in page_title or author in page_text or author in page_url_text
+    ):
+        score += 1
+
+    if editorial_terms and any(
+        editorial in page_title or editorial in page_text or editorial in page_url_text
+        for editorial in editorial_terms
+    ):
+        score += 1
+
+    return score
+
+
+def _supports_contextual_page_match(
+    html: str,
+    page_url: str,
+    source_record: SourceBookRecord,
+) -> bool:
+    hostname = urlparse(page_url).hostname or ""
+    score = _contextual_page_match_score(html, page_url, source_record)
+
+    if _is_publisher_domain(hostname):
+        return score >= 3
+
+    if _is_retailer_domain(hostname):
+        return score >= 4
+
+    return False
 
 
 def _build_evidence_excerpt(html: str, isbn: str) -> str:
@@ -444,6 +515,8 @@ def augment_fetch_results_with_web_search(
     max_pages_per_record: int = 3,
     max_search_attempts_per_record: int = 6,
     max_fetch_attempts_per_record: int = 4,
+    allow_contextual_matches: bool = False,
+    status_label: str = "fallback",
 ) -> list[FetchResult]:
     if extractor is None:
         return fetch_results
@@ -460,7 +533,7 @@ def augment_fetch_results_with_web_search(
         if on_status_update is not None:
             on_status_update(
                 "Stage: searching trusted web sources "
-                f"for {len(targeted_results)} Stage 1 records"
+                f"for {len(targeted_results)} Stage 1 records ({status_label})"
             )
 
         targeted_index = 0
@@ -473,13 +546,14 @@ def augment_fetch_results_with_web_search(
             source_record = _seed_record(fetch_result)
             if on_status_update is not None:
                 on_status_update(
-                    "Web search fallback "
+                    f"Web search {status_label} "
                     f"{targeted_index}/{len(targeted_results)}: {source_record.isbn}"
                 )
 
             issue_codes: list[str] = []
             documents: list[WebSearchEvidenceDocument] = []
             seen_urls: set[str] = set()
+            fetched_domains: list[str] = []
             search_attempts = 0
             fetch_attempts = 0
 
@@ -516,6 +590,9 @@ def augment_fetch_results_with_web_search(
 
                         fetch_attempts += 1
                         seen_urls.add(candidate_url)
+                        hostname = (urlparse(candidate_url).hostname or "").casefold()
+                        if hostname and hostname not in fetched_domains:
+                            fetched_domains.append(hostname)
                         page_html, fetch_issue_codes = _run_with_retry(
                             lambda: active_page_fetcher.fetch_text(candidate_url),
                             "web_search_fetch",
@@ -528,7 +605,15 @@ def augment_fetch_results_with_web_search(
                             continue
 
                         normalized_isbns = _extract_isbn_candidates(page_html)
-                        if source_record.isbn not in normalized_isbns:
+                        isbn_present = source_record.isbn in normalized_isbns
+                        if not isbn_present and not (
+                            allow_contextual_matches
+                            and _supports_contextual_page_match(
+                                page_html,
+                                candidate_url,
+                                source_record,
+                            )
+                        ):
                             continue
 
                         hostname = urlparse(candidate_url).hostname or ""
@@ -542,18 +627,27 @@ def augment_fetch_results_with_web_search(
                                 domain=hostname,
                                 page_title=_extract_html_title(page_html),
                                 excerpt=_build_evidence_excerpt(page_html, source_record.isbn),
+                                isbn_present=isbn_present,
                             )
                         )
 
                     if (
                         len(documents) >= max_pages_per_record
                         or fetch_attempts >= max_fetch_attempts_per_record
-                    ):
-                        break
+                        ):
+                            break
 
             if not documents:
                 augmented_results.append(
-                    fetch_result.model_copy(
+                    with_diagnostic(
+                        fetch_result,
+                        f"web_search_{status_label}",
+                        "completed",
+                        web_search_match=False,
+                        fetched_domains=fetched_domains,
+                        documents_found=0,
+                        issue_codes=issue_codes,
+                    ).model_copy(
                         update={
                             "issue_codes": _merge_issue_codes(
                                 fetch_result.issue_codes,
@@ -568,7 +662,21 @@ def augment_fetch_results_with_web_search(
             extraction = extractor.extract(source_record, documents)
             if extraction is None or "extractor_low_confidence" in extraction.issues:
                 augmented_results.append(
-                    fetch_result.model_copy(
+                    with_diagnostic(
+                        fetch_result,
+                        f"web_search_{status_label}",
+                        "completed",
+                        web_search_match=True,
+                        fetched_domains=fetched_domains,
+                        documents_found=len(documents),
+                        document_domains=[document.domain for document in documents],
+                        extraction_used=False,
+                        extraction_confidence=(
+                            extraction.confidence if extraction is not None else None
+                        ),
+                        extraction_issues=(extraction.issues if extraction is not None else None),
+                        issue_codes=issue_codes,
+                    ).model_copy(
                         update={
                             "issue_codes": _merge_issue_codes(
                                 fetch_result.issue_codes,
@@ -583,7 +691,20 @@ def augment_fetch_results_with_web_search(
             extracted_record = _build_extracted_record(source_record, extraction, documents)
             if extracted_record is None:
                 augmented_results.append(
-                    fetch_result.model_copy(
+                    with_diagnostic(
+                        fetch_result,
+                        f"web_search_{status_label}",
+                        "completed",
+                        web_search_match=True,
+                        fetched_domains=fetched_domains,
+                        documents_found=len(documents),
+                        document_domains=[document.domain for document in documents],
+                        extraction_used=True,
+                        extraction_confidence=extraction.confidence,
+                        extraction_issues=extraction.issues,
+                        extracted_fields=[],
+                        issue_codes=issue_codes,
+                    ).model_copy(
                         update={
                             "issue_codes": _merge_issue_codes(
                                 fetch_result.issue_codes,
@@ -596,8 +717,23 @@ def augment_fetch_results_with_web_search(
                 continue
 
             if fetch_result.record is None:
+                changed_fields = changed_record_fields(None, extracted_record)
                 augmented_results.append(
-                    fetch_result.model_copy(
+                    with_diagnostic(
+                        fetch_result,
+                        f"web_search_{status_label}",
+                        "completed",
+                        web_search_match=True,
+                        fetched_domains=fetched_domains,
+                        documents_found=len(documents),
+                        document_domains=[document.domain for document in documents],
+                        extraction_used=True,
+                        extraction_confidence=extraction.confidence,
+                        extraction_issues=extraction.issues,
+                        extracted_fields=changed_fields,
+                        changed_fields=changed_fields,
+                        issue_codes=issue_codes,
+                    ).model_copy(
                         update={
                             "record": extracted_record,
                             "issue_codes": _merge_issue_codes(
@@ -609,10 +745,30 @@ def augment_fetch_results_with_web_search(
                 )
                 continue
 
+            merged_record = _apply_web_search_record(fetch_result.record, extracted_record)
+            changed_fields = changed_record_fields(fetch_result.record, merged_record)
             augmented_results.append(
-                fetch_result.model_copy(
+                with_diagnostic(
+                    fetch_result,
+                    f"web_search_{status_label}",
+                    "completed",
+                    web_search_match=True,
+                    fetched_domains=fetched_domains,
+                    documents_found=len(documents),
+                    document_domains=[document.domain for document in documents],
+                    extraction_used=True,
+                    extraction_confidence=extraction.confidence,
+                    extraction_issues=extraction.issues,
+                    extracted_fields=[
+                        field_name
+                        for field_name in ("title", "subtitle", "author", "editorial")
+                        if getattr(extracted_record, field_name) is not None
+                    ],
+                    changed_fields=changed_fields,
+                    issue_codes=issue_codes,
+                ).model_copy(
                     update={
-                        "record": _apply_web_search_record(fetch_result.record, extracted_record),
+                        "record": merged_record,
                         "issue_codes": _merge_issue_codes(fetch_result.issue_codes, issue_codes),
                     }
                 )

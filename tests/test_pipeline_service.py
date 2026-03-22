@@ -145,4 +145,9 @@ def test_process_isbn_file_runs_web_search_fallback_before_resolution(
     ):
         process_isbn_file(input_file, source=DummySource(), config=AppConfig())
 
-    mock_augment_fetch_results_with_web_search.assert_called_once()
+    assert mock_augment_fetch_results_with_web_search.call_count == 2
+    first_call = mock_augment_fetch_results_with_web_search.call_args_list[0]
+    second_call = mock_augment_fetch_results_with_web_search.call_args_list[1]
+    assert first_call.kwargs["allow_contextual_matches"] is True
+    assert first_call.kwargs["status_label"] == "preliminary"
+    assert second_call.kwargs["status_label"] == "fallback"

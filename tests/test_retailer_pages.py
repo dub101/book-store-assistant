@@ -69,9 +69,21 @@ def test_build_retailer_search_query_uses_exact_isbn_only() -> None:
         )
     )
     assert query == '"9780306406157"'
+
+
+def test_build_retailer_search_queries_use_collected_record_context() -> None:
     assert build_retailer_search_queries(
-        SourceBookRecord(source_name="google_books", isbn="9780306406157")
-    ) == ['"9780306406157"']
+        SourceBookRecord(
+            source_name="google_books",
+            isbn="9780306406157",
+            title="Libro de prueba [Texto impreso]",
+            author="Autora Ejemplo",
+            editorial="Barcelona, Editorial Ariel",
+        )
+    ) == [
+        '"9780306406157" "Libro de prueba" "Autora Ejemplo"',
+        '"9780306406157"',
+    ]
 
 
 def test_extract_retailer_page_record_parses_bibliographic_fields() -> None:
@@ -135,6 +147,7 @@ def test_augment_fetch_results_with_retailer_editorials_fills_missing_fields() -
     assert augmented[0].record is not None
     assert augmented[0].record.author == "Autora Ejemplo"
     assert augmented[0].record.editorial == "Planeta"
+    assert searcher.queries[0][0] == '"9780306406157" "Libro de prueba"'
 
 
 def test_augment_fetch_results_with_retailer_editorials_records_issue_codes_on_failure() -> None:
