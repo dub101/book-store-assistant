@@ -50,7 +50,7 @@ def test_process_isbn_file_uses_injected_source_and_resolves_bibliographic_recor
     assert result.publisher_identity_results == [
         PublisherIdentityResult(
             isbn="9780306406157",
-            publisher_name="Debolsillo",
+            publisher_name="Penguin Random House Grupo Editorial",
             imprint_name="Debolsillo",
             publisher_group_key="penguin_random_house",
             source_name="google_books",
@@ -61,7 +61,11 @@ def test_process_isbn_file_uses_injected_source_and_resolves_bibliographic_recor
         )
     ]
     assert isinstance(result.resolution_results[0].record, BibliographicRecord)
-    assert result.resolution_results[0].record.publisher == "Debolsillo"
+    assert result.resolution_results[0].record.editorial == "Debolsillo"
+    assert (
+        result.resolution_results[0].record.publisher
+        == "Penguin Random House Grupo Editorial"
+    )
 
 
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
@@ -100,3 +104,45 @@ def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unl
     assert mock_augment_publisher_pages.call_args.kwargs["eligible_isbns"] == {
         "9780306406157"
     }
+
+
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_web_search")
+def test_process_isbn_file_runs_web_search_fallback_before_resolution(
+    mock_augment_fetch_results_with_web_search,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    initial_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="bne",
+                isbn="9780306406157",
+                title="BNE Title",
+                author=None,
+                editorial="Barcelona, Planeta",
+            ),
+            errors=[],
+            issue_codes=[],
+        )
+    ]
+    mock_augment_fetch_results_with_web_search.return_value = initial_results
+
+    with (
+        patch(
+            "book_store_assistant.pipeline.service.fetch_all",
+            return_value=initial_results,
+        ),
+        patch(
+            "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+            return_value=AcceptingValidator(),
+        ),
+        patch(
+            "book_store_assistant.pipeline.service.build_default_bibliographic_extractor",
+            return_value=object(),
+        ),
+    ):
+        process_isbn_file(input_file, source=DummySource(), config=AppConfig())
+
+    mock_augment_fetch_results_with_web_search.assert_called_once()

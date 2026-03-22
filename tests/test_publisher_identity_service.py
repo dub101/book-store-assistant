@@ -35,6 +35,60 @@ def test_resolve_publisher_identity_uses_editorial_field_when_available() -> Non
     )
 
 
+def test_resolve_publisher_identity_splits_catalog_style_editorial_into_imprint_and_group() -> None:
+    fetch_result = FetchResult(
+        isbn="9780306406157",
+        record=SourceBookRecord(
+            source_name="bne",
+            isbn="9780306406157",
+            editorial="Barcelona, Paidós",
+            field_sources={"editorial": "bne"},
+        ),
+        errors=[],
+    )
+
+    result = resolve_publisher_identity(fetch_result)
+
+    assert result == PublisherIdentityResult(
+        isbn="9780306406157",
+        publisher_name="Planeta",
+        imprint_name="Paidós",
+        publisher_group_key="planeta",
+        source_name="bne",
+        source_field="editorial",
+        confidence=0.95,
+        resolution_method="editorial_field",
+        evidence=["editorial:Barcelona, Paidós"],
+    )
+
+
+def test_resolve_publisher_identity_normalizes_catalog_style_group_name() -> None:
+    fetch_result = FetchResult(
+        isbn="9780306406157",
+        record=SourceBookRecord(
+            source_name="bne",
+            isbn="9780306406157",
+            editorial="Barcelona, Planeta",
+            field_sources={"editorial": "bne"},
+        ),
+        errors=[],
+    )
+
+    result = resolve_publisher_identity(fetch_result)
+
+    assert result == PublisherIdentityResult(
+        isbn="9780306406157",
+        publisher_name="Planeta",
+        imprint_name="Planeta",
+        publisher_group_key="planeta",
+        source_name="bne",
+        source_field="editorial",
+        confidence=0.95,
+        resolution_method="editorial_field",
+        evidence=["editorial:Barcelona, Planeta"],
+    )
+
+
 def test_resolve_publisher_identity_can_fall_back_to_source_url_domain() -> None:
     fetch_result = FetchResult(
         isbn="9780306406157",

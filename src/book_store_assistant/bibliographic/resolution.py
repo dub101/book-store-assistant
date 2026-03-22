@@ -1,3 +1,5 @@
+import re
+
 from book_store_assistant.bibliographic.models import BibliographicRecord
 from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.base import RecordQualityValidator
@@ -17,6 +19,11 @@ EDITORIAL_MISSING_CODE = "MISSING_EDITORIAL"
 PUBLISHER_MISSING_CODE = "MISSING_PUBLISHER"
 VALIDATION_UNAVAILABLE_CODE = "VALIDATION_UNAVAILABLE"
 VALIDATION_REJECTED_CODE = "VALIDATION_REJECTED"
+CATALOG_TITLE_ARTIFACT_PATTERN = re.compile(
+    r"\s*\[(?:[^\]]*texto impreso[^\]]*|[^\]]*recurso electr[oó]nico[^\]]*|"
+    r"[^\]]*electronic resource[^\]]*)\]\s*",
+    re.IGNORECASE,
+)
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -25,6 +32,32 @@ def _clean_text(value: str | None) -> str | None:
 
     cleaned = " ".join(value.split()).strip()
     return cleaned or None
+
+
+def _clean_catalog_text(value: str | None) -> str | None:
+    cleaned = _clean_text(value)
+    if cleaned is None:
+        return None
+
+    normalized = _clean_text(CATALOG_TITLE_ARTIFACT_PATTERN.sub(" ", cleaned))
+    return normalized or cleaned
+
+
+def _clean_title(value: str | None, subtitle: str | None = None) -> str | None:
+    cleaned = _clean_catalog_text(value)
+    if cleaned is None:
+        return None
+
+    cleaned_subtitle = _clean_catalog_text(subtitle)
+    if cleaned_subtitle:
+        normalized_title = cleaned.casefold()
+        for separator in (" : ", ": "):
+            suffix = f"{separator}{cleaned_subtitle}"
+            if normalized_title.endswith(suffix.casefold()):
+                stripped = cleaned[: -len(suffix)].rstrip(" :;-")
+                return stripped or cleaned
+
+    return cleaned
 
 
 def _review_note_from_assessment(
@@ -45,8 +78,8 @@ def _coalesce_editorial_and_publisher(
     publisher_identity: PublisherIdentityResult | None,
 ) -> tuple[str | None, str | None]:
     editorial = (
-        _clean_text(source_record.editorial)
-        or _clean_text(publisher_identity.imprint_name if publisher_identity is not None else None)
+        _clean_text(publisher_identity.imprint_name if publisher_identity is not None else None)
+        or _clean_text(source_record.editorial)
         or _clean_text(
             publisher_identity.publisher_name if publisher_identity is not None else None
         )
@@ -70,7 +103,7 @@ def _build_candidate_record(
     source_record: SourceBookRecord,
     publisher_identity: PublisherIdentityResult | None,
 ) -> BibliographicRecord | None:
-    title = _clean_text(source_record.title)
+    title = _clean_title(source_record.title, source_record.subtitle)
     author = _clean_text(source_record.author)
     editorial, publisher = _coalesce_editorial_and_publisher(
         source_record,
@@ -83,7 +116,7 @@ def _build_candidate_record(
     return BibliographicRecord(
         isbn=source_record.isbn,
         title=title,
-        subtitle=_clean_text(source_record.subtitle),
+        subtitle=_clean_catalog_text(source_record.subtitle),
         author=author,
         editorial=editorial,
         publisher=publisher,
@@ -101,7 +134,7 @@ def resolve_bibliographic_record(
     candidate_record = _build_candidate_record(source_record, publisher_identity)
     editorial, publisher = _coalesce_editorial_and_publisher(source_record, publisher_identity)
 
-    if not _clean_text(source_record.title):
+    if not _clean_title(source_record.title, source_record.subtitle):
         reason_codes.append(TITLE_MISSING_CODE)
         errors.append(TITLE_MISSING_ERROR)
         review_details.append("No reliable source supplied title.")

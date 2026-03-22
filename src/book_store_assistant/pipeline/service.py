@@ -10,6 +10,7 @@ from book_store_assistant.publisher_identity.service import (
     resolve_publisher_identities,
 )
 from book_store_assistant.resolution.providers import (
+    build_default_bibliographic_extractor,
     build_default_record_quality_validator,
 )
 from book_store_assistant.resolution.results import ResolutionResult
@@ -31,6 +32,7 @@ from book_store_assistant.sources.service import (
     fetch_all,
 )
 from book_store_assistant.sources.staged import fetch_with_stages
+from book_store_assistant.sources.web_search import augment_fetch_results_with_web_search
 
 StatusUpdateCallback = Callable[[str], None]
 
@@ -89,6 +91,7 @@ def process_isbn_file(
     app_config = config or AppConfig()
     input_result = read_isbn_inputs(input_path)
     validator = build_default_record_quality_validator(app_config)
+    extractor = build_default_bibliographic_extractor(app_config)
     if source is None:
         fetch_results = fetch_with_stages(
             input_path,
@@ -184,6 +187,22 @@ def process_isbn_file(
             ),
             max_fetch_attempts_per_record=(
                 app_config.publisher_page_max_fetch_attempts_per_record
+            ),
+        )
+    if app_config.web_search_fallback_enabled:
+        fetch_results = augment_fetch_results_with_web_search(
+            fetch_results,
+            timeout_seconds=app_config.web_search_timeout_seconds,
+            extractor=extractor,
+            on_status_update=on_status_update,
+            max_retries=app_config.publisher_page_max_retries,
+            backoff_seconds=app_config.web_search_backoff_seconds,
+            max_pages_per_record=app_config.web_search_max_pages_per_record,
+            max_search_attempts_per_record=(
+                app_config.web_search_max_search_attempts_per_record
+            ),
+            max_fetch_attempts_per_record=(
+                app_config.web_search_max_fetch_attempts_per_record
             ),
         )
     publisher_identity_results = resolve_publisher_identities(fetch_results)

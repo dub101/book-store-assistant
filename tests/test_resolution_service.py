@@ -78,3 +78,31 @@ def test_resolve_all_routes_rejected_candidates_to_review() -> None:
     assert results[0].candidate_record is not None
     assert results[0].reason_codes == ["VALIDATION_REJECTED"]
     assert results[0].validation_assessment is not None
+
+
+def test_resolve_all_strips_catalog_suffixes_from_titles() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9788449326134",
+            record=SourceBookRecord(
+                source_name="bne",
+                isbn="9788449326134",
+                title="Psicologia y simbolica del arquetipo [Texto impreso] : ensayo",
+                subtitle="ensayo",
+                author="Carl Gustav Jung",
+                editorial="Paidos",
+            ),
+            publisher_identity=PublisherIdentityResult(
+                isbn="9788449326134",
+                publisher_name="Planeta",
+                imprint_name="Paidos",
+            ),
+            errors=[],
+        ),
+    ]
+
+    results = resolve_all(fetch_results, validator=AcceptingValidator())
+
+    assert results[0].record is not None
+    assert results[0].record.title == "Psicologia y simbolica del arquetipo"
+    assert results[0].record.subtitle == "ensayo"

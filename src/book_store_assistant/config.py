@@ -207,6 +207,36 @@ class AppConfig(BaseModel):
     llm_record_validation_min_confidence: float = Field(
         default_factory=lambda: _env_float("BSA_LLM_RECORD_VALIDATION_MIN_CONFIDENCE", 0.8)
     )
+    web_search_fallback_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_WEB_SEARCH_FALLBACK_ENABLED", True)
+    )
+    web_search_timeout_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_WEB_SEARCH_TIMEOUT_SECONDS", 6.0)
+    )
+    web_search_max_pages_per_record: int = Field(
+        default_factory=lambda: _env_int("BSA_WEB_SEARCH_MAX_PAGES_PER_RECORD", 3)
+    )
+    web_search_max_search_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_WEB_SEARCH_MAX_SEARCH_ATTEMPTS_PER_RECORD",
+            3,
+        )
+    )
+    web_search_max_fetch_attempts_per_record: int = Field(
+        default_factory=lambda: _env_int(
+            "BSA_WEB_SEARCH_MAX_FETCH_ATTEMPTS_PER_RECORD",
+            2,
+        )
+    )
+    web_search_backoff_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_WEB_SEARCH_BACKOFF_SECONDS", 0.5)
+    )
+    llm_web_extraction_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_LLM_WEB_EXTRACTION_ENABLED", True)
+    )
+    llm_web_extraction_min_confidence: float = Field(
+        default_factory=lambda: _env_float("BSA_LLM_WEB_EXTRACTION_MIN_CONFIDENCE", 0.75)
+    )
     ai_provider: AIProvider = AIProvider.OPENAI
     openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     openai_api_base_url: str = Field(

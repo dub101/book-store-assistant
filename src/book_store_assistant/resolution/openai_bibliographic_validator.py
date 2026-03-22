@@ -179,6 +179,13 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
         if assessment is None:
             return None
 
+        if assessment.accepted:
+            if assessment.confidence < self.min_confidence:
+                return assessment.model_copy(
+                    update={"issues": [*assessment.issues, "validator_low_confidence"]}
+                )
+            return assessment
+
         if assessment.confidence < self.min_confidence:
             return RecordValidationAssessment(
                 accepted=False,
