@@ -88,7 +88,8 @@ def apply_record_quality_validation(
             continue
 
         if (
-            not _has_critical_validation_issue(assessment.issues, assessment.explanation)
+            isinstance(resolution_result.record, BookRecord)
+            and not _has_critical_validation_issue(assessment.issues, assessment.explanation)
             and _record_is_faithful_normalization(
                 resolution_result.source_record,
                 resolution_result.record,

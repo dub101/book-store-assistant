@@ -1,13 +1,14 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import openpyxl
 
-from book_store_assistant.config import AppConfig, ExecutionMode
-from book_store_assistant.enrichment.models import GeneratedSynopsis
+from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.pipeline.input import read_isbn_inputs
 from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
+from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
@@ -16,22 +17,9 @@ SAMPLE_1_PATH = PROJECT_ROOT / "data" / "input" / "sample_1.csv"
 SAMPLE_2_PATH = PROJECT_ROOT / "data" / "input" / "sample_2.csv"
 
 
-def _long_english_synopsis(isbn: str) -> str:
-    return (
-        f"This fixture description for {isbn} is intentionally long enough to provide "
-        "grounded descriptive evidence for AI synopsis generation without inventing metadata."
-    )
-
-
-class FixtureSynopsisGenerator:
-    def generate(self, isbn: str, evidence) -> GeneratedSynopsis | None:
-        return GeneratedSynopsis(
-            text=(
-                f"Resumen generado para {isbn} a partir de evidencia suficiente y "
-                "conservadora del registro de origen."
-            ),
-            evidence_indexes=[0],
-        )
+class AcceptingValidator:
+    def validate(self, source_record, candidate_record):
+        return RecordValidationAssessment(accepted=True, confidence=0.97)
 
 
 class FixtureBatchSource:
@@ -55,10 +43,6 @@ class FixtureBatchSource:
 def _build_fixture_record(
     isbn: str,
     *,
-    synopsis: str | None,
-    language: str | None,
-    subject: str | None = "FICCION",
-    categories: list[str] | None = None,
     author: str | None = "Fixture Author",
     editorial: str | None = "Fixture Editorial",
 ) -> SourceBookRecord:
@@ -67,23 +51,14 @@ def _build_fixture_record(
         "author": "fixture_source",
         "editorial": "fixture_source",
     }
-    if synopsis is not None:
-        field_sources["synopsis"] = "fixture_source"
-    if subject is not None:
-        field_sources["subject"] = "fixture_source"
-    if categories:
-        field_sources["categories"] = "fixture_source"
 
     return SourceBookRecord(
         source_name="fixture_source",
         isbn=isbn,
         title=f"Fixture Title {isbn[-4:]}",
+        subtitle=f"Fixture Subtitle {isbn[-2:]}",
         author=author,
         editorial=editorial,
-        synopsis=synopsis,
-        subject=subject,
-        categories=categories or [],
-        language=language,
         field_sources=field_sources,
     )
 
@@ -98,9 +73,7 @@ def _build_fetch_error(isbn: str) -> FetchResult:
 
 
 def _build_sample_1_fixture_results(fixture_isbns: list[str]) -> dict[str, FetchResult]:
-    english_synopsis_indexes = {0, 5, 9}
     fetch_error_indexes = {8}
-    alias_subject_indexes = {3}
     results: dict[str, FetchResult] = {}
 
     for index, isbn in enumerate(fixture_isbns):
@@ -108,27 +81,7 @@ def _build_sample_1_fixture_results(fixture_isbns: list[str]) -> dict[str, Fetch
             results[isbn] = _build_fetch_error(isbn)
             continue
 
-        if index in english_synopsis_indexes:
-            record = _build_fixture_record(
-                isbn,
-                synopsis=_long_english_synopsis(isbn),
-                language="en",
-            )
-        elif index in alias_subject_indexes:
-            record = _build_fixture_record(
-                isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
-                subject=None,
-                categories=["Romance literature"],
-            )
-        else:
-            record = _build_fixture_record(
-                isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
-            )
-
+        record = _build_fixture_record(isbn)
         results[isbn] = FetchResult(isbn=isbn, record=record, errors=[])
 
     return results
@@ -139,85 +92,58 @@ def _build_sample_2_fixture_results(fixture_isbns: list[str]) -> dict[str, Fetch
 
     for index, isbn in enumerate(fixture_isbns):
         if index < 10:
-            record = _build_fixture_record(
-                isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
-            )
+            record = _build_fixture_record(isbn)
         elif index < 20:
-            record = _build_fixture_record(
-                isbn,
-                synopsis=_long_english_synopsis(isbn),
-                language="en",
-            )
+            record = _build_fixture_record(isbn)
         elif index < 25:
             results[isbn] = _build_fetch_error(isbn)
             continue
         elif index < 30:
-            record = _build_fixture_record(
-                isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
-                subject=None,
-                categories=[],
-            )
+            record = _build_fixture_record(isbn)
         elif index < 35:
             record = _build_fixture_record(
                 isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
                 editorial=None,
             )
         elif index < 40:
             record = _build_fixture_record(
                 isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
                 author=None,
             )
         elif index < 45:
-            record = _build_fixture_record(
-                isbn,
-                synopsis=None,
-                language=None,
-            )
+            record = _build_fixture_record(isbn)
         else:
-            record = _build_fixture_record(
-                isbn,
-                synopsis="Resumen existente del libro.",
-                language="es",
-                subject=None,
-                categories=["Romance literature"],
-            )
+            record = _build_fixture_record(isbn)
 
         results[isbn] = FetchResult(isbn=isbn, record=record, errors=[])
 
     return results
 
 
-def test_sample_1_batch_regression_in_ai_mode(tmp_path: Path) -> None:
+def test_sample_1_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
     fixture_isbns = [item.isbn for item in read_isbn_inputs(SAMPLE_1_PATH).valid_inputs]
-    result = process_isbn_file(
-        SAMPLE_1_PATH,
-        source=FixtureBatchSource("sample_1", fixture_isbns),
-        config=AppConfig(
-            execution_mode=ExecutionMode.AI_ENRICHED,
-            publisher_page_timeout_seconds=0.01,
-            publisher_page_max_retries=0,
-            publisher_page_backoff_seconds=0.0,
-        ),
-        generator=FixtureSynopsisGenerator(),
-    )
+    with patch(
+        "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+        return_value=AcceptingValidator(),
+    ):
+        result = process_isbn_file(
+            SAMPLE_1_PATH,
+            source=FixtureBatchSource("sample_1", fixture_isbns),
+            config=AppConfig(
+                publisher_page_timeout_seconds=0.01,
+                publisher_page_max_retries=0,
+                publisher_page_backoff_seconds=0.0,
+            ),
+        )
 
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
     unresolved_count = sum(1 for item in result.resolution_results if item.record is None)
-    applied_count = sum(1 for item in result.enrichment_results if item.applied)
 
     assert len(result.input_result.valid_inputs) == 10
     assert sum(1 for item in result.fetch_results if item.record is not None) == 9
     assert resolved_count == 9
     assert unresolved_count == 1
-    assert applied_count == 3
+    assert result.enrichment_results == []
 
     resolved_output = tmp_path / "sample_1_books.xlsx"
     review_output = tmp_path / "sample_1_review.xlsx"
@@ -231,30 +157,31 @@ def test_sample_1_batch_regression_in_ai_mode(tmp_path: Path) -> None:
     assert review_sheet.max_row == 2
 
 
-def test_sample_2_batch_regression_in_ai_mode(tmp_path: Path) -> None:
+def test_sample_2_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
     fixture_isbns = [item.isbn for item in read_isbn_inputs(SAMPLE_2_PATH).valid_inputs]
-    result = process_isbn_file(
-        SAMPLE_2_PATH,
-        source=FixtureBatchSource("sample_2", fixture_isbns),
-        config=AppConfig(
-            execution_mode=ExecutionMode.AI_ENRICHED,
-            publisher_page_timeout_seconds=0.01,
-            publisher_page_max_retries=0,
-            publisher_page_backoff_seconds=0.0,
-        ),
-        generator=FixtureSynopsisGenerator(),
-    )
+    with patch(
+        "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+        return_value=AcceptingValidator(),
+    ):
+        result = process_isbn_file(
+            SAMPLE_2_PATH,
+            source=FixtureBatchSource("sample_2", fixture_isbns),
+            config=AppConfig(
+                publisher_page_timeout_seconds=0.01,
+                publisher_page_max_retries=0,
+                publisher_page_backoff_seconds=0.0,
+            ),
+        )
 
     resolved_count = sum(1 for item in result.resolution_results if item.record is not None)
     unresolved_count = sum(1 for item in result.resolution_results if item.record is None)
-    applied_count = sum(1 for item in result.enrichment_results if item.applied)
 
     assert len(result.input_result.valid_inputs) == 49
     assert result.input_result.invalid_values == ["9788449333830"]
     assert sum(1 for item in result.fetch_results if item.record is not None) == 44
     assert resolved_count == 34
     assert unresolved_count == 15
-    assert applied_count == 10
+    assert result.enrichment_results == []
 
     resolved_output = tmp_path / "sample_2_books.xlsx"
     review_output = tmp_path / "sample_2_review.xlsx"

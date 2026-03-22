@@ -1,14 +1,14 @@
 from collections import Counter
-from contextlib import nullcontext
 from pathlib import Path
 
 import typer
 
-from book_store_assistant.config import ExecutionMode
-from book_store_assistant.enrichment.models import EnrichmentResult
-from book_store_assistant.pipeline.export import export_resolved_records
+from book_store_assistant.bibliographic.export import (
+    export_handoff_results,
+    export_review_rows,
+    export_upload_records,
+)
 from book_store_assistant.pipeline.input import read_isbn_inputs
-from book_store_assistant.pipeline.review_export import export_unresolved_results
 from book_store_assistant.pipeline.service import process_isbn_file
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.results import FetchResult
@@ -16,10 +16,8 @@ from book_store_assistant.sources.results import FetchResult
 app = typer.Typer(help="Book Store Assistant CLI.")
 
 
-def _mode_output_path(path: Path, mode: ExecutionMode) -> Path:
-    if path.stem.endswith(f".{mode.value}"):
-        return path
-    return path.with_name(f"{path.stem}.{mode.value}{path.suffix}")
+def _default_handoff_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.handoff.jsonl")
 
 
 def _summarize_fetch_result(result: FetchResult) -> str:
@@ -48,22 +46,6 @@ def _summarize_resolution_result(result: ResolutionResult) -> str:
     return f"{isbn}: review"
 
 
-def _summarize_enrichment_result(result: EnrichmentResult) -> str:
-    if result.applied and result.generated_synopsis is not None:
-        return f"{result.isbn}: enrichment applied"
-
-    if result.skipped_reason and result.evidence:
-        return (
-            f"{result.isbn}: enrichment skipped "
-            f"({result.skipped_reason}, evidence={len(result.evidence)})"
-        )
-
-    if result.skipped_reason:
-        return f"{result.isbn}: enrichment skipped ({result.skipped_reason})"
-
-    return f"{result.isbn}: enrichment not applied"
-
-
 def _count_source_issue_codes(fetch_results: list[FetchResult]) -> Counter[str]:
     return Counter(
         issue_code
@@ -77,24 +59,16 @@ def main(
     input_path: Path,
     output: Path | None = None,
     review_output: Path | None = None,
-    mode: ExecutionMode = ExecutionMode.RULES_ONLY,
+    handoff_output: Path | None = None,
 ) -> None:
-    """Read ISBNs from a CSV file and report pipeline counts."""
+    """Read ISBNs from a CSV file and build Stage 1 bibliographic outputs."""
     input_preview = read_isbn_inputs(input_path)
-    enrichment_progress_context = (
-        typer.progressbar(
-            length=len(input_preview.valid_inputs),
-            label="Enriching records",
-        )
-        if mode is ExecutionMode.AI_ENRICHED
-        else nullcontext(None)
-    )
 
     if input_preview.valid_inputs:
         with typer.progressbar(
             length=len(input_preview.valid_inputs),
             label="Consulting ISBNs",
-        ) as fetch_progress, enrichment_progress_context as enrichment_progress:
+        ) as fetch_progress:
 
             def on_fetch_start(index: int, total: int, isbn: str) -> None:
                 typer.echo(f"Consulting ISBN {index}/{total}: {isbn}", err=True)
@@ -103,39 +77,20 @@ def main(
                 fetch_progress.update(1)
                 typer.echo(_summarize_fetch_result(result), err=True)
 
-            def on_enrichment_start(index: int, total: int, isbn: str) -> None:
-                return None
-
-            def on_enrichment_complete(
-                index: int,
-                total: int,
-                result: EnrichmentResult,
-            ) -> None:
-                if enrichment_progress is not None:
-                    enrichment_progress.update(1)
-
             def on_status_update(message: str) -> None:
                 typer.echo(message, err=True)
 
             result = process_isbn_file(
                 input_path,
-                mode=mode,
                 on_fetch_start=on_fetch_start,
                 on_fetch_complete=on_fetch_complete,
-                on_enrichment_start=on_enrichment_start,
-                on_enrichment_complete=on_enrichment_complete,
                 on_status_update=on_status_update,
             )
     else:
         result = process_isbn_file(
             input_path,
-            mode=mode,
             on_status_update=lambda message: typer.echo(message, err=True),
         )
-
-    if mode is ExecutionMode.AI_ENRICHED:
-        for enrichment_result in result.enrichment_results:
-            typer.echo(_summarize_enrichment_result(enrichment_result), err=True)
 
     for resolution_result in result.resolution_results:
         typer.echo(_summarize_resolution_result(resolution_result), err=True)
@@ -145,7 +100,6 @@ def main(
     unresolved_count = len(unresolved_results)
     fetched_count = sum(1 for item in result.fetch_results if item.record is not None)
 
-    typer.echo(f"Execution mode: {mode.value}")
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
     typer.echo(f"Invalid rows: {len(result.input_result.invalid_values)}")
 
@@ -168,24 +122,9 @@ def main(
         if google_rate_limited_count:
             typer.secho(
                 "Warning: Google Books rate limiting was detected. "
-                "Rules-only results may be degraded until upstream access recovers.",
+                "Bibliographic results may be degraded until upstream access recovers.",
                 fg=typer.colors.YELLOW,
             )
-
-    if mode is ExecutionMode.AI_ENRICHED:
-        enrichment_applied_count = sum(1 for item in result.enrichment_results if item.applied)
-        evidence_count = sum(1 for item in result.enrichment_results if item.evidence)
-        enrichment_skipped_counts = Counter(
-            item.skipped_reason for item in result.enrichment_results if item.skipped_reason
-        )
-
-        typer.echo(f"Records with evidence: {evidence_count}")
-        typer.echo(f"Enrichment applied: {enrichment_applied_count}")
-
-        if enrichment_skipped_counts:
-            typer.echo("Enrichment skips:")
-            for skipped_reason, count in sorted(enrichment_skipped_counts.items()):
-                typer.echo(f"- {skipped_reason}: {count}")
 
     typer.echo(f"Resolved records: {resolved_count}")
     typer.echo(f"Unresolved records: {unresolved_count}")
@@ -212,14 +151,19 @@ def main(
             typer.echo(f"- {reason_code}: {count}")
 
     if output is not None:
-        resolved_output = _mode_output_path(output, mode)
-        export_resolved_records(result.resolution_results, resolved_output)
-        typer.echo(f"Exported resolved records to {resolved_output}")
+        export_upload_records(result.resolution_results, output)
+        typer.echo(f"Exported upload records to {output}")
+
+        if handoff_output is None:
+            handoff_output = _default_handoff_path(output)
 
     if review_output is not None:
-        resolved_review_output = _mode_output_path(review_output, mode)
-        export_unresolved_results(result.resolution_results, resolved_review_output)
-        typer.echo(f"Exported unresolved records to {resolved_review_output}")
+        export_review_rows(result.resolution_results, review_output)
+        typer.echo(f"Exported review records to {review_output}")
+
+    if handoff_output is not None:
+        export_handoff_results(result.resolution_results, handoff_output)
+        typer.echo(f"Exported handoff results to {handoff_output}")
 
 
 if __name__ == "__main__":

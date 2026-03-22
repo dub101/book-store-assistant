@@ -2,7 +2,7 @@ from pathlib import Path
 
 import openpyxl
 
-from book_store_assistant.models import BookRecord
+from book_store_assistant.bibliographic.models import BibliographicRecord
 from book_store_assistant.pipeline.export import export_resolved_records
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
@@ -18,13 +18,13 @@ def test_export_resolved_records_writes_only_resolved_rows(tmp_path: Path) -> No
             errors=["Synopsis is missing."],
         ),
         ResolutionResult(
-            record=BookRecord(
+            record=BibliographicRecord(
                 isbn="0306406152",
                 title="Example Title",
+                subtitle="Example Subtitle",
                 author="Example Author",
                 editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
+                publisher="Example Publisher",
             ),
             source_record=source_record,
             errors=[],
@@ -38,3 +38,4 @@ def test_export_resolved_records_writes_only_resolved_rows(tmp_path: Path) -> No
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "0306406152"
+    assert sheet.cell(row=2, column=6).value == "Example Publisher"

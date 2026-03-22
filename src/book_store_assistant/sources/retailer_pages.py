@@ -9,7 +9,6 @@ from urllib.parse import quote
 import httpx
 
 from book_store_assistant.isbn import normalize_isbn
-from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import no_match_issue_code
 from book_store_assistant.sources.merge import merge_source_records
@@ -31,7 +30,6 @@ from book_store_assistant.sources.publisher_pages import (
 from book_store_assistant.sources.results import FetchResult
 
 RetailerStatusCallback = Callable[[str], None]
-RETAILER_EDITORIAL_CACHE_KEY = "retailer_metadata_lookup_v5"
 
 AUTHOR_LABEL_PATTERN = re.compile(
     r"(?:autor(?:es)?|author)\s*[:|]\s*([^\n|]+)",
@@ -465,7 +463,7 @@ def extract_retailer_page_record(
 
 
 def _needs_retailer_metadata_lookup(record: SourceBookRecord) -> bool:
-    return not record.editorial or not record.author
+    return not record.title or not record.editorial or not record.author
 
 
 def build_retailer_search_query(record: SourceBookRecord) -> str:
@@ -508,8 +506,6 @@ def augment_fetch_results_with_retailer_editorials(
     searcher: PublisherPageSearcher | None = None,
     page_fetcher: PageContentFetcher | None = None,
     on_status_update: RetailerStatusCallback | None = None,
-    cache: FetchResultCache | None = None,
-    cache_ttl_seconds: float | None = None,
     max_retries: int = 2,
     backoff_seconds: float = 0.5,
     sleep: Callable[[float], None] = time.sleep,
@@ -534,49 +530,6 @@ def augment_fetch_results_with_retailer_editorials(
             if record is None or not _needs_retailer_metadata_lookup(record):
                 augmented_results.append(fetch_result)
                 continue
-
-            cached_entry = cache.get_entry(record.isbn) if cache is not None else None
-            if cached_entry is not None:
-                cached_result = cached_entry.result
-                cached_record = (
-                    _sanitize_retailer_record(cached_result.record)
-                    if cached_result.record is not None
-                    else None
-                )
-                negative_cache_expired = (
-                    cached_result.record is None
-                    and cache_ttl_seconds is not None
-                    and cache_ttl_seconds >= 0
-                    and (time.time() - cached_entry.cached_at > cache_ttl_seconds)
-                )
-                if not negative_cache_expired and cached_record is not None:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "record": apply_retailer_editorial_record(
-                                    record,
-                                    cached_record,
-                                )
-                            }
-                        )
-                    )
-                    continue
-                if not negative_cache_expired and cached_result.record is None:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "issue_codes": [
-                                    *fetch_result.issue_codes,
-                                    *(
-                                        code
-                                        for code in cached_result.issue_codes
-                                        if code not in fetch_result.issue_codes
-                                    ),
-                                ]
-                            }
-                        )
-                    )
-                    continue
 
             if on_status_update is not None:
                 on_status_update(
@@ -636,23 +589,9 @@ def augment_fetch_results_with_retailer_editorials(
                         ]
                     }
                 )
-                if cache is not None:
-                    cache.set(
-                        failed_result.model_copy(update={"record": None}),
-                        allow_empty=True,
-                    )
                 augmented_results.append(failed_result)
                 continue
 
-            if cache is not None:
-                cache.set(
-                    FetchResult(
-                        isbn=record.isbn,
-                        record=retailer_record,
-                        errors=[],
-                        issue_codes=[],
-                    )
-                )
             augmented_results.append(
                 fetch_result.model_copy(
                     update={

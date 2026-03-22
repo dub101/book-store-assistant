@@ -13,7 +13,6 @@ from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
-from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
@@ -57,7 +56,6 @@ SUBJECT_LABEL_PATTERN = re.compile(
 )
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 PublisherPageStatusCallback = Callable[[str], None]
-PUBLISHER_PAGE_CACHE_KEY = "publisher_page_lookup_v2"
 PUBLISHER_PAGE_ISBN_MISMATCH = "PUBLISHER_PAGE_ISBN_MISMATCH"
 RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 T = TypeVar("T")
@@ -1232,11 +1230,8 @@ def apply_publisher_page_record(
 
     return merged_record.model_copy(update=updates)
 
-
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
-    synopsis = (record.synopsis or "").strip()
-    has_subject_signal = bool(record.subject) or bool(record.categories)
-    return bool(record.editorial) and (not synopsis or not has_subject_signal)
+    return bool(record.editorial) and (not record.title or not record.author)
 
 
 def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:
@@ -1250,13 +1245,10 @@ def augment_fetch_results_with_publisher_pages(
     searcher: PublisherPageSearcher | None = None,
     page_fetcher: PageContentFetcher | None = None,
     on_status_update: PublisherPageStatusCallback | None = None,
-    cache: FetchResultCache | None = None,
-    cache_ttl_seconds: float | None = None,
     max_retries: int = 2,
     backoff_seconds: float = 0.5,
     sleep: Callable[[float], None] = time.sleep,
     eligible_isbns: set[str] | None = None,
-    ignore_negative_cache: bool = False,
     max_profiles_per_record: int | None = None,
     max_search_attempts_per_record: int | None = None,
     max_fetch_attempts_per_record: int | None = None,
@@ -1283,40 +1275,6 @@ def augment_fetch_results_with_publisher_pages(
             if not _needs_publisher_lookup(record):
                 augmented_results.append(fetch_result)
                 continue
-
-            cached_entry = cache.get_entry(record.isbn) if cache is not None else None
-            if cached_entry is not None:
-                cached_result = cached_entry.result
-                negative_cache_expired = (
-                    cached_result.record is None
-                    and cache_ttl_seconds is not None
-                    and cache_ttl_seconds >= 0
-                    and (time.time() - cached_entry.cached_at > cache_ttl_seconds)
-                )
-                if not negative_cache_expired and cached_result.record is not None:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "record": apply_publisher_page_record(
-                                    record,
-                                    cached_result.record,
-                                )
-                            }
-                        )
-                    )
-                    continue
-                if not negative_cache_expired and not ignore_negative_cache:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "issue_codes": _merge_issue_codes(
-                                    fetch_result.issue_codes,
-                                    cached_result.issue_codes,
-                                )
-                            }
-                        )
-                    )
-                    continue
 
             candidate_profiles = _candidate_publisher_profiles(record)
             if max_profiles_per_record is not None and max_profiles_per_record >= 0:
@@ -1366,23 +1324,9 @@ def augment_fetch_results_with_publisher_pages(
                         )
                     }
                 )
-                if cache is not None:
-                    cache.set(
-                        failed_result.model_copy(update={"record": None}),
-                        allow_empty=True,
-                    )
                 augmented_results.append(failed_result)
                 continue
 
-            if cache is not None:
-                cache.set(
-                    FetchResult(
-                        isbn=record.isbn,
-                        record=publisher_record,
-                        errors=[],
-                        issue_codes=[],
-                    )
-                )
             augmented_results.append(
                 fetch_result.model_copy(
                     update={"record": apply_publisher_page_record(record, publisher_record)}

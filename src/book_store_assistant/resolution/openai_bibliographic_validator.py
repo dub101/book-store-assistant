@@ -14,7 +14,7 @@ JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 
 def _build_messages(
     source_record: SourceBookRecord,
-    candidate_record: BookRecord,
+    candidate_record: BibliographicRecord,
 ) -> list[dict[str, object]]:
     source_lines = [
         f"ISBN: {source_record.isbn}",
@@ -23,8 +23,7 @@ def _build_messages(
         f"Source subtitle: {source_record.subtitle or ''}",
         f"Source author: {source_record.author or ''}",
         f"Source editorial: {source_record.editorial or ''}",
-        f"Source synopsis: {source_record.synopsis or ''}",
-        f"Source subject: {source_record.subject or ''}",
+        f"Source language: {source_record.language or ''}",
         f"Source categories: {', '.join(source_record.categories)}",
         f"Field sources: {source_record.field_sources}",
     ]
@@ -34,36 +33,27 @@ def _build_messages(
         f"Subtitle: {candidate_record.subtitle or ''}",
         f"Author: {candidate_record.author}",
         f"Editorial: {candidate_record.editorial}",
-        f"Synopsis: {candidate_record.synopsis}",
-        f"Subject: {candidate_record.subject}",
+        f"Publisher: {candidate_record.publisher}",
     ]
     system_prompt = (
-        "You validate Spanish bookstore catalog records. "
-        "Reject records only when there is clear evidence that the candidate metadata is "
-        "corrupted, hallucinated, unsupported by the source evidence, not customer-facing, "
-        "or obviously unsuitable for bookstore export. "
-        "Do not reject a record just because it could be written better, is somewhat promotional, "
-        "or could use a more specific subject. "
-        "If the candidate is a faithful normalization or cleanup of the source-backed metadata, "
-        "accept it. "
-        "A synopsis is invalid only if it is bibliography, index notes, references, cover copy "
-        "without descriptive substance, or unrelated boilerplate. "
-        "Reject authors or editorials only if they look like scraped navigation, JSON fragments, "
-        "or unrelated site text. "
+        "You validate bookstore upload rows for bibliographic correctness. "
+        "Use the source evidence only. "
+        "Accept the row unless there is a clear reason that title, subtitle, author, editorial, "
+        "or publisher is unsupported, corrupted, hallucinated, mismatched to the ISBN, "
+        "or obviously scraped site boilerplate. "
+        "It is acceptable for editorial and publisher to be the same value when the evidence "
+        "supports only one trusted publishing name. "
         "Return only valid JSON with keys accepted, confidence, issues, and explanation."
     )
     user_prompt = "\n".join(
         [
-            "Candidate bookstore record:",
+            "Candidate upload row:",
             *candidate_lines,
             "",
             "Source evidence:",
             *source_lines,
             "",
-            (
-                "Accept the record unless there is a clear, concrete reason it is unsafe or "
-                "unsupported for bookstore export."
-            ),
+            "Accept the row unless there is a clear, concrete reason it is unsafe for upload.",
         ]
     )
     return [
@@ -85,15 +75,12 @@ def _extract_output_text(payload: dict) -> str | None:
     for item in output:
         if not isinstance(item, dict):
             continue
-
         content_items = item.get("content")
         if not isinstance(content_items, list):
             continue
-
         for content_item in content_items:
             if not isinstance(content_item, dict):
                 continue
-
             text_value = content_item.get("text")
             if isinstance(text_value, str) and text_value.strip():
                 text_parts.append(text_value.strip())
@@ -143,7 +130,7 @@ def _parse_validation_response(text: str) -> RecordValidationAssessment | None:
     )
 
 
-class OpenAIRecordValidator(RecordQualityValidator):
+class OpenAIBibliographicValidator(RecordQualityValidator):
     def __init__(
         self,
         api_key: str,
@@ -163,7 +150,7 @@ class OpenAIRecordValidator(RecordQualityValidator):
         source_record: SourceBookRecord,
         candidate_record: BookRecord | BibliographicRecord,
     ) -> RecordValidationAssessment | None:
-        if not isinstance(candidate_record, BookRecord):
+        if not isinstance(candidate_record, BibliographicRecord):
             return None
 
         try:

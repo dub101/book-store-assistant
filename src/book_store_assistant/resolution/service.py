@@ -1,5 +1,5 @@
-from book_store_assistant.resolution.base import SubjectMapper
-from book_store_assistant.resolution.books import resolve_book_record
+from book_store_assistant.bibliographic.resolution import resolve_bibliographic_record
+from book_store_assistant.resolution.base import RecordQualityValidator, SubjectMapper
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.issues import format_issue_detail
 from book_store_assistant.sources.models import SourceBookRecord
@@ -25,7 +25,9 @@ def _merge_unique(*values: list[str]) -> list[str]:
 def resolve_all(
     fetch_results: list[FetchResult],
     subject_mapper: SubjectMapper | None = None,
+    validator: RecordQualityValidator | None = None,
 ) -> list[ResolutionResult]:
+    del subject_mapper
     resolution_results: list[ResolutionResult] = []
 
     for fetch_result in fetch_results:
@@ -51,9 +53,10 @@ def resolve_all(
             )
             continue
 
-        resolved_result = resolve_book_record(
+        resolved_result = resolve_bibliographic_record(
             fetch_result.record,
-            subject_mapper=subject_mapper,
+            publisher_identity=fetch_result.publisher_identity,
+            validator=validator,
         )
 
         if resolved_result.record is None and fetch_result.errors:
@@ -69,7 +72,10 @@ def resolve_all(
             resolution_results.append(
                 ResolutionResult(
                     record=None,
+                    candidate_record=resolved_result.candidate_record,
                     source_record=resolved_result.source_record,
+                    publisher_identity=resolved_result.publisher_identity,
+                    validation_assessment=resolved_result.validation_assessment,
                     errors=_merge_unique(fetch_result.errors, resolved_result.errors),
                     source_issue_codes=fetch_result.issue_codes,
                     reason_codes=merged_reason_codes,

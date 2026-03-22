@@ -2,9 +2,9 @@ from pathlib import Path
 
 import openpyxl
 
-from book_store_assistant.enrichment.models import EnrichmentResult
-from book_store_assistant.models import BookRecord
+from book_store_assistant.bibliographic.models import BibliographicRecord
 from book_store_assistant.pipeline.review_export import export_unresolved_results
+from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
 
@@ -15,21 +15,30 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
     results = [
         ResolutionResult(
             record=None,
-            source_record=source_record,
-            enrichment_result=EnrichmentResult(
+            candidate_record=BibliographicRecord(
                 isbn="9780306406157",
-                skipped_reason="no_generator_configured",
+                title="Questionable Title",
+                author="Questionable Author",
+                editorial="Questionable Editorial",
+                publisher="Questionable Publisher",
             ),
-            errors=["Synopsis is missing."],
+            source_record=source_record,
+            validation_assessment=RecordValidationAssessment(
+                accepted=False,
+                confidence=0.42,
+                explanation="Needs a quick human check.",
+            ),
+            errors=["LLM validation rejected the bibliographic record."],
+            reason_codes=["VALIDATION_REJECTED"],
+            review_details=["Needs a quick human check."],
         ),
         ResolutionResult(
-            record=BookRecord(
+            record=BibliographicRecord(
                 isbn="0306406152",
                 title="Example Title",
                 author="Example Author",
                 editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="Narrativa",
+                publisher="Example Publisher",
             ),
             source_record=source_record,
             errors=[],
@@ -43,8 +52,9 @@ def test_export_unresolved_results_writes_only_unresolved_rows(tmp_path: Path) -
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=16).value == "no_generator_configured"
-    assert sheet.cell(row=2, column=18).value is None
+    assert sheet.cell(row=2, column=8).value == "VALIDATION_REJECTED"
+    assert sheet.cell(row=2, column=9).value == "0.42"
+    assert sheet.cell(row=2, column=10).value == "Needs a quick human check."
 
 
 def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: Path) -> None:
@@ -67,5 +77,5 @@ def test_export_unresolved_results_preserves_isbn_for_fetch_failures(tmp_path: P
 
     assert sheet.max_row == 2
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=6).value == "fetch_error"
-    assert sheet.cell(row=2, column=11).value is None
+    assert sheet.cell(row=2, column=7).value == "review"
+    assert sheet.cell(row=2, column=10).value is None

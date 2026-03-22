@@ -1,10 +1,8 @@
 import httpx
 
-from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.retailer_pages import (
-    RETAILER_EDITORIAL_CACHE_KEY,
     RetailerProfile,
     apply_retailer_editorial_record,
     augment_fetch_results_with_retailer_editorials,
@@ -35,34 +33,13 @@ CASA_HTML = """
 </html>
 """
 
-AGAPEA_HTML = """
-<html>
-  <head>
-    <title>VICTORIA - 9788408295853</title>
-    <meta
-      name="description"
-      content="Comprar el libro Victoria. Premio Planeta 2024 de Paloma
-      Sanchez-Garnica, Editorial Planeta (9788408295853) con ENVIO GRATIS."
-    />
-  </head>
-  <body>
-    <p>ISBN 9788408295853</p>
-  </body>
-</html>
-"""
-
 
 class StubSearcher:
     def __init__(self, links: list[str]) -> None:
         self.links = links
         self.queries: list[tuple[str, tuple[str, ...]]] = []
 
-    def search(
-        self,
-        query: str,
-        allowed_domains: tuple[str, ...],
-        limit: int = 3,
-    ) -> list[str]:
+    def search(self, query: str, allowed_domains: tuple[str, ...], limit: int = 3) -> list[str]:
         self.queries.append((query, allowed_domains))
         return self.links[:limit]
 
@@ -78,16 +55,7 @@ class StubPageFetcher:
 
 
 class RaisingSearcher:
-    def __init__(self) -> None:
-        self.queries: list[tuple[str, tuple[str, ...]]] = []
-
-    def search(
-        self,
-        query: str,
-        allowed_domains: tuple[str, ...],
-        limit: int = 3,
-    ) -> list[str]:
-        self.queries.append((query, allowed_domains))
+    def search(self, query: str, allowed_domains: tuple[str, ...], limit: int = 3) -> list[str]:
         raise httpx.TimeoutException("search timed out")
 
 
@@ -97,96 +65,50 @@ def test_build_retailer_search_query_uses_exact_isbn_only() -> None:
             source_name="google_books",
             isbn="9780306406157",
             title="Libro de prueba",
-            author="Autora Ejemplo, Otra",
+            author="Autora Ejemplo",
         )
     )
-
     assert query == '"9780306406157"'
+    assert build_retailer_search_queries(
+        SourceBookRecord(source_name="google_books", isbn="9780306406157")
+    ) == ['"9780306406157"']
 
 
-def test_build_retailer_search_queries_use_exact_isbn_only() -> None:
-    queries = build_retailer_search_queries(
-        SourceBookRecord(
-            source_name="google_books",
-            isbn="9780306406157",
-            title="Libro de prueba",
-            author="Autora Ejemplo, Otra",
-        )
-    )
-
-    assert queries == ['"9780306406157"']
-
-
-def test_extract_retailer_page_record_parses_editorial() -> None:
+def test_extract_retailer_page_record_parses_bibliographic_fields() -> None:
     record = extract_retailer_page_record(
         CASA_HTML,
         "https://www.casadellibro.com/libro/123",
         "9780306406157",
-        profile=RetailerProfile("casa_del_libro", ("casadellibro.com",)),
-    )
-
-    assert record is not None
-    assert record.editorial == "Planeta"
-
-
-def test_extract_retailer_page_record_rejects_garbage_editorial_and_author() -> None:
-    html = """
-    <html>
-      <head><title>Comprar libros | Casa del Libro Colombia</title></head>
-      <body>
-        <div>ISBN 9788401027970</div>
-        <script>
-          {"id":3389,"nombreWeb":3390,"seoPrice":3407}
-        </script>
-        <div>Top más leídos Promociones Libros desde $15.199</div>
-      </body>
-    </html>
-    """
-
-    record = extract_retailer_page_record(
-        html,
-        "https://www.casadellibro.com.co/?query=9788401027970",
-        "9788401027970",
         RetailerProfile("casa_del_libro", ("casadellibro.com",)),
     )
 
-    assert record is None
-
-
-def test_extract_retailer_page_record_parses_agapea_editorial_from_meta_description() -> None:
-    record = extract_retailer_page_record(
-        AGAPEA_HTML,
-        "https://www.agapea.com/buscador/buscador.php?texto=9788408295853",
-        "9788408295853",
-        profile=RetailerProfile("agapea", ("agapea.com",)),
-    )
-
     assert record is not None
-    assert record.author == "Paloma Sanchez-Garnica"
-    assert record.editorial == "Editorial Planeta"
+    assert record.title == "Libro de prueba"
+    assert record.author == "Autora Ejemplo"
+    assert record.editorial == "Planeta"
 
 
-def test_apply_retailer_editorial_record_fills_missing_editorial() -> None:
+def test_apply_retailer_editorial_record_fills_missing_bibliographic_fields() -> None:
     existing = SourceBookRecord(
         source_name="google_books",
         isbn="9780306406157",
         title="Libro de prueba",
-        author="Autora Ejemplo",
     )
     retailer = SourceBookRecord(
         source_name="retailer_page:casa_del_libro",
         isbn="9780306406157",
+        author="Autora Ejemplo",
         editorial="Planeta",
     )
 
     merged = apply_retailer_editorial_record(existing, retailer)
 
+    assert merged.author == "Autora Ejemplo"
     assert merged.editorial == "Planeta"
-    assert merged.field_sources["editorial"] == "retailer_page:casa_del_libro"
+    assert merged.field_sources["author"] == "retailer_page:casa_del_libro"
 
 
-def test_augment_fetch_results_with_retailer_editorials_fills_missing_author_when_editorial_exists(
-) -> None:
+def test_augment_fetch_results_with_retailer_editorials_fills_missing_fields() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -194,7 +116,6 @@ def test_augment_fetch_results_with_retailer_editorials_fills_missing_author_whe
                 source_name="google_books",
                 isbn="9780306406157",
                 title="Libro de prueba",
-                editorial="Planeta",
             ),
             errors=[],
             issue_codes=[],
@@ -213,312 +134,26 @@ def test_augment_fetch_results_with_retailer_editorials_fills_missing_author_whe
 
     assert augmented[0].record is not None
     assert augmented[0].record.author == "Autora Ejemplo"
-    assert augmented[0].record.field_sources["author"] == "retailer_page:casa_del_libro"
-
-
-def test_augment_fetch_results_with_retailer_editorials_fills_missing_editorial() -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
-    page_fetcher = StubPageFetcher({"https://www.casadellibro.com/libro/123": CASA_HTML})
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=page_fetcher,
-        max_retries=0,
-    )
-
-    assert augmented[0].record is not None
     assert augmented[0].record.editorial == "Planeta"
-    assert augmented[0].record.field_sources["editorial"] == "retailer_page:casa_del_libro"
 
 
-def test_augment_fetch_results_with_retailer_editorials_uses_direct_agapea_lookup_before_search(
-) -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9788408295853",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9788408295853",
-                title="Victoria. Premio Planeta 2024",
-                author="Paloma Sanchez-Garnica",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    searcher = StubSearcher([])
-    page_fetcher = StubPageFetcher(
-        {"https://www.agapea.com/buscador/buscador.php?texto=9788408295853": AGAPEA_HTML}
-    )
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=page_fetcher,
-        max_retries=0,
-    )
-
-    assert augmented[0].record is not None
-    assert augmented[0].record.editorial == "Editorial Planeta"
-    assert searcher.queries == []
-
-
-def test_augment_fetch_results_with_retailer_editorials_searches_new_retailer_domains() -> None:
+def test_augment_fetch_results_with_retailer_editorials_records_issue_codes_on_failure() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
+            record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
             errors=[],
             issue_codes=[],
         )
     ]
-    searcher = StubSearcher(
-        [
-            "https://www.agapea.com/libros/libro-de-prueba-9780306406157-i.htm",
-            "https://www.todostuslibros.com/libros/libro-de-prueba_9780306406157",
-        ]
-    )
-    page_fetcher = StubPageFetcher({})
 
     augmented = augment_fetch_results_with_retailer_editorials(
         fetch_results,
         timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=page_fetcher,
-        max_retries=0,
-    )
-
-    assert augmented[0].record is not None
-    assert augmented[0].record.editorial is None
-    assert searcher.queries[0] == (
-        '"9780306406157"',
-        ("agapea.com",),
-    )
-    assert searcher.queries[1] == (
-        '"9780306406157"',
-        (
-            "buscalibre.com",
-            "buscalibre.cl",
-            "buscalibre.com.co",
-            "buscalibre.com.mx",
-            "buscalibre.pe",
-            "buscalibre.us",
-        ),
-    )
-    assert searcher.queries[-1] == (
-        '"9780306406157"',
-        ("todostuslibros.com",),
-    )
-
-
-def test_augment_fetch_results_with_retailer_editorials_reuses_cached_negative_result(
-    tmp_path,
-) -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    cache = FetchResultCache(tmp_path / "retailer-cache", RETAILER_EDITORIAL_CACHE_KEY)
-    cache.set(
-        FetchResult(
-            isbn="9780306406157",
-            record=None,
-            errors=[],
-            issue_codes=["RETAILER_PAGE_SEARCH_TIMEOUT", "RETAILER_PAGE_EDITORIAL_NO_MATCH"],
-        ),
-        allow_empty=True,
-    )
-    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=StubPageFetcher({}),
-        cache=cache,
-        cache_ttl_seconds=3600,
-        max_retries=0,
-    )
-
-    assert augmented[0].record is not None
-    assert augmented[0].record.editorial is None
-    assert augmented[0].issue_codes == [
-        "RETAILER_PAGE_SEARCH_TIMEOUT",
-        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
-    ]
-    assert searcher.queries == []
-
-
-def test_augment_fetch_results_with_retailer_editorials_ignores_invalid_cached_positive_result(
-    tmp_path,
-) -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9788408295853",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9788408295853",
-                title="Victoria. Premio Planeta 2024",
-                author="Paloma Sanchez-Garnica",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    cache = FetchResultCache(tmp_path / "retailer-cache", RETAILER_EDITORIAL_CACHE_KEY)
-    cache.set(
-        FetchResult(
-            isbn="9788408295853",
-            record=SourceBookRecord(
-                source_name="retailer_page:casa_del_libro",
-                isbn="9788408295853",
-                editorial='{"id":3389,"nombreWeb":3390}',
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    )
-    page_fetcher = StubPageFetcher(
-        {"https://www.agapea.com/buscador/buscador.php?texto=9788408295853": AGAPEA_HTML}
-    )
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=StubSearcher([]),
-        page_fetcher=page_fetcher,
-        cache=cache,
-        cache_ttl_seconds=3600,
-        max_retries=0,
-    )
-
-    assert augmented[0].record is not None
-    assert augmented[0].record.editorial == "Editorial Planeta"
-    assert page_fetcher.calls == ["https://www.agapea.com/buscador/buscador.php?texto=9788408295853"]
-
-
-def test_augment_fetch_results_with_retailer_editorials_honors_search_budget() -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    searcher = StubSearcher([])
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
+        searcher=RaisingSearcher(),
         page_fetcher=StubPageFetcher({}),
         max_retries=0,
-        max_search_attempts_per_record=1,
     )
 
-    assert augmented[0].issue_codes == [
-        "RETAILER_PAGE_SEARCH_BUDGET_EXHAUSTED",
-        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
-    ]
-    assert len(searcher.queries) == 1
-
-
-def test_augment_fetch_results_with_retailer_editorials_does_not_spend_budget_on_search_timeouts(
-) -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    searcher = RaisingSearcher()
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=StubPageFetcher({}),
-        max_retries=0,
-        max_search_attempts_per_record=1,
-    )
-
-    assert "RETAILER_PAGE_SEARCH_BUDGET_EXHAUSTED" not in augmented[0].issue_codes
+    assert augmented[0].record is not None
     assert "RETAILER_PAGE_SEARCH_TIMEOUT" in augmented[0].issue_codes
-    assert "RETAILER_PAGE_EDITORIAL_NO_MATCH" in augmented[0].issue_codes
-    assert len(searcher.queries) > 1
-
-
-def test_augment_fetch_results_with_retailer_editorials_honors_fetch_budget() -> None:
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Libro de prueba",
-                author="Autora Ejemplo",
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    searcher = StubSearcher(["https://www.casadellibro.com/libro/123"])
-    page_fetcher = StubPageFetcher({"https://www.casadellibro.com/libro/123": "<html></html>"})
-
-    augmented = augment_fetch_results_with_retailer_editorials(
-        fetch_results,
-        timeout_seconds=1.0,
-        searcher=searcher,
-        page_fetcher=page_fetcher,
-        max_retries=0,
-        max_fetch_attempts_per_record=0,
-    )
-
-    assert augmented[0].issue_codes == [
-        "RETAILER_PAGE_FETCH_BUDGET_EXHAUSTED",
-        "RETAILER_PAGE_EDITORIAL_NO_MATCH",
-    ]
-    assert page_fetcher.calls == []

@@ -117,48 +117,11 @@ class AppConfig(BaseModel):
     output_dir: Path = Field(
         default_factory=lambda: Path(_configured_str("output_dir", "data/output"))
     )
-    intermediate_dir: Path = Field(
-        default_factory=lambda: Path(_configured_str("intermediate_dir", "data/intermediate"))
-    )
-    source_cache_dir: Path = Field(
-        default_factory=lambda: Path(_configured_str("source_cache_dir", "data/cache/fetch"))
-    )
-    source_cache_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_SOURCE_CACHE_ENABLED", True)
-    )
-    publisher_page_cache_dir: Path = Field(
-        default_factory=lambda: Path(
-            _configured_str("publisher_page_cache_dir", "data/cache/publisher_pages")
-        )
-    )
-    publisher_page_cache_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_CACHE_ENABLED", True)
-    )
-    retailer_page_cache_dir: Path = Field(
-        default_factory=lambda: Path(
-            _configured_str("retailer_page_cache_dir", "data/cache/retailer_pages")
-        )
-    )
-    retailer_page_cache_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_RETAILER_PAGE_CACHE_ENABLED", True)
-    )
     publisher_page_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", True)
     )
     retailer_page_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_RETAILER_PAGE_LOOKUP_ENABLED", True)
-    )
-    publisher_page_negative_cache_ttl_seconds: float = Field(
-        default_factory=lambda: _env_float(
-            "BSA_PUBLISHER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",
-            21600.0,
-        )
-    )
-    retailer_page_negative_cache_ttl_seconds: float = Field(
-        default_factory=lambda: _env_float(
-            "BSA_RETAILER_PAGE_NEGATIVE_CACHE_TTL_SECONDS",
-            21600.0,
-        )
     )
     source_request_pause_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)

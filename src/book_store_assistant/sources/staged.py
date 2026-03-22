@@ -5,21 +5,14 @@ from pathlib import Path
 from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.contracts import ISBNInput
 from book_store_assistant.sources.bne import BneSruSource
-from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.google_books import GoogleBooksSource
-from book_store_assistant.sources.intermediate import export_fetch_results, read_fetch_results
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.open_library import OpenLibrarySource
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
 
-STAGED_SOURCE_CACHE_KEY = "staged_fetch_v1"
 StageUpdateCallback = Callable[[str], None]
-
-
-def _stage_output_path(intermediate_dir: Path, input_path: Path, stage_name: str) -> Path:
-    return intermediate_dir / f"{input_path.stem}.{stage_name}.jsonl"
 
 
 def _prefix_result(result: FetchResult, source_name: str) -> FetchResult:
@@ -76,12 +69,6 @@ def _chunked(values: list[str], size: int) -> list[list[str]]:
 
     return [values[index : index + size] for index in range(0, len(values), size)]
 
-
-def _save_and_read_stage(results: list[FetchResult], path: Path) -> list[FetchResult]:
-    export_fetch_results(results, path)
-    return read_fetch_results(path)
-
-
 def _has_text(value: str | None) -> bool:
     return value is not None and bool(value.strip())
 
@@ -107,7 +94,7 @@ def _needs_additional_metadata(result: FetchResult | None) -> bool:
     )
 
 
-def fetch_with_intermediate_stages(
+def fetch_with_stages(
     input_path: Path,
     inputs: list[ISBNInput],
     config: AppConfig,
@@ -115,27 +102,18 @@ def fetch_with_intermediate_stages(
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
-    cache = (
-        FetchResultCache(config.source_cache_dir, STAGED_SOURCE_CACHE_KEY)
-        if config.source_cache_enabled
-        else None
-    )
+    del input_path
     bne = BneSruSource(config)
     open_library = OpenLibrarySource(config)
     google_books = GoogleBooksSource(config)
 
     if on_stage_update is not None:
-        on_stage_update(f"Stage: reading cache for {len(inputs)} ISBNs")
+        on_stage_update(f"Stage: initializing fetch for {len(inputs)} ISBNs")
 
     cache_stage_results = [
-        (cache.get(item.isbn) if cache is not None else None)
-        or FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
+        FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
         for item in inputs
     ]
-    cache_stage_results = _save_and_read_stage(
-        cache_stage_results,
-        _stage_output_path(config.intermediate_dir, input_path, "cache"),
-    )
 
     merged_after_cache = {
         result.isbn: result
@@ -160,13 +138,6 @@ def fetch_with_intermediate_stages(
 
             result = bne.fetch(isbn)
             bne_stage_results.append(result)
-            if cache is not None:
-                cache.set(result)
-
-        bne_stage_results = _save_and_read_stage(
-            bne_stage_results,
-            _stage_output_path(config.intermediate_dir, input_path, "bne"),
-        )
         bne_by_isbn = {
             result.isbn: _prefix_result(result, bne.source_name)
             for result in bne_stage_results
@@ -208,14 +179,6 @@ def fetch_with_intermediate_stages(
 
         batch_results = open_library.fetch_batch(batch)
         open_library_stage_results.extend(batch_results)
-        for result in batch_results:
-            if cache is not None:
-                cache.set(result)
-
-    open_library_stage_results = _save_and_read_stage(
-        open_library_stage_results,
-        _stage_output_path(config.intermediate_dir, input_path, "open_library"),
-    )
     open_library_by_isbn = {
         result.isbn: _prefix_result(result, open_library.source_name)
         for result in open_library_stage_results
@@ -250,13 +213,6 @@ def fetch_with_intermediate_stages(
 
         result = google_books.fetch(isbn)
         google_stage_results.append(result)
-        if cache is not None:
-            cache.set(result)
-
-    google_stage_results = _save_and_read_stage(
-        google_stage_results,
-        _stage_output_path(config.intermediate_dir, input_path, "google_books"),
-    )
     google_by_isbn = {
         result.isbn: _prefix_result(result, google_books.source_name)
         for result in google_stage_results

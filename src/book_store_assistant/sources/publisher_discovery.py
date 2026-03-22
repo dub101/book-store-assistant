@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 
 import httpx
 
-from book_store_assistant.sources.cache import FetchResultCache
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_pages import (
@@ -24,13 +23,10 @@ from book_store_assistant.sources.publisher_pages import (
 from book_store_assistant.sources.results import FetchResult
 
 PublisherDiscoveryStatusCallback = Callable[[str], None]
-PUBLISHER_DISCOVERY_CACHE_KEY = "publisher_discovery_v1"
 
 
 def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
-    synopsis = (record.synopsis or "").strip()
-    has_subject_signal = bool(record.subject) or bool(record.categories)
-    return not record.editorial or not synopsis or not has_subject_signal
+    return not record.title or not record.author or not record.editorial
 
 
 def _run_with_retry(
@@ -142,8 +138,6 @@ def augment_fetch_results_with_publisher_discovery(
     searcher: PublisherPageSearcher | None = None,
     page_fetcher: _DefaultPageFetcher | None = None,
     on_status_update: PublisherDiscoveryStatusCallback | None = None,
-    cache: FetchResultCache | None = None,
-    cache_ttl_seconds: float | None = None,
     max_retries: int = 2,
     backoff_seconds: float = 0.5,
     sleep: Callable[[float], None] = time.sleep,
@@ -151,7 +145,6 @@ def augment_fetch_results_with_publisher_discovery(
     max_fetch_attempts_per_record: int | None = None,
     search_result_limit: int = 5,
 ) -> list[FetchResult]:
-    del cache_ttl_seconds
     with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
         active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds, client=client)
         active_page_fetcher = page_fetcher or _DefaultPageFetcher(timeout_seconds, client=client)
@@ -169,33 +162,6 @@ def augment_fetch_results_with_publisher_discovery(
             record = fetch_result.record
             if record is None or not _needs_publisher_discovery(record):
                 augmented_results.append(fetch_result)
-                continue
-
-            cached_entry = cache.get_entry(record.isbn) if cache is not None else None
-            if cached_entry is not None:
-                cached_result = cached_entry.result
-                if cached_result.record is not None:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "record": _apply_publisher_discovery_record(
-                                    record,
-                                    cached_result.record,
-                                )
-                            }
-                        )
-                    )
-                    continue
-                augmented_results.append(
-                    fetch_result.model_copy(
-                        update={
-                            "issue_codes": _merge_issue_codes(
-                                fetch_result.issue_codes,
-                                cached_result.issue_codes,
-                            )
-                        }
-                    )
-                )
                 continue
 
             if on_status_update is not None:
@@ -308,20 +274,9 @@ def augment_fetch_results_with_publisher_discovery(
                         )
                     }
                 )
-                if cache is not None:
-                    cache.set(failed_result.model_copy(update={"record": None}), allow_empty=True)
                 augmented_results.append(failed_result)
                 continue
 
-            if cache is not None:
-                cache.set(
-                    FetchResult(
-                        isbn=record.isbn,
-                        record=discovered_record,
-                        errors=[],
-                        issue_codes=[],
-                    )
-                )
             augmented_results.append(
                 fetch_result.model_copy(
                     update={

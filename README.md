@@ -1,350 +1,145 @@
 # Book Store Assistant
 
-Book Store Assistant transforms a CSV of ISBNs into:
-- a Geslib-ready Excel workbook for resolved books
-- a review workbook for rows that still need manual attention
+Book Store Assistant is currently focused on Stage 1 of the split pipeline:
 
-The project is optimized for trustworthy resolution rather than maximum yield. It prefers review over invention.
+- input: a CSV with ISBNs
+- output 1: an upload-ready Excel workbook
+- output 2: a JSONL handoff for Stage 2
+- optional output 3: a compact review workbook for rows that still need human attention
+
+The active Stage 1 upload columns are:
+
+- `ISBN`
+- `Title`
+- `Subtitle`
+- `Author`
+- `Editorial`
+- `Publisher`
+
+Stage 1 does not generate synopsis or subject data anymore.
+Those belong to the later Stage 2 pipeline that will consume the JSONL handoff.
 
 ## Goal
 
-The business goal is to automate bookstore intake while preserving metadata quality.
+Stage 1 is optimized for bibliographic correctness first and throughput second.
 
-For a row to be resolved, the pipeline must produce:
+The active runtime does this:
+
+1. Read and normalize ISBNs from CSV.
+2. Fetch bibliographic metadata from deterministic sources.
+3. Use exact-ISBN retailer and publisher web lookup only when bibliographic fields are still incomplete.
+4. Resolve editorial and publisher identity.
+5. Build a candidate upload row with:
+   - `ISBN`
+   - `Title`
+   - `Subtitle`
+   - `Author`
+   - `Editorial`
+   - `Publisher`
+6. Run an LLM validator on the candidate row.
+7. Send accepted rows to the upload workbook.
+8. Send rejected or incomplete rows to the review workbook.
+9. Persist all per-row Stage 1 results to JSONL for Stage 2.
+
+Current rule of thumb:
+
+- deterministic/web lookup may gather evidence
+- the LLM validates only
+- the LLM does not generate metadata for Stage 1
+
+## Current Runtime
+
+The main orchestration entry point is:
+
+- `src/book_store_assistant/pipeline/service.py`
+
+The active CLI entry point is:
+
+- `src/book_store_assistant/cli.py`
+
+Main Stage 1 components:
+
+- `src/book_store_assistant/sources/staged.py`
+  - staged metadata fetch from BNE, Open Library, and Google Books
+- `src/book_store_assistant/sources/retailer_pages.py`
+  - exact-ISBN retailer lookup for missing bibliographic fields
+- `src/book_store_assistant/sources/publisher_pages.py`
+  - publisher page lookup when bibliographic fields are still incomplete
+- `src/book_store_assistant/sources/publisher_discovery.py`
+  - exact-ISBN discovery pass for remaining incomplete rows
+- `src/book_store_assistant/publisher_identity/service.py`
+  - editorial/publisher normalization
+- `src/book_store_assistant/bibliographic/resolution.py`
+  - Stage 1 candidate construction and acceptance/review routing
+- `src/book_store_assistant/resolution/openai_bibliographic_validator.py`
+  - LLM validation for upload rows only
+- `src/book_store_assistant/bibliographic/export.py`
+  - upload Excel, review Excel, and JSONL handoff export
+
+Compact flow:
+
+`Input -> Staged Fetch -> Web Lookup -> Publisher Identity -> Candidate Row -> LLM Validation -> Upload/Review/Handoff`
+
+## Outputs
+
+### Upload Workbook
+
+Sheet name: `Upload`
+
+Columns:
+
 - `ISBN`
 - `Title`
+- `Subtitle`
 - `Author`
 - `Editorial`
-- `Synopsis`
-- `Subject`
-- `SubjectCode`
+- `Publisher`
 
-Additional rules:
-- `Synopsis` must be in Spanish
-- `Subject` must come from the internal bookstore catalog
-- metadata must remain factual
-- unresolved or unsafe rows go to review rather than being guessed
+### Review Workbook
 
-## Current State
+Sheet name: `Review`
 
-Current repository state:
-- the deterministic pipeline is the main path
-- `ai-enriched` only adds grounded synopsis generation and fallback subject mapping
-- the old extra AI record-selection and record-validation passes are not in the runtime hot path
-- retailer and publisher page lookups are now narrowly gated to rows that still lack useful `editorial`, `synopsis`, or subject signal
-- unresolved rows keep diagnostics and raw payload context for manual follow-up
+Columns:
 
-## Execution Modes
+- `ISBN`
+- `Title`
+- `Subtitle`
+- `Author`
+- `Editorial`
+- `Publisher`
+- `Status`
+- `ReasonCode`
+- `ValidatorConfidence`
+- `ReviewNote`
 
-The application supports two modes:
+The review workbook is intentionally minimal.
+Detailed provenance and diagnostics live in the JSONL handoff, not in the spreadsheet.
 
-- `rules-only`
-  - deterministic fetch, merge, page augmentation, and resolution only
-  - no AI synopsis generation
-  - no LLM fallback subject mapping
-  - non-Spanish or missing synopsis still goes to review
+### JSONL Handoff
 
-- `ai-enriched`
-  - runs the same deterministic pipeline first
-  - collects grounded evidence from trusted source data and trusted source pages
-  - may generate a standardized Spanish synopsis when evidence is sufficient
-  - may use LLM subject mapping only when deterministic catalog matching fails
-  - must not make outcomes worse than `rules-only`
+The JSONL handoff contains one serialized Stage 1 result per line.
+It preserves:
 
-Current AI behavior:
-- synopsis generation is grounded by collected evidence only
-- output synopsis text may be standardized in `ai-enriched` when evidence is sufficient
-- subject mapping remains constrained to exact values from the internal catalog
-- the runtime does not currently apply a separate AI record-validation pass after resolution
-- rejected or weak generations stay visible in diagnostics and review output
+- source record data
+- publisher identity
+- validator assessment
+- accepted candidate row when available
+- reason codes and review details
 
-## Pipeline Flow
+This handoff is the intended input boundary for Stage 2.
 
-The main runtime flow is:
+## No Cache Policy
 
-1. Read ISBN inputs from CSV.
-2. Normalize and validate ISBNs.
-3. Read cached fetch results.
-4. Query BNE for rows still missing required metadata when enabled.
-5. Batch query Open Library for rows still missing required metadata.
-6. Query Google Books one by one for rows still missing required metadata or synopsis support.
-7. Merge staged source results conservatively with field provenance and confidence.
-8. Query trusted retailer pages for missing `editorial` when core sources still leave it blank.
-9. Query trusted publisher pages for rows that already have `editorial` but still lack synopsis or subject signal.
-10. Re-run publisher-page lookup for rows whose `editorial` was unlocked by retailer fallback.
-11. Run exact-ISBN publisher discovery for the remaining rows that still need synopsis or subject signal.
-12. Resolve publisher identity separately from edition metadata and attach provenance.
-13. Optionally enrich synopsis data in `ai-enriched` and fall back to LLM subject mapping only during resolution.
-14. Resolve business-required fields.
-15. Split into resolved rows and review rows.
-16. Export workbook outputs.
+The active Stage 1 runtime no longer uses cache files.
 
-The main orchestration entry point is `process_isbn_file()` in `src/book_store_assistant/pipeline/service.py`.
+Removed from the active path:
 
-## Pipeline Components
+- staged fetch cache
+- retailer page cache
+- publisher page cache
+- hidden intermediate stage snapshots
 
-The pipeline is easier to understand if it is viewed as a sequence of explicit components.
-Each component has a bounded responsibility and hands structured data to the next one.
-
-1. Input
-   - Responsibility: read CSV rows, normalize ISBNs, and separate valid from invalid inputs.
-   - Main files:
-     - `src/book_store_assistant/pipeline/input.py`
-     - `src/book_store_assistant/isbn.py`
-
-2. Staged Metadata Fetch
-   - Responsibility: fetch bibliographic metadata in source order using cache, BNE, Open Library, and Google Books.
-   - Main files:
-     - `src/book_store_assistant/sources/staged.py`
-     - `src/book_store_assistant/sources/bne.py`
-     - `src/book_store_assistant/sources/open_library.py`
-     - `src/book_store_assistant/sources/google_books.py`
-
-3. Intermediate Persistence and Source Cache
-   - Responsibility: persist staged fetch results and reuse successful prior fetches across runs.
-   - Main files:
-     - `src/book_store_assistant/sources/cache.py`
-     - `src/book_store_assistant/sources/intermediate.py`
-
-4. Page Augmentation
-   - Responsibility: improve fetched records using retailer editorial fallback, direct publisher-page lookup, and exact-ISBN publisher discovery for rows that still need more signal.
-   - Main files:
-     - `src/book_store_assistant/sources/publisher_pages.py`
-     - `src/book_store_assistant/sources/publisher_discovery.py`
-     - `src/book_store_assistant/sources/retailer_pages.py`
-
-5. Multi-Source Merge
-   - Responsibility: merge source records conservatively with field provenance and confidence.
-   - Main file:
-     - `src/book_store_assistant/sources/merge.py`
-
-6. Publisher Identity Resolution
-   - Responsibility: resolve publisher/imprint identity separately from edition metadata and attach that result to records.
-   - Main files:
-     - `src/book_store_assistant/publisher_identity/service.py`
-     - `src/book_store_assistant/publisher_identity/models.py`
-
-7. Enrichment
-   - Responsibility: collect grounded evidence and, in `ai-enriched`, optionally generate a standardized Spanish synopsis.
-   - Main files:
-     - `src/book_store_assistant/enrichment/service.py`
-     - `src/book_store_assistant/enrichment/evidence.py`
-     - `src/book_store_assistant/enrichment/openai_generator.py`
-
-8. Subject Catalog Loading and Mapping
-   - Responsibility: load the internal bookstore catalog and map source metadata into allowed bookstore subjects only.
-   - Main files:
-     - `src/book_store_assistant/subject_loader.py`
-     - `src/book_store_assistant/subject_mapping.py`
-     - `src/book_store_assistant/subject_selection.py`
-
-9. Resolution
-   - Responsibility: apply business rules to decide whether a row is safely resolved or must be sent to review.
-   - Main files:
-     - `src/book_store_assistant/resolution/service.py`
-     - `src/book_store_assistant/resolution/books.py`
-     - `src/book_store_assistant/resolution/subject_resolution.py`
-     - `src/book_store_assistant/resolution/synopsis_resolution.py`
-
-10. Review Split
-   - Responsibility: separate resolved output rows from unresolved rows that need manual review.
-   - Main files:
-     - `src/book_store_assistant/resolution/books.py`
-     - `src/book_store_assistant/pipeline/review.py`
-
-11. Export
-   - Responsibility: write the resolved workbook and the review workbook.
-   - Main files:
-     - `src/book_store_assistant/pipeline/export.py`
-     - `src/book_store_assistant/pipeline/review_export.py`
-     - `src/book_store_assistant/export/excel.py`
-     - `src/book_store_assistant/export/rows.py`
-     - `src/book_store_assistant/export/schema.py`
-
-12. Orchestration
-   - Responsibility: coordinate the full end-to-end flow and report status to the CLI.
-   - Main files:
-     - `src/book_store_assistant/pipeline/service.py`
-     - `src/book_store_assistant/cli.py`
-
-Compact mental model:
-
-`Input -> Staged Fetch -> Page Augmentation -> Merge -> Publisher Identity -> Enrichment -> Subject Mapping -> Resolution -> Review Split -> Export`
-
-## Architecture
-
-The codebase follows a layered, pipeline-oriented structure.
-
-Core layers:
-- `pipeline/`
-  - orchestration and process-level contracts
-  - coordinates input, fetch, enrichment, resolution, and export
-- `publisher_identity/`
-  - publisher/imprint resolution separated from edition metadata resolution
-  - stores publisher provenance, confidence, and matching method
-- `sources/`
-  - metadata source ports/adapters
-  - provider-specific fetchers, payload parsers, merge logic, and source issue tracking
-- `enrichment/`
-  - evidence collection and synopsis generation
-  - provider wiring for AI-backed enrichment
-- `resolution/`
-  - business rules for synopsis acceptance, subject resolution, and required-field checks
-- `export/`
-  - workbook schemas, row builders, and Excel writing
-- `validation/`
-  - export validation and record-level checks
-
-Shared support modules:
-- `config.py`
-  - application configuration defaults
-- `models.py`
-  - resolved output model
-- `subject_loader.py`, `subject_mapping.py`, `subject_selection.py`
-  - bookstore subject catalog loading and matching
-- `isbn.py`
-  - normalization and validity rules for ISBNs
-
-Architectural intent:
-- schema-first: intermediate results are explicit models
-- ports/adapters: external sources stay isolated from core resolution logic
-- rules-first: deterministic metadata and business rules take priority
-- additive enrichment: AI is used only where it can be grounded and safely constrained
-- auditability-first: chosen metadata stays explainable through field provenance, confidence, and raw payload retention
-
-## Repo Map
-
-Important package entry points:
-- `src/book_store_assistant/cli.py`
-  - Typer CLI entry point
-- `src/book_store_assistant/pipeline/service.py`
-  - end-to-end orchestration
-- `src/book_store_assistant/publisher_identity/service.py`
-  - publisher identity resolution and attachment
-- `src/book_store_assistant/resolution/books.py`
-  - required-field resolution and review routing
-- `src/book_store_assistant/sources/bne.py`
-  - BNE SRU adapter for Spain-first metadata lookup
-- `src/book_store_assistant/sources/google_books.py`
-  - Google Books adapter with retry/backoff
-- `src/book_store_assistant/sources/open_library.py`
-  - Open Library adapter
-- `src/book_store_assistant/export/schema.py`
-  - workbook column contracts
-- `data/reference/subjects.tsv`
-  - internal subject catalog
-
-## Current Backbone Capabilities
-
-Implemented:
-- project scaffold with `pytest`, `ruff`, and `mypy`
-- ISBN normalization and validation
-- CSV ingestion
-- structured pipeline result models
-- BNE, Google Books, and Open Library source adapters
-- staged fetch flow: cache -> BNE -> Open Library -> Google Books
-- JSONL intermediates for staged fetch results
-- successful fetch-result caching
-- separate publisher identity resolution with provenance and confidence
-- conservative multi-source merge with field provenance and field-level confidence
-- structured fetch issue codes
-- Google Books retry/backoff for HTTP `429`
-- retailer-page fallback for missing `editorial`
-- narrowed publisher-page lookup for rows that still need synopsis or subject signal
-- exact-ISBN publisher discovery for remaining eligible rows
-- publisher-page lookup with ISBN-confirmed page parsing
-- negative caching and retry/backoff for publisher-page search/fetch
-- targeted second publisher-page pass after retailer `editorial` recovery
-- deterministic resolution and unresolved/review routing
-- dual execution modes: `rules-only` and `ai-enriched`
-- grounded evidence collection for AI synopsis generation
-- Google Books synopsis fallback through `searchInfo.textSnippet` when `description` is absent
-- constrained AI subject mapping to internal catalog values only
-- stronger deterministic subject resolution from controlled provider terms before LLM fallback
-- baseline-preserving result selection in `ai-enriched`, so worse AI outcomes do not replace better deterministic ones
-- generated synopsis rejection when cited evidence is not descriptively grounded
-- resolved and review Excel export
-- raw upstream payload retention in fetch results and review output for auditing
-- internal subject catalog loading and alias-aware matching
-- CLI progress, status summaries, and degraded-source warnings
-
-Still intentionally out of scope for the backbone:
-- maximizing yield through many more sources
-- broad subject taxonomy expansion beyond curated internal aliases
-- aggressive heuristic guessing of missing metadata
-
-## Output Contracts
-
-Resolved workbook columns:
-- ISBN
-- Title
-- Subtitle
-- Author
-- Editorial
-- Synopsis
-- Subject
-- SubjectCode
-- CoverURL
-
-Review workbook columns:
-- ISBN
-- Title
-- Subtitle
-- Author
-- Editorial
-- Source
-- Language
-- Subject
-- SubjectCode
-- SubjectType
-- Categories
-- CoverURL
-- Synopsis
-- FieldSources
-- SourceIssueCodes
-- EnrichmentStatus
-- EvidenceCount
-- EvidenceOrigins
-- GeneratedSynopsisFlags
-- GeneratedSynopsisText
-- GeneratedSynopsisRaw
-- RawSourcePayload
-- ReasonCodes
-- ReviewDetails
-
-## Subject Catalog Format
-
-The reference subject file lives at `data/reference/subjects.tsv`.
-
-Supported formats:
-- plain canonical subject: `Narrativa`
-- canonical subject with aliases: `Historia | Historical | Historia universal`
-- tabular catalog with `Subject`, `Description`, `Subject_Type`, and optional `Aliases`
-
-Rules:
-- the canonical export value is the subject `Description`
-- `Subject` in the resolved workbook is the human-readable bookstore description
-- `SubjectCode` is the internal bookstore code from the same catalog row
-- optional aliases are accepted for matching but are not exported as resolved subject values
-- blank lines and `#` comments are ignored
-- the current pipeline resolves only book subject types (`L0`)
-- non-book subject types such as `P0` remain in the catalog but are excluded from current subject resolution
-
-Legacy example:
-```text
-# canonical | aliases
-Narrativa | Ficcion | Fiction | Novel
-Historia | Historical | Historia universal
-Infantil | Juvenile | Juvenile Fiction
-```
-
-Tabular example:
-```text
-Subject	Description	Subject_Type	Aliases
-13	FICCION	L0	Fiction | Novel
-1301	LITERATURA Y NOVELA	L0	Literature | Romance literature
-22	PELUCHES Y TITERES	P0
-```
+Runs now reflect live source behavior instead of stale cached data.
 
 ## Development
 
@@ -355,16 +150,19 @@ python -m venv .venv
 ```
 
 Install dependencies:
+
 ```bash
 .venv/bin/pip install -e ".[dev]"
 ```
 
-Run tests:
+Run targeted tests for the current Stage 1 path:
+
 ```bash
-.venv/bin/pytest
+.venv/bin/pytest tests/test_bibliographic_export.py tests/test_resolution_service.py tests/test_pipeline_service.py tests/test_cli.py
 ```
 
-Run lint and type checks:
+Run lint and type checks when needed:
+
 ```bash
 .venv/bin/ruff check .
 .venv/bin/mypy src
@@ -374,56 +172,36 @@ Run lint and type checks:
 
 Non-secret operational settings can live in `bsa.toml`.
 An example file is included as `bsa.toml.example`.
-It shows a minimal working subset rather than every available knob in `AppConfig`.
 
 Configuration precedence:
-1. explicit CLI/runtime arguments
+
+1. explicit CLI arguments
 2. environment variables
 3. `bsa.toml`
 4. code defaults
 
-Recommended:
-- keep non-secret pipeline settings in `bsa.toml`
-- keep secrets such as `OPENAI_API_KEY` in the shell environment
-
 Typical `bsa.toml` settings:
+
 ```toml
 input_dir = "data/input"
 output_dir = "data/output"
-intermediate_dir = "data/intermediate"
-source_cache_dir = "data/cache/fetch"
-retailer_page_cache_dir = "data/cache/retailer_pages"
-publisher_page_cache_dir = "data/cache/publisher_pages"
-source_cache_enabled = true
-bne_lookup_enabled = true
-bne_sru_base_url = "https://catalogo.bne.es/view/sru/34BNE_INST"
-publisher_page_cache_enabled = true
-retailer_page_cache_enabled = true
 publisher_page_lookup_enabled = true
 retailer_page_lookup_enabled = true
-publisher_page_negative_cache_ttl_seconds = 21600
-retailer_page_negative_cache_ttl_seconds = 21600
 publisher_page_timeout_seconds = 3.0
 retailer_page_timeout_seconds = 2.0
 publisher_page_max_retries = 0
 retailer_page_max_retries = 0
 publisher_page_backoff_seconds = 0.5
 retailer_page_backoff_seconds = 0.25
-request_timeout_seconds = 10.0
 source_request_pause_seconds = 0.5
 open_library_batch_size = 25
-execution_mode = "rules-only"
-llm_subject_mapping_enabled = true
-llm_subject_mapping_min_confidence = 0.85
+request_timeout_seconds = 10.0
+llm_record_validation_enabled = true
+llm_record_validation_min_confidence = 0.85
 ```
 
-Current AI config note:
-- `llm_subject_mapping_*` is part of the active `ai-enriched` path
-- `llm_record_validation_*` still exists in `AppConfig`, but it is not wired into the main runtime path today
+Minimum AI environment variables:
 
-Secrets and provider settings still come from the process environment.
-
-Minimum AI variables:
 ```bash
 export OPENAI_API_KEY="sk-..."
 export OPENAI_MODEL="gpt-4o-mini"
@@ -431,271 +209,49 @@ export OPENAI_MODEL="gpt-4o-mini"
 
 The app does not load `.env` files by itself.
 
-Preferred way to run the project:
-- the installed console script is `book-store-assistant`
-- use the optional `bsa` shell helper if you want a shorter command plus repo-specific OpenAI env wiring
-- this repo's shell helper maps `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` to `OPENAI_API_KEY` before launching the CLI
-- this avoids the common mistake where direct `python -m ...` runs miss the API key and silently degrade `ai-enriched` mode
+Preferred helper on this machine:
 
-Recommended helper:
 ```bash
 bsa() {
   cd "$HOME/Documents/projects/pet_projects/book-store-assistant" || return
   OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
-  OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
-  ./.venv/bin/book-store-assistant "$@"
+  OPENAI_MODEL="gpt-4o-mini" \
+  ./.venv/bin/python -m book_store_assistant.cli "$@"
 }
 ```
 
-Important:
-- `bsa.toml` is optional and intended for non-secret settings
-- process environment overrides `bsa.toml`
-- values stored in `.env` are ignored unless you export them into the shell yourself
-- if you do not use `bsa`, export `OPENAI_API_KEY` in the same shell or pass it inline when invoking the CLI
-- publisher-page and retailer-page lookup are enabled by default in normal runs
-- page lookup can be disabled with `BSA_PUBLISHER_PAGE_LOOKUP_ENABLED=0` and `BSA_RETAILER_PAGE_LOOKUP_ENABLED=0`
-- cache TTL, retry/backoff, and timeout remain configurable independently of those lookup toggles
-
-## Current Caveats
-
-- BNE, Open Library, Google Books, publisher search, and retailer search are upstream-dependent and may degrade with timeouts or HTTP `403`/`503`
-- the biggest remaining unresolved buckets in live batches are usually `FETCH_ERROR`, `MISSING_EDITORIAL`, and `MISSING_SUBJECT`
-- publisher and retailer discovery now run in strict exact-ISBN mode only
-- direct publisher-page lookup only runs for rows that already have `editorial` and still need synopsis or subject signal
-- exact-ISBN publisher discovery runs after retailer fallback on the narrowed set of still-incomplete rows
-- publisher pages are trusted only when the fetched HTML explicitly contains the target ISBN
-- retailer fallback exists only to recover exact-ISBN `editorial` data; it is not used as a fuzzy metadata fallback for title/author/synopsis
-- `ai-enriched` helps most when the row already has enough evidence to infer a synopsis or subject; it cannot recover metadata that upstream retrieval never found
-- page-lookup runtime can still be dominated by repeated external search failures before the pipeline even reaches a product page URL
-- output file names passed to the CLI should generally be unsuffixed, for example `sample_3_books.xlsx`
-- running `./.venv/bin/python -m book_store_assistant.cli ...` directly will not see `OPENAI_API_KEY_BOOK_STORE_ASSISTANT` unless you export `OPENAI_API_KEY` in that shell
-- using the `bsa` helper avoids that mismatch
+`bsa` is the preferred way to run the project here because it maps the repo-specific OpenAI key into `OPENAI_API_KEY` before launching the CLI.
 
 ## CLI
 
-The CLI reads ISBNs from a CSV file, runs the pipeline, and can export both resolved and review outputs.
-The packaged command is `book-store-assistant`.
-The `bsa` examples below assume you defined the helper shown in the Configuration section.
+Preferred invocation:
 
-Recommended invocation:
 ```bash
-bsa data/input/sample_1.csv --output data/output/books.xlsx --review-output data/output/review.xlsx
+bsa data/input/sample_1.csv --output data/output/upload.xlsx --review-output data/output/review.xlsx --handoff-output data/output/handoff.jsonl
 ```
 
-Recommended AI-enriched invocation:
+Equivalent direct invocation:
+
 ```bash
-bsa data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
+.venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv --output data/output/upload.xlsx --review-output data/output/review.xlsx --handoff-output data/output/handoff.jsonl
 ```
 
-Equivalent direct CLI form:
-```bash
-.venv/bin/book-store-assistant data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
+Current CLI behavior:
 
-Equivalent module form:
-```bash
-OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
-OPENAI_MODEL="gpt-4o-mini" \
-.venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
-
-Direct invocation note:
-- `bsa` is the safest default because it supplies the project-specific OpenAI key mapping automatically
-- direct `.venv/bin/book-store-assistant` and `.venv/bin/python -m ...` invocations are fine only when `OPENAI_API_KEY` is already exported in that shell
-
-CLI summary behavior:
 - prints valid and invalid input counts
 - prints invalid raw input values
 - prints fetched, resolved, and unresolved counts
-- prints execution mode
 - prints aggregated source issue-code counts
 - warns explicitly when Google Books rate limiting is detected
 - prints unresolved source counts
 - prints unresolved reason-code counts
-- shows fetch progress during long runs
-- logs per-ISBN fetch outcomes during consultation
-- logs per-ISBN enrichment outcomes in `ai-enriched` mode
+- logs per-ISBN fetch outcomes
 - logs per-ISBN final resolution status
 
-Output naming behavior:
-- the CLI appends the execution mode to output filenames
-- `--output data/output/books.xlsx --mode rules-only` writes `data/output/books.rules-only.xlsx`
-- `--output data/output/books.xlsx --mode ai-enriched` writes `data/output/books.ai-enriched.xlsx`
-- the same applies to review files
+If `--output` is provided and `--handoff-output` is omitted, the CLI derives a handoff path automatically by appending `.handoff.jsonl` to the upload workbook stem.
 
-Current `ai-enriched` limitation:
-- AI generation only happens when the pipeline can gather grounded descriptive evidence
-- if no synopsis and no trusted source-page description are available, the row remains unresolved
-- the current bottlenecks are still retrieval quality and evidence coverage, not model availability
+## Notes
 
-Current source-reliability note:
-- Google Books fetches now retry on HTTP 429 responses with exponential backoff
-- if Google Books eventually succeeds after retries, the run still reports the rate-limit issue code in the CLI summary so operators can see upstream degradation
-- rules-only mode now continues to Google Books when synopsis is still missing, even if Open Library already supplied title/author/editorial/categories
-- when `editorial` is still missing after core sources, the pipeline first tries selected retailer domains with exact-ISBN-only search
-- publisher-page lookup and exact-ISBN publisher discovery then run only on the narrowed subset that still lacks synopsis or subject signal
-- retailer-derived `editorial` is kept as lower-confidence provenance than official publisher-page data
-- source review rows now retain raw upstream payload text for audit and debugging
-
-## Demo Run
-
-For a quick demo, use the smaller tracked batch:
-
-```bash
-bsa data/input/sample_1.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
-
-For a larger operator-style demo batch, use:
-
-```bash
-bsa data/input/sample_2.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
-
-If you do not want to use the shell helper:
-
-```bash
-OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
-OPENAI_MODEL="gpt-4o-mini" \
-./.venv/bin/python -m book_store_assistant.cli data/input/sample_2.csv --mode ai-enriched --output data/output/books.xlsx --review-output data/output/review.xlsx
-```
-
-Expected demo outcome:
-- the CLI prints fetch progress, enrichment progress, per-ISBN enrichment/resolution statuses, source issue-code counts, and unresolved reason counts
-- resolved rows are written to `data/output/books.ai-enriched.xlsx`
-- unresolved rows are written to `data/output/review.ai-enriched.xlsx`
-
-## Operator Workflow
-
-Recommended operator flow:
-
-1. Start with `sample_1.csv` for a quick smoke run or use a fresh ISBN file in `data/input/`.
-2. Run `ai-enriched` mode when you want the best safe synopsis coverage.
-3. Check the CLI summary for:
-   - source issue codes
-   - Google Books rate-limit warnings
-   - unresolved reason counts
-4. Review `books.*.xlsx` for resolved rows ready for Geslib import.
-5. Review `review.*.xlsx` for unresolved rows, source diagnostics, and enrichment diagnostics.
-
-Input file hygiene:
-- tracked repo fixtures live as `sample_*.csv`
-- ad hoc operator files in `data/input/` remain ignored by git unless explicitly promoted to tracked samples
-
-## How To Extend The Project
-
-To add a new metadata source:
-- create a new adapter in `src/book_store_assistant/sources/`
-- keep provider-specific parsing inside that adapter or its parser module
-- return structured `FetchResult` data, including issue codes on failures
-- wire the source into the staged fetch flow in `src/book_store_assistant/sources/staged.py`
-- cover it with focused adapter/parser tests
-
-To change business rules:
-- start in `src/book_store_assistant/resolution/`
-- keep deterministic business decisions there rather than in source adapters or the CLI
-
-To change workbook columns:
-- update `src/book_store_assistant/export/schema.py`
-- update row builders in `src/book_store_assistant/export/rows.py`
-- update export validation and tests together
-
-To evolve AI enrichment:
-- keep evidence gathering in `src/book_store_assistant/enrichment/evidence.py`
-- keep generation/provider concerns in `src/book_store_assistant/enrichment/`
-- preserve the rules-first, grounded-only behavior
-
-## Quality Gate
-
-The standard local validation flow is:
-
-```bash
-.venv/bin/ruff check .
-.venv/bin/mypy src
-.venv/bin/pytest
-```
-
-For day-to-day work:
-- make changes in coherent slices
-- stop at stable checkpoints
-- prefer focused tests while iterating
-- run the full quality gate before committing
-
-## Contributor Workflow
-
-Recommended contributor loop:
-
-1. Check `git status --short --branch`.
-2. Read the affected code path before editing.
-3. Make one coherent slice at a time.
-4. Run focused tests while iterating.
-5. Run the full quality gate before committing.
-6. Keep commits split by concern:
-   - runtime behavior
-   - tests
-   - docs when possible
-
-Useful local commands:
-
-```bash
-.venv/bin/ruff check .
-.venv/bin/mypy src
-.venv/bin/pytest
-```
-
-Sample-batch regression tests:
-
-```bash
-.venv/bin/pytest tests/test_sample_batch_regressions.py
-```
-
-## Known Boundaries
-
-This backbone is intentionally conservative.
-
-Current limitations:
-- source availability still affects yield
-- synopsis generation depends on grounded evidence coverage
-- subject matching is limited to the internal catalog and its curated aliases
-- the system prefers review over speculative resolution
-
-## Geslib Import Workflow
-
-Geslib import is currently treated as a column-mapping workflow rather than a fixed Excel template contract.
-
-Recommended mapping for the resolved workbook:
-- Map `ISBN` to the ISBN field in Geslib
-- Map `Title`, `Subtitle`, `Author`, `Editorial`, and `Synopsis` to their corresponding metadata fields
-- Map `Subject` when the Geslib importer expects the human-readable subject description
-- Map `SubjectCode` when the Geslib importer expects the internal bookstore subject code
-- Keep both `Subject` and `SubjectCode` in the export so the operator can choose the correct Geslib target during import
-
-Current operator note:
-- `Subject` is the bookstore subject description from the structured catalog
-- `SubjectCode` is the internal code from the same catalog row
-- `SubjectType` appears only in the review workbook for diagnosis and catalog verification
-- `EnrichmentStatus` appears only in the review workbook for AI-enrichment diagnosis
-- `EvidenceCount` shows how many evidence blocks were collected for that unresolved row
-- `GeneratedSynopsisFlags` shows validation failures when a generated synopsis was rejected
-- `GeneratedSynopsisText` and `GeneratedSynopsisRaw` show the attempted AI synopsis and raw model output when generation was rejected
-- `EvidenceOrigins` shows whether evidence came from direct source metadata, structured provider page data, or scraped provider page text
-- `RawSourcePayload` shows the original upstream payload captured for the unresolved row
-
-## Optional Future Work
-
-The backbone is designed so more trusted sources can be added later without restructuring the core pipeline.
-
-Examples:
-- trusted publisher pages such as Planeta
-- deferred bibliographic adapters such as Cerlalc where they materially improve coverage
-- additional review diagnostics informed by real operator use
-
-Current recommendation:
-- treat source expansion as optional follow-on work
-- preserve the current rules-first, adapter-based design when adding new providers
-
-## Project Structure
-- `src/book_store_assistant/` application code
-- `tests/` automated tests
-- `data/input/` tracked sample CSVs plus ignored ad hoc local input files
-- `data/output/` generated output files
-- `data/reference/subjects.tsv` internal subject catalog
+- `Editorial` and `Publisher` are exported as separate columns in Stage 1.
+- When only one trusted publishing name is available, the validator is allowed to accept the same value in both fields.
+- Stage 2 is intentionally not part of the active runtime yet.
