@@ -98,21 +98,22 @@ def test_app_config_uses_project_data_directories(monkeypatch) -> None:
     assert not hasattr(config, "retailer_page_cache_enabled")
     assert config.publisher_page_lookup_enabled is True
     assert config.retailer_page_lookup_enabled is True
-    assert config.publisher_page_timeout_seconds == 3.0
-    assert config.retailer_page_timeout_seconds == 2.0
+    assert config.publisher_page_timeout_seconds == 6.0
+    assert config.retailer_page_timeout_seconds == 4.0
     assert config.publisher_page_max_retries == 0
     assert config.retailer_page_max_retries == 0
     assert config.publisher_page_backoff_seconds == 0.5
     assert config.retailer_page_backoff_seconds == 0.25
     assert config.publisher_page_max_profiles_per_record == 3
-    assert config.publisher_page_max_search_attempts_per_record == 6
-    assert config.publisher_page_max_fetch_attempts_per_record == 3
-    assert config.retailer_page_max_search_attempts_per_record == 4
-    assert config.retailer_page_max_fetch_attempts_per_record == 2
+    assert config.publisher_page_max_search_attempts_per_record == 8
+    assert config.publisher_page_max_fetch_attempts_per_record == 4
+    assert config.retailer_page_max_search_attempts_per_record == 6
+    assert config.retailer_page_max_fetch_attempts_per_record == 3
     assert config.web_search_fallback_enabled is True
-    assert config.web_search_timeout_seconds == 6.0
-    assert config.web_search_max_search_attempts_per_record == 3
-    assert config.web_search_max_fetch_attempts_per_record == 2
+    assert config.web_search_timeout_seconds == 10.0
+    assert config.web_search_max_pages_per_record == 4
+    assert config.web_search_max_search_attempts_per_record == 5
+    assert config.web_search_max_fetch_attempts_per_record == 4
     assert config.ai_provider == AIProvider.OPENAI
     assert config.openai_api_base_url == "https://api.openai.com/v1"
     assert config.openai_model == "gpt-4o-mini"
@@ -206,19 +207,20 @@ def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatc
     assert not hasattr(config, "retailer_page_cache_enabled")
     assert config.publisher_page_lookup_enabled is True
     assert config.retailer_page_lookup_enabled is True
-    assert config.publisher_page_timeout_seconds == 3.0
-    assert config.retailer_page_timeout_seconds == 2.0
+    assert config.publisher_page_timeout_seconds == 6.0
+    assert config.retailer_page_timeout_seconds == 4.0
     assert config.publisher_page_max_retries == 0
     assert config.retailer_page_max_retries == 0
     assert config.publisher_page_backoff_seconds == 0.5
     assert config.retailer_page_backoff_seconds == 0.25
     assert config.publisher_page_max_profiles_per_record == 3
-    assert config.publisher_page_max_search_attempts_per_record == 6
-    assert config.publisher_page_max_fetch_attempts_per_record == 3
-    assert config.retailer_page_max_search_attempts_per_record == 4
-    assert config.retailer_page_max_fetch_attempts_per_record == 2
+    assert config.publisher_page_max_search_attempts_per_record == 8
+    assert config.publisher_page_max_fetch_attempts_per_record == 4
+    assert config.retailer_page_max_search_attempts_per_record == 6
+    assert config.retailer_page_max_fetch_attempts_per_record == 3
     assert config.request_timeout_seconds == 10.0
     assert config.web_search_fallback_enabled is True
-    assert config.web_search_timeout_seconds == 6.0
-    assert config.web_search_max_search_attempts_per_record == 3
-    assert config.web_search_max_fetch_attempts_per_record == 2
+    assert config.web_search_timeout_seconds == 10.0
+    assert config.web_search_max_pages_per_record == 4
+    assert config.web_search_max_search_attempts_per_record == 5
+    assert config.web_search_max_fetch_attempts_per_record == 4

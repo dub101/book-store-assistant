@@ -138,6 +138,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         record_field_confidence = _seed_field_confidence(record, record_field_sources)
 
         source_name = _merge_source_names(merged.source_name, record.source_name)
+        raw_source_payload = merged.raw_source_payload or record.raw_source_payload
         categories = _merge_string_lists(merged.categories, record.categories)
         title = _merge_scalar_field(
             merged,
@@ -250,6 +251,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
             source_name=source_name,
             isbn=merged.isbn,
             source_url=source_url,
+            raw_source_payload=raw_source_payload,
             title=title,
             subtitle=subtitle,
             author=author,

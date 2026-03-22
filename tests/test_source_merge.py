@@ -168,3 +168,23 @@ def test_merge_source_records_prefers_higher_confidence_values() -> None:
     assert merged.field_sources["editorial"] == "bne"
     assert merged.field_confidence["title"] == 1.0
     assert merged.field_confidence["editorial"] == 1.0
+
+
+def test_merge_source_records_preserves_raw_source_payload() -> None:
+    merged = merge_source_records(
+        [
+            SourceBookRecord(
+                source_name="google_books",
+                isbn="9780306406157",
+                raw_source_payload='{"source":"google"}',
+                title="Example Title",
+            ),
+            SourceBookRecord(
+                source_name="open_library",
+                isbn="9780306406157",
+                editorial="Example Editorial",
+            ),
+        ]
+    )
+
+    assert merged.raw_source_payload == '{"source":"google"}'

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import openpyxl
 
@@ -89,6 +90,7 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
         errors=["LLM validation rejected the bibliographic record."],
         reason_codes=["VALIDATION_REJECTED"],
         review_details=["Title is not well supported by the source evidence."],
+        path_summary={"first_material_gain_stage": "retailer_lookup"},
     )
 
     export_review_rows([result], review_file)
@@ -101,4 +103,5 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
     assert sheet.cell(row=2, column=6).value == "Questionable Publisher"
     assert sheet.cell(row=2, column=8).value == "VALIDATION_REJECTED"
     assert sheet.cell(row=2, column=9).value == "0.45"
-    assert handoff_file.read_text(encoding="utf-8").strip()
+    payload = json.loads(handoff_file.read_text(encoding="utf-8").strip())
+    assert payload["path_summary"]["first_material_gain_stage"] == "retailer_lookup"

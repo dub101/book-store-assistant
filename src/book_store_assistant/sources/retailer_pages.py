@@ -81,6 +81,10 @@ GARBAGE_METADATA_TOKENS = (
     "top más leídos",
     "promociones",
     "comprar libros",
+    "newsletter",
+    "suscr",
+    "correo electrónico",
+    "bandeja de entrada",
 )
 
 
@@ -399,6 +403,16 @@ def _sanitize_retailer_record(record: SourceBookRecord) -> SourceBookRecord | No
     )
 
 
+def _seed_lookup_record(fetch_result: FetchResult) -> SourceBookRecord:
+    if fetch_result.record is not None:
+        return fetch_result.record
+
+    return SourceBookRecord(
+        source_name="fetch_error",
+        isbn=fetch_result.isbn,
+    )
+
+
 def _build_direct_query_urls(record: SourceBookRecord, profile: RetailerProfile) -> list[str]:
     encoded_isbn = quote(record.isbn, safe="")
     return [template.format(isbn=encoded_isbn) for template in profile.direct_query_urls]
@@ -470,10 +484,6 @@ def extract_retailer_page_record(
 
 def _needs_retailer_metadata_lookup(record: SourceBookRecord) -> bool:
     return not record.title or not record.editorial or not record.author
-
-
-def build_retailer_search_query(record: SourceBookRecord) -> str:
-    return f'"{record.isbn}"'
 
 
 def build_retailer_search_queries(record: SourceBookRecord) -> list[str]:
@@ -550,10 +560,8 @@ def augment_fetch_results_with_retailer_editorials(
             )
 
         for index, fetch_result in enumerate(fetch_results, start=1):
-            record = fetch_result.record
-            if record is None:
-                augmented_results.append(fetch_result)
-                continue
+            base_record = fetch_result.record
+            record = _seed_lookup_record(fetch_result)
 
             force_lookup = force_lookup_isbns is not None and record.isbn in force_lookup_isbns
             if not force_lookup and not _needs_retailer_metadata_lookup(record):
@@ -567,10 +575,26 @@ def augment_fetch_results_with_retailer_editorials(
 
             attempted_fetch_urls: list[str] = []
             fetched_domains: list[str] = []
+            attempted_search_queries: list[str] = []
+            attempted_search_domains: list[list[str]] = []
+            candidate_urls: list[str] = []
             direct_query_urls_by_profile = {
                 profile.key: set(_build_direct_query_urls(record, profile))
                 for profile in SUPPORTED_RETAILERS
             }
+
+            def _search_with_trace(
+                query: str,
+                allowed_domains: tuple[str, ...],
+                limit: int = SEARCH_RESULT_LIMIT,
+            ) -> list[str]:
+                attempted_search_queries.append(query)
+                attempted_search_domains.append(list(allowed_domains))
+                result_urls = active_searcher.search(query, allowed_domains, limit)
+                for result_url in result_urls:
+                    if result_url not in candidate_urls:
+                        candidate_urls.append(result_url)
+                return result_urls
 
             def _fetch_with_trace(url: str) -> str | None:
                 attempted_fetch_urls.append(url)
@@ -587,7 +611,7 @@ def augment_fetch_results_with_retailer_editorials(
                 ),
                 direct_query_urls=_build_direct_query_urls,
                 extract_record=extract_retailer_page_record,
-                search=active_searcher.search,
+                search=_search_with_trace,
                 fetch_text=_fetch_with_trace,
                 run_with_retry=_run_with_retry,
                 rank_candidate_urls=_rank_candidate_urls,
@@ -628,8 +652,12 @@ def augment_fetch_results_with_retailer_editorials(
                     "retailer_lookup",
                     "completed",
                     forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
                     retailer_domains_fetched=fetched_domains,
-                    retailer_fetch_count=len(attempted_fetch_urls),
+                    fetch_attempts=len(attempted_fetch_urls),
                     retailer_match=False,
                     agapea_direct_success=False,
                     issue_codes=retailer_issue_codes,
@@ -656,16 +684,24 @@ def augment_fetch_results_with_retailer_editorials(
                 augmented_results.append(failed_result)
                 continue
 
-            merged_record = apply_retailer_editorial_record(record, retailer_record)
-            changed_fields = changed_record_fields(record, merged_record)
+            merged_record = (
+                apply_retailer_editorial_record(base_record, retailer_record)
+                if base_record is not None
+                else merge_source_records([retailer_record])
+            )
+            changed_fields = changed_record_fields(base_record, merged_record)
             augmented_results.append(
                 with_diagnostic(
                     fetch_result,
                     "retailer_lookup",
                     "completed",
                     forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
                     retailer_domains_fetched=fetched_domains,
-                    retailer_fetch_count=len(attempted_fetch_urls),
+                    fetch_attempts=len(attempted_fetch_urls),
                     retailer_match=True,
                     retailer_source=retailer_record.source_name,
                     retailer_editorial=retailer_record.editorial,

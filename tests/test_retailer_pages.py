@@ -7,7 +7,6 @@ from book_store_assistant.sources.retailer_pages import (
     apply_retailer_editorial_record,
     augment_fetch_results_with_retailer_editorials,
     build_retailer_search_queries,
-    build_retailer_search_query,
     extract_retailer_page_record,
 )
 
@@ -57,18 +56,6 @@ class StubPageFetcher:
 class RaisingSearcher:
     def search(self, query: str, allowed_domains: tuple[str, ...], limit: int = 3) -> list[str]:
         raise httpx.TimeoutException("search timed out")
-
-
-def test_build_retailer_search_query_uses_exact_isbn_only() -> None:
-    query = build_retailer_search_query(
-        SourceBookRecord(
-            source_name="google_books",
-            isbn="9780306406157",
-            title="Libro de prueba",
-            author="Autora Ejemplo",
-        )
-    )
-    assert query == '"9780306406157"'
 
 
 def test_build_retailer_search_queries_use_collected_record_context() -> None:
@@ -170,3 +157,31 @@ def test_augment_fetch_results_with_retailer_editorials_records_issue_codes_on_f
 
     assert augmented[0].record is not None
     assert "RETAILER_PAGE_SEARCH_TIMEOUT" in augmented[0].issue_codes
+
+
+def test_augment_fetch_results_with_retailer_editorials_recovers_from_fetch_error() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=None,
+            errors=["google_books: No Google Books match found."],
+            issue_codes=["GOOGLE_BOOKS:GOOGLE_BOOKS_NO_MATCH"],
+        )
+    ]
+    page_url = "https://www.casadellibro.com/libro/123"
+    searcher = StubSearcher([page_url])
+    page_fetcher = StubPageFetcher({page_url: CASA_HTML})
+
+    augmented = augment_fetch_results_with_retailer_editorials(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.title == "Libro de prueba"
+    assert augmented[0].record.author == "Autora Ejemplo"
+    assert augmented[0].record.editorial == "Planeta"
+    assert augmented[0].record.field_sources["editorial"] == "retailer_page:casa_del_libro"

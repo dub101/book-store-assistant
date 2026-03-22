@@ -20,7 +20,7 @@ SAMPLE_2_PATH = PROJECT_ROOT / "data" / "input" / "sample_2.csv"
 
 
 class AcceptingValidator:
-    def validate(self, source_record, candidate_record):
+    def validate(self, source_record, candidate_record, publisher_identity=None):
         return RecordValidationAssessment(accepted=True, confidence=0.97)
 
 
@@ -132,6 +132,9 @@ def test_sample_1_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
             SAMPLE_1_PATH,
             source=FixtureBatchSource("sample_1", fixture_isbns),
             config=AppConfig(
+                retailer_page_lookup_enabled=False,
+                publisher_page_lookup_enabled=False,
+                web_search_fallback_enabled=False,
                 publisher_page_timeout_seconds=0.01,
                 publisher_page_max_retries=0,
                 publisher_page_backoff_seconds=0.0,
@@ -168,6 +171,9 @@ def test_sample_2_batch_regression_in_stage_1_mode(tmp_path: Path) -> None:
             SAMPLE_2_PATH,
             source=FixtureBatchSource("sample_2", fixture_isbns),
             config=AppConfig(
+                retailer_page_lookup_enabled=False,
+                publisher_page_lookup_enabled=False,
+                web_search_fallback_enabled=False,
                 publisher_page_timeout_seconds=0.01,
                 publisher_page_max_retries=0,
                 publisher_page_backoff_seconds=0.0,

@@ -27,7 +27,7 @@ class DummySource:
 
 
 class AcceptingValidator:
-    def validate(self, source_record, candidate_record):
+    def validate(self, source_record, candidate_record, publisher_identity=None):
         assert candidate_record.title == "Example Title"
         return RecordValidationAssessment(accepted=True, confidence=0.97)
 

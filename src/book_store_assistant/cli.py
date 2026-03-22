@@ -54,6 +54,16 @@ def _count_source_issue_codes(fetch_results: list[FetchResult]) -> Counter[str]:
     )
 
 
+def _count_first_material_gain_stages(
+    resolution_results: list[ResolutionResult],
+) -> Counter[str]:
+    return Counter(
+        result.path_summary.get("first_material_gain_stage")
+        for result in resolution_results
+        if isinstance(result.path_summary.get("first_material_gain_stage"), str)
+    )
+
+
 @app.command()
 def main(
     input_path: Path,
@@ -128,6 +138,12 @@ def main(
 
     typer.echo(f"Resolved records: {resolved_count}")
     typer.echo(f"Unresolved records: {unresolved_count}")
+
+    first_gain_counts = _count_first_material_gain_stages(result.resolution_results)
+    if first_gain_counts:
+        typer.echo("First material gain by stage:")
+        for stage_name, count in sorted(first_gain_counts.items()):
+            typer.echo(f"- {stage_name}: {count}")
 
     if unresolved_results:
         source_counts = Counter(

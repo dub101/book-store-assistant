@@ -125,10 +125,10 @@ class AppConfig(BaseModel):
     )
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
     publisher_page_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 3.0)
+        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 6.0)
     )
     retailer_page_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_TIMEOUT_SECONDS", 2.0)
+        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_TIMEOUT_SECONDS", 4.0)
     )
     publisher_page_max_retries: int = Field(
         default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_RETRIES", 0)
@@ -148,25 +148,25 @@ class AppConfig(BaseModel):
     publisher_page_max_search_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_PUBLISHER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            6,
+            8,
         )
     )
     publisher_page_max_fetch_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_PUBLISHER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            3,
+            4,
         )
     )
     retailer_page_max_search_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_RETAILER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            4,
+            6,
         )
     )
     retailer_page_max_fetch_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_RETAILER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            2,
+            3,
         )
     )
     request_timeout_seconds: float = Field(
@@ -182,21 +182,21 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_bool("BSA_WEB_SEARCH_FALLBACK_ENABLED", True)
     )
     web_search_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_WEB_SEARCH_TIMEOUT_SECONDS", 6.0)
+        default_factory=lambda: _env_float("BSA_WEB_SEARCH_TIMEOUT_SECONDS", 10.0)
     )
     web_search_max_pages_per_record: int = Field(
-        default_factory=lambda: _env_int("BSA_WEB_SEARCH_MAX_PAGES_PER_RECORD", 3)
+        default_factory=lambda: _env_int("BSA_WEB_SEARCH_MAX_PAGES_PER_RECORD", 4)
     )
     web_search_max_search_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_WEB_SEARCH_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            3,
+            5,
         )
     )
     web_search_max_fetch_attempts_per_record: int = Field(
         default_factory=lambda: _env_int(
             "BSA_WEB_SEARCH_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            2,
+            4,
         )
     )
     web_search_backoff_seconds: float = Field(

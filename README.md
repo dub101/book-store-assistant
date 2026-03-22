@@ -27,25 +27,26 @@ The active runtime does this:
 
 1. Read and normalize ISBNs from CSV.
 2. Fetch bibliographic metadata from deterministic sources.
-3. Use exact-ISBN retailer and publisher web lookup only when bibliographic fields are still incomplete.
-4. Resolve editorial and publisher identity.
-5. Build a candidate upload row with:
+3. Run a grounded web-retrieval pass when Stage 1 fields are still incomplete.
+4. Use exact-ISBN retailer and publisher web lookup to confirm or fill remaining gaps.
+5. Resolve editorial and publisher identity.
+6. Build a candidate upload row with:
    - `ISBN`
    - `Title`
    - `Subtitle`
    - `Author`
    - `Editorial`
    - `Publisher`
-6. Run an LLM validator on the candidate row.
-7. Send accepted rows to the upload workbook.
-8. Send rejected or incomplete rows to the review workbook.
-9. Persist all per-row Stage 1 results to JSONL for Stage 2.
+7. Run an LLM validator on the candidate row.
+8. Send accepted rows to the upload workbook.
+9. Send rejected or incomplete rows to the review workbook.
+10. Persist all per-row Stage 1 results to JSONL for Stage 2.
 
 Current rule of thumb:
 
-- deterministic/web lookup may gather evidence
-- the LLM validates only
-- the LLM does not generate metadata for Stage 1
+- deterministic sources remain the first pass
+- grounded web retrieval may propose Stage 1 fields, but later retailer/publisher checks still run
+- the final upload row still goes through validation before acceptance
 
 ## Current Runtime
 
@@ -61,6 +62,8 @@ Main Stage 1 components:
 
 - `src/book_store_assistant/sources/staged.py`
   - staged metadata fetch from BNE, Open Library, and Google Books
+- `src/book_store_assistant/sources/web_search.py`
+  - grounded web retrieval and evidence-backed extraction for incomplete rows
 - `src/book_store_assistant/sources/retailer_pages.py`
   - exact-ISBN retailer lookup for missing bibliographic fields
 - `src/book_store_assistant/sources/publisher_pages.py`
@@ -78,7 +81,7 @@ Main Stage 1 components:
 
 Compact flow:
 
-`Input -> Staged Fetch -> Web Lookup -> Publisher Identity -> Candidate Row -> LLM Validation -> Upload/Review/Handoff`
+`Input -> Staged Fetch -> Grounded Web Retrieval -> Retailer / Publisher Checks -> Publisher Identity -> Candidate Row -> LLM Validation -> Upload/Review/Handoff`
 
 ## Outputs
 
@@ -125,6 +128,7 @@ It preserves:
 - validator assessment
 - accepted candidate row when available
 - reason codes and review details
+- per-stage diagnostics and a path summary of where the row improved
 
 This handoff is the intended input boundary for Stage 2.
 
@@ -187,12 +191,20 @@ input_dir = "data/input"
 output_dir = "data/output"
 publisher_page_lookup_enabled = true
 retailer_page_lookup_enabled = true
-publisher_page_timeout_seconds = 3.0
-retailer_page_timeout_seconds = 2.0
+publisher_page_timeout_seconds = 6.0
+retailer_page_timeout_seconds = 4.0
 publisher_page_max_retries = 0
 retailer_page_max_retries = 0
 publisher_page_backoff_seconds = 0.5
 retailer_page_backoff_seconds = 0.25
+publisher_page_max_search_attempts_per_record = 8
+publisher_page_max_fetch_attempts_per_record = 4
+retailer_page_max_search_attempts_per_record = 6
+retailer_page_max_fetch_attempts_per_record = 3
+web_search_timeout_seconds = 10.0
+web_search_max_pages_per_record = 4
+web_search_max_search_attempts_per_record = 5
+web_search_max_fetch_attempts_per_record = 4
 source_request_pause_seconds = 0.5
 open_library_batch_size = 25
 request_timeout_seconds = 10.0

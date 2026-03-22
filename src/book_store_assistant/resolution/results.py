@@ -19,3 +19,4 @@ class ResolutionResult(BaseModel):
     reason_codes: list[str] = Field(default_factory=list)
     review_details: list[str] = Field(default_factory=list)
     diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+    path_summary: dict[str, Any] = Field(default_factory=dict)

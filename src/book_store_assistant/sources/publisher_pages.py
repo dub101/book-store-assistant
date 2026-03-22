@@ -12,6 +12,7 @@ import httpx
 from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.isbn import normalize_isbn
+from book_store_assistant.sources.diagnostics import changed_record_fields, with_diagnostic
 from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
@@ -1329,14 +1330,40 @@ def augment_fetch_results_with_publisher_pages(
                     f"Publisher lookup {index}/{len(fetch_results)}: {record.isbn}"
                 )
 
+            attempted_search_queries: list[str] = []
+            attempted_search_domains: list[list[str]] = []
+            candidate_urls: list[str] = []
+            attempted_fetch_urls: list[str] = []
+            fetched_domains: list[str] = []
+
+            def _search_with_trace(
+                query: str,
+                allowed_domains: tuple[str, ...],
+                limit: int = SEARCH_RESULT_LIMIT,
+            ) -> list[str]:
+                attempted_search_queries.append(query)
+                attempted_search_domains.append(list(allowed_domains))
+                result_urls = active_searcher.search(query, allowed_domains, limit)
+                for result_url in result_urls:
+                    if result_url not in candidate_urls:
+                        candidate_urls.append(result_url)
+                return result_urls
+
+            def _fetch_with_trace(url: str) -> str | None:
+                attempted_fetch_urls.append(url)
+                hostname = (urlparse(url).hostname or "").casefold()
+                if hostname and hostname not in fetched_domains:
+                    fetched_domains.append(hostname)
+                return active_page_fetcher.fetch_text(url)
+
             publisher_record, raw_issue_codes = lookup_exact_page_record(
                 record,
                 candidate_profiles,
                 search_queries=build_publisher_search_queries,
                 direct_query_urls=lambda _record, _profile: [],
                 extract_record=extract_publisher_page_record,
-                search=active_searcher.search,
-                fetch_text=active_page_fetcher.fetch_text,
+                search=_search_with_trace,
+                fetch_text=_fetch_with_trace,
                 run_with_retry=_run_with_retry,
                 rank_candidate_urls=_rank_candidate_urls,
                 is_allowed_domain=_is_allowed_domain,
@@ -1356,7 +1383,21 @@ def augment_fetch_results_with_publisher_pages(
             ]
 
             if publisher_record is None:
-                failed_result = fetch_result.model_copy(
+                failed_result = with_diagnostic(
+                    fetch_result,
+                    "publisher_pages",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=len(attempted_fetch_urls),
+                    publisher_match=False,
+                    publisher_profiles=[profile.key for profile in candidate_profiles],
+                    issue_codes=publisher_issue_codes,
+                ).model_copy(
                     update={
                         "issue_codes": _merge_issue_codes(
                             fetch_result.issue_codes,
@@ -1368,9 +1409,31 @@ def augment_fetch_results_with_publisher_pages(
                 augmented_results.append(failed_result)
                 continue
 
+            merged_record = apply_publisher_page_record(record, publisher_record)
             augmented_results.append(
-                fetch_result.model_copy(
-                    update={"record": apply_publisher_page_record(record, publisher_record)}
+                with_diagnostic(
+                    fetch_result,
+                    "publisher_pages",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=len(attempted_fetch_urls),
+                    publisher_match=True,
+                    publisher_source=publisher_record.source_name,
+                    publisher_editorial=publisher_record.editorial,
+                    publisher_source_url=(
+                        str(publisher_record.source_url)
+                        if publisher_record.source_url is not None
+                        else None
+                    ),
+                    publisher_profiles=[profile.key for profile in candidate_profiles],
+                    changed_fields=changed_record_fields(record, merged_record),
+                ).model_copy(
+                    update={"record": merged_record}
                 )
             )
 

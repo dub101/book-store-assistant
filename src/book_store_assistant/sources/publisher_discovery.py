@@ -4,7 +4,9 @@ from urllib.parse import urlparse
 
 import httpx
 
+from book_store_assistant.sources.diagnostics import changed_record_fields, with_diagnostic
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
+from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.publisher_pages import (
     SUPPORTED_PUBLISHERS,
@@ -32,6 +34,16 @@ PublisherDiscoveryStatusCallback = Callable[[str], None]
 
 def _needs_publisher_discovery(record: SourceBookRecord) -> bool:
     return not record.title or not record.author or not record.editorial
+
+
+def _seed_lookup_record(fetch_result: FetchResult) -> SourceBookRecord:
+    if fetch_result.record is not None:
+        return fetch_result.record
+
+    return SourceBookRecord(
+        source_name="fetch_error",
+        isbn=fetch_result.isbn,
+    )
 
 
 def _run_with_retry(
@@ -186,10 +198,8 @@ def augment_fetch_results_with_publisher_discovery(
             )
 
         for index, fetch_result in enumerate(fetch_results, start=1):
-            record = fetch_result.record
-            if record is None:
-                augmented_results.append(fetch_result)
-                continue
+            base_record = fetch_result.record
+            record = _seed_lookup_record(fetch_result)
 
             force_lookup = force_lookup_isbns is not None and record.isbn in force_lookup_isbns
             if not force_lookup and not _needs_publisher_discovery(record):
@@ -204,6 +214,9 @@ def augment_fetch_results_with_publisher_discovery(
             search_attempts = 0
             fetch_attempts = 0
             candidate_urls: list[str] = []
+            fetched_domains: list[str] = []
+            attempted_search_queries: list[str] = []
+            attempted_search_domains: list[list[str]] = []
             search_issue_codes: list[str] = []
             queries = build_publisher_discovery_search_queries(record)
             for allowed_domains in search_domain_groups:
@@ -214,6 +227,9 @@ def augment_fetch_results_with_publisher_discovery(
                         and search_attempts >= max_search_attempts_per_record
                     ):
                         break
+
+                    attempted_search_queries.append(query)
+                    attempted_search_domains.append(list(allowed_domains))
 
                     def _search_query() -> list[str]:
                         return active_searcher.search(query, allowed_domains, search_result_limit)
@@ -267,6 +283,9 @@ def augment_fetch_results_with_publisher_discovery(
                     sleep,
                 )
                 fetch_attempts += 1
+                hostname = (urlparse(candidate_url).hostname or "").casefold()
+                if hostname and hostname not in fetched_domains:
+                    fetched_domains.append(hostname)
                 discovered_issue_codes = _merge_issue_codes(discovered_issue_codes, issue_codes)
                 if page_html is None or not isinstance(page_html, str):
                     continue
@@ -295,14 +314,29 @@ def augment_fetch_results_with_publisher_discovery(
                     break
 
             if discovered_record is None:
-                failed_result = fetch_result.model_copy(
+                publisher_issue_codes = [
+                    _publisher_lookup_issue_code(code)
+                    for code in discovered_issue_codes
+                ]
+                failed_result = with_diagnostic(
+                    fetch_result,
+                    "publisher_discovery",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=search_attempts,
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=fetch_attempts,
+                    publisher_match=False,
+                    publisher_profiles=[profile.key for profile in SUPPORTED_PUBLISHERS],
+                    issue_codes=publisher_issue_codes,
+                ).model_copy(
                     update={
                         "issue_codes": _merge_issue_codes(
                             fetch_result.issue_codes,
-                            [
-                                _publisher_lookup_issue_code(code)
-                                for code in discovered_issue_codes
-                            ],
+                            publisher_issue_codes,
                             [no_match_issue_code("publisher_page")],
                         )
                     }
@@ -310,11 +344,35 @@ def augment_fetch_results_with_publisher_discovery(
                 augmented_results.append(failed_result)
                 continue
 
+            merged_record = (
+                _apply_publisher_discovery_record(base_record, discovered_record)
+                if base_record is not None
+                else merge_source_records([discovered_record])
+            )
             augmented_results.append(
-                fetch_result.model_copy(
-                    update={
-                        "record": _apply_publisher_discovery_record(record, discovered_record)
-                    }
+                with_diagnostic(
+                    fetch_result,
+                    "publisher_discovery",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=search_attempts,
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=fetch_attempts,
+                    publisher_match=True,
+                    publisher_source=discovered_record.source_name,
+                    publisher_editorial=discovered_record.editorial,
+                    publisher_source_url=(
+                        str(discovered_record.source_url)
+                        if discovered_record.source_url is not None
+                        else None
+                    ),
+                    publisher_profiles=[profile.key for profile in SUPPORTED_PUBLISHERS],
+                    changed_fields=changed_record_fields(base_record, merged_record),
+                ).model_copy(
+                    update={"record": merged_record}
                 )
             )
 

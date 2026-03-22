@@ -99,3 +99,30 @@ def test_publisher_discovery_queries_use_collected_record_context() -> None:
         '"9788401027970" "El nino que perdio la guerra" "Julia Navarro"',
         '"9788401027970"',
     ]
+
+
+def test_publisher_discovery_recovers_from_fetch_error() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9788401027970",
+            record=None,
+            errors=["google_books: No Google Books match found."],
+            issue_codes=["GOOGLE_BOOKS:GOOGLE_BOOKS_NO_MATCH"],
+        )
+    ]
+    page_url = "https://www.penguinlibros.com/es/narrativa/123456-el-nino-que-perdio-la-guerra"
+    searcher = StubSearcher([page_url])
+    page_fetcher = StubPageFetcher({page_url: PENGUIN_HTML})
+
+    augmented = augment_fetch_results_with_publisher_discovery(
+        fetch_results,
+        timeout_seconds=1.0,
+        searcher=searcher,
+        page_fetcher=page_fetcher,
+        max_retries=0,
+    )
+
+    assert augmented[0].record is not None
+    assert augmented[0].record.title == "El nino que perdio la guerra"
+    assert augmented[0].record.author == "Julia Navarro"
+    assert augmented[0].record.editorial == "Plaza & Janes"

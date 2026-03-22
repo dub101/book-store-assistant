@@ -177,7 +177,11 @@ def resolve_bibliographic_record(
             review_details=[review_note],
         )
 
-    assessment = validator.validate(source_record, candidate_record)
+    assessment = validator.validate(
+        source_record,
+        candidate_record,
+        publisher_identity=publisher_identity,
+    )
     if assessment is None:
         review_note = "LLM validator returned no decision."
         return ResolutionResult(

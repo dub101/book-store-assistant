@@ -127,6 +127,16 @@ def _annotate_stage_updates(
     return annotated_results
 
 
+def _run_augmented_stage(
+    fetch_results: list[FetchResult],
+    stage_name: str,
+    runner: Callable[[list[FetchResult]], list[FetchResult]],
+) -> list[FetchResult]:
+    previous_results = [result.model_copy(deep=True) for result in fetch_results]
+    current_results = runner(fetch_results)
+    return _annotate_stage_updates(previous_results, current_results, stage_name)
+
+
 def _retailer_unlocked_publisher_lookup(
     result: FetchResult,
     previous_editorial: str | None,
@@ -192,27 +202,26 @@ def process_isbn_file(
     web_search_unlocked_isbns: set[str] = set()
     if app_config.web_search_fallback_enabled:
         fetch_results_before_web_search = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_web_search(
-            fetch_results,
-            timeout_seconds=app_config.web_search_timeout_seconds,
-            extractor=extractor,
-            on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.web_search_backoff_seconds,
-            max_pages_per_record=app_config.web_search_max_pages_per_record,
-            max_search_attempts_per_record=(
-                app_config.web_search_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.web_search_max_fetch_attempts_per_record
-            ),
-            allow_contextual_matches=True,
-            status_label="preliminary",
-        )
-        fetch_results = _annotate_stage_updates(
-            fetch_results_before_web_search,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "web_search_preliminary",
+            lambda current_results: augment_fetch_results_with_web_search(
+                current_results,
+                timeout_seconds=app_config.web_search_timeout_seconds,
+                extractor=extractor,
+                on_status_update=on_status_update,
+                max_retries=app_config.publisher_page_max_retries,
+                backoff_seconds=app_config.web_search_backoff_seconds,
+                max_pages_per_record=app_config.web_search_max_pages_per_record,
+                max_search_attempts_per_record=(
+                    app_config.web_search_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.web_search_max_fetch_attempts_per_record
+                ),
+                allow_contextual_matches=True,
+                status_label="preliminary",
+            ),
         )
         web_search_unlocked_isbns = _web_search_unlocked_isbns(
             fetch_results_before_web_search,
@@ -223,25 +232,23 @@ def process_isbn_file(
         for result in fetch_results
     }
     if app_config.retailer_page_lookup_enabled:
-        retailer_before = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_retailer_editorials(
-            fetch_results,
-            timeout_seconds=app_config.retailer_page_timeout_seconds,
-            on_status_update=on_status_update,
-            max_retries=app_config.retailer_page_max_retries,
-            backoff_seconds=app_config.retailer_page_backoff_seconds,
-            max_search_attempts_per_record=(
-                app_config.retailer_page_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.retailer_page_max_fetch_attempts_per_record
-            ),
-            force_lookup_isbns=web_search_unlocked_isbns,
-        )
-        fetch_results = _annotate_stage_updates(
-            retailer_before,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "retailer_lookup",
+            lambda current_results: augment_fetch_results_with_retailer_editorials(
+                current_results,
+                timeout_seconds=app_config.retailer_page_timeout_seconds,
+                on_status_update=on_status_update,
+                max_retries=app_config.retailer_page_max_retries,
+                backoff_seconds=app_config.retailer_page_backoff_seconds,
+                max_search_attempts_per_record=(
+                    app_config.retailer_page_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.retailer_page_max_fetch_attempts_per_record
+                ),
+                force_lookup_isbns=web_search_unlocked_isbns,
+            ),
         )
     publisher_candidate_isbns = {
         result.isbn
@@ -262,94 +269,86 @@ def process_isbn_file(
         publisher_candidate_isbns - retailer_unlocked_isbns
     ) | web_search_unlocked_isbns
     if app_config.publisher_page_lookup_enabled and initial_publisher_candidate_isbns:
-        publisher_pages_before = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_publisher_pages(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
-            eligible_isbns=initial_publisher_candidate_isbns,
-            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
-            max_search_attempts_per_record=(
-                app_config.publisher_page_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.publisher_page_max_fetch_attempts_per_record
-            ),
-            force_lookup_isbns=web_search_unlocked_isbns,
-        )
-        fetch_results = _annotate_stage_updates(
-            publisher_pages_before,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "publisher_pages",
+            lambda current_results: augment_fetch_results_with_publisher_pages(
+                current_results,
+                timeout_seconds=app_config.publisher_page_timeout_seconds,
+                on_status_update=on_status_update,
+                max_retries=app_config.publisher_page_max_retries,
+                backoff_seconds=app_config.publisher_page_backoff_seconds,
+                eligible_isbns=initial_publisher_candidate_isbns,
+                max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+                max_search_attempts_per_record=(
+                    app_config.publisher_page_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.publisher_page_max_fetch_attempts_per_record
+                ),
+                force_lookup_isbns=web_search_unlocked_isbns,
+            ),
         )
     if app_config.publisher_page_lookup_enabled and retailer_unlocked_isbns:
-        publisher_pages_before = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_publisher_pages(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
-            eligible_isbns=retailer_unlocked_isbns,
-            max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
-            max_search_attempts_per_record=(
-                app_config.publisher_page_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.publisher_page_max_fetch_attempts_per_record
-            ),
-            force_lookup_isbns=web_search_unlocked_isbns,
-        )
-        fetch_results = _annotate_stage_updates(
-            publisher_pages_before,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "publisher_pages",
+            lambda current_results: augment_fetch_results_with_publisher_pages(
+                current_results,
+                timeout_seconds=app_config.publisher_page_timeout_seconds,
+                on_status_update=on_status_update,
+                max_retries=app_config.publisher_page_max_retries,
+                backoff_seconds=app_config.publisher_page_backoff_seconds,
+                eligible_isbns=retailer_unlocked_isbns,
+                max_profiles_per_record=app_config.publisher_page_max_profiles_per_record,
+                max_search_attempts_per_record=(
+                    app_config.publisher_page_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.publisher_page_max_fetch_attempts_per_record
+                ),
+                force_lookup_isbns=web_search_unlocked_isbns,
+            ),
         )
     if app_config.publisher_page_lookup_enabled:
-        publisher_discovery_before = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_publisher_discovery(
-            fetch_results,
-            timeout_seconds=app_config.publisher_page_timeout_seconds,
-            on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.publisher_page_backoff_seconds,
-            max_search_attempts_per_record=(
-                app_config.publisher_page_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.publisher_page_max_fetch_attempts_per_record
-            ),
-            force_lookup_isbns=web_search_unlocked_isbns,
-        )
-        fetch_results = _annotate_stage_updates(
-            publisher_discovery_before,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "publisher_discovery",
+            lambda current_results: augment_fetch_results_with_publisher_discovery(
+                current_results,
+                timeout_seconds=app_config.publisher_page_timeout_seconds,
+                on_status_update=on_status_update,
+                max_retries=app_config.publisher_page_max_retries,
+                backoff_seconds=app_config.publisher_page_backoff_seconds,
+                max_search_attempts_per_record=(
+                    app_config.publisher_page_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.publisher_page_max_fetch_attempts_per_record
+                ),
+                force_lookup_isbns=web_search_unlocked_isbns,
+            ),
         )
     if app_config.web_search_fallback_enabled:
-        fallback_before = [result.model_copy(deep=True) for result in fetch_results]
-        fetch_results = augment_fetch_results_with_web_search(
-            fetch_results,
-            timeout_seconds=app_config.web_search_timeout_seconds,
-            extractor=extractor,
-            on_status_update=on_status_update,
-            max_retries=app_config.publisher_page_max_retries,
-            backoff_seconds=app_config.web_search_backoff_seconds,
-            max_pages_per_record=app_config.web_search_max_pages_per_record,
-            max_search_attempts_per_record=(
-                app_config.web_search_max_search_attempts_per_record
-            ),
-            max_fetch_attempts_per_record=(
-                app_config.web_search_max_fetch_attempts_per_record
-            ),
-            status_label="fallback",
-        )
-        fetch_results = _annotate_stage_updates(
-            fallback_before,
+        fetch_results = _run_augmented_stage(
             fetch_results,
             "web_search_fallback",
+            lambda current_results: augment_fetch_results_with_web_search(
+                current_results,
+                timeout_seconds=app_config.web_search_timeout_seconds,
+                extractor=extractor,
+                on_status_update=on_status_update,
+                max_retries=app_config.publisher_page_max_retries,
+                backoff_seconds=app_config.web_search_backoff_seconds,
+                max_pages_per_record=app_config.web_search_max_pages_per_record,
+                max_search_attempts_per_record=(
+                    app_config.web_search_max_search_attempts_per_record
+                ),
+                max_fetch_attempts_per_record=(
+                    app_config.web_search_max_fetch_attempts_per_record
+                ),
+                status_label="fallback",
+            ),
         )
     publisher_identity_results = resolve_publisher_identities(fetch_results)
     fetch_results = attach_publisher_identities(fetch_results, publisher_identity_results)

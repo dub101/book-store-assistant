@@ -554,6 +554,9 @@ def augment_fetch_results_with_web_search(
             documents: list[WebSearchEvidenceDocument] = []
             seen_urls: set[str] = set()
             fetched_domains: list[str] = []
+            attempted_search_queries: list[str] = []
+            attempted_search_domains: list[list[str]] = []
+            candidate_urls_seen: list[str] = []
             search_attempts = 0
             fetch_attempts = 0
 
@@ -566,6 +569,8 @@ def augment_fetch_results_with_web_search(
                         break
 
                     search_attempts += 1
+                    attempted_search_queries.append(query)
+                    attempted_search_domains.append(list(allowed_domains))
                     candidate_urls, search_issue_codes = _run_with_retry(
                         lambda: active_searcher.search(query, allowed_domains, SEARCH_RESULT_LIMIT),
                         "web_search_search",
@@ -576,6 +581,9 @@ def augment_fetch_results_with_web_search(
                     issue_codes = _merge_issue_codes(issue_codes, search_issue_codes)
                     if candidate_urls is None:
                         continue
+                    for candidate_url in candidate_urls:
+                        if candidate_url not in seen_urls and candidate_url not in candidate_urls_seen:
+                            candidate_urls_seen.append(candidate_url)
 
                     for candidate_url in _rank_candidate_urls(candidate_urls, source_record):
                         if len(documents) >= max_pages_per_record:
@@ -644,8 +652,13 @@ def augment_fetch_results_with_web_search(
                         f"web_search_{status_label}",
                         "completed",
                         web_search_match=False,
+                        search_queries=attempted_search_queries,
+                        search_domains=attempted_search_domains,
+                        search_attempts=search_attempts,
+                        candidate_urls=candidate_urls_seen,
                         fetched_domains=fetched_domains,
                         documents_found=0,
+                        fetch_attempts=fetch_attempts,
                         issue_codes=issue_codes,
                     ).model_copy(
                         update={
@@ -667,9 +680,14 @@ def augment_fetch_results_with_web_search(
                         f"web_search_{status_label}",
                         "completed",
                         web_search_match=True,
+                        search_queries=attempted_search_queries,
+                        search_domains=attempted_search_domains,
+                        search_attempts=search_attempts,
+                        candidate_urls=candidate_urls_seen,
                         fetched_domains=fetched_domains,
                         documents_found=len(documents),
                         document_domains=[document.domain for document in documents],
+                        fetch_attempts=fetch_attempts,
                         extraction_used=False,
                         extraction_confidence=(
                             extraction.confidence if extraction is not None else None
@@ -696,9 +714,14 @@ def augment_fetch_results_with_web_search(
                         f"web_search_{status_label}",
                         "completed",
                         web_search_match=True,
+                        search_queries=attempted_search_queries,
+                        search_domains=attempted_search_domains,
+                        search_attempts=search_attempts,
+                        candidate_urls=candidate_urls_seen,
                         fetched_domains=fetched_domains,
                         documents_found=len(documents),
                         document_domains=[document.domain for document in documents],
+                        fetch_attempts=fetch_attempts,
                         extraction_used=True,
                         extraction_confidence=extraction.confidence,
                         extraction_issues=extraction.issues,
@@ -724,9 +747,14 @@ def augment_fetch_results_with_web_search(
                         f"web_search_{status_label}",
                         "completed",
                         web_search_match=True,
+                        search_queries=attempted_search_queries,
+                        search_domains=attempted_search_domains,
+                        search_attempts=search_attempts,
+                        candidate_urls=candidate_urls_seen,
                         fetched_domains=fetched_domains,
                         documents_found=len(documents),
                         document_domains=[document.domain for document in documents],
+                        fetch_attempts=fetch_attempts,
                         extraction_used=True,
                         extraction_confidence=extraction.confidence,
                         extraction_issues=extraction.issues,
@@ -753,9 +781,14 @@ def augment_fetch_results_with_web_search(
                     f"web_search_{status_label}",
                     "completed",
                     web_search_match=True,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=search_attempts,
+                    candidate_urls=candidate_urls_seen,
                     fetched_domains=fetched_domains,
                     documents_found=len(documents),
                     document_domains=[document.domain for document in documents],
+                    fetch_attempts=fetch_attempts,
                     extraction_used=True,
                     extraction_confidence=extraction.confidence,
                     extraction_issues=extraction.issues,

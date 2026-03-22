@@ -7,12 +7,12 @@ from book_store_assistant.sources.results import FetchResult
 
 
 class AcceptingValidator:
-    def validate(self, source_record, candidate_record):
+    def validate(self, source_record, candidate_record, publisher_identity=None):
         return RecordValidationAssessment(accepted=True, confidence=0.98)
 
 
 class RejectingValidator:
-    def validate(self, source_record, candidate_record):
+    def validate(self, source_record, candidate_record, publisher_identity=None):
         return RecordValidationAssessment(
             accepted=False,
             confidence=0.41,
