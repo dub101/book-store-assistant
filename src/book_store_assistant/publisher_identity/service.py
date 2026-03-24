@@ -48,6 +48,25 @@ def _clean_publisher_name(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _split_editorial_segments(value: str) -> list[str]:
+    segments = [
+        _clean_publisher_name(segment.strip(" []()"))
+        for segment in value.split(",")
+    ]
+    return [segment for segment in segments if segment]
+
+
+def _resolve_imprint_name(
+    editorial: str,
+    publisher_display_name: str | None,
+) -> str:
+    segments = _split_editorial_segments(editorial)
+    if len(segments) >= 2:
+        return segments[-1]
+
+    return editorial
+
+
 def _publisher_from_domain(url: str | None) -> tuple[str | None, str | None]:
     if url is None:
         return None, None
@@ -80,10 +99,25 @@ def resolve_publisher_identity(fetch_result: FetchResult) -> PublisherIdentityRe
 
     if editorial is not None:
         matched_profile = match_publisher_profile(editorial)
+        normalized_editorial = editorial
+        editorial_segments = _split_editorial_segments(editorial)
+        if matched_profile is None and editorial_segments:
+            trailing_segment = editorial_segments[-1]
+            trailing_match = match_publisher_profile(trailing_segment)
+            if trailing_match is not None:
+                matched_profile = trailing_match
+                normalized_editorial = trailing_segment
+
+        publisher_display_name = (
+            PUBLISHER_DISPLAY_NAMES.get(matched_profile.key)
+            if matched_profile is not None
+            else None
+        )
+        imprint_name = _resolve_imprint_name(normalized_editorial, publisher_display_name)
         return PublisherIdentityResult(
             isbn=fetch_result.isbn,
-            publisher_name=editorial,
-            imprint_name=editorial,
+            publisher_name=publisher_display_name or normalized_editorial,
+            imprint_name=imprint_name,
             publisher_group_key=matched_profile.key if matched_profile is not None else None,
             source_name=editorial_source,
             source_field="editorial",
@@ -106,27 +140,3 @@ def resolve_publisher_identity(fetch_result: FetchResult) -> PublisherIdentityRe
         )
 
     return PublisherIdentityResult(isbn=fetch_result.isbn)
-
-
-def resolve_publisher_identities(
-    fetch_results: list[FetchResult],
-) -> list[PublisherIdentityResult]:
-    return [resolve_publisher_identity(fetch_result) for fetch_result in fetch_results]
-
-
-def attach_publisher_identities(
-    fetch_results: list[FetchResult],
-    publisher_identity_results: list[PublisherIdentityResult],
-) -> list[FetchResult]:
-    attached_results: list[FetchResult] = []
-
-    for fetch_result, publisher_identity_result in zip(
-        fetch_results,
-        publisher_identity_results,
-        strict=True,
-    ):
-        attached_results.append(
-            fetch_result.model_copy(update={"publisher_identity": publisher_identity_result})
-        )
-
-    return attached_results

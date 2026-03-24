@@ -6,28 +6,32 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from html import unescape
 from typing import TypedDict, TypeVar
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import HttpUrl, TypeAdapter
 
-from book_store_assistant.enrichment.page_fetch import extract_description_candidates_from_html
 from book_store_assistant.isbn import normalize_isbn
-from book_store_assistant.resolution.synopsis_resolution import is_spanish_language
-from book_store_assistant.sources.cache import FetchResultCache
+from book_store_assistant.sources.diagnostics import changed_record_fields, with_diagnostic
+from book_store_assistant.sources.exact_page_lookup import lookup_exact_page_record
 from book_store_assistant.sources.issues import classify_http_issue, no_match_issue_code
 from book_store_assistant.sources.language_codes import normalize_language_code
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.models import SourceBookRecord
+from book_store_assistant.sources.page_descriptions import (
+    extract_description_candidates_from_html,
+)
 from book_store_assistant.sources.results import FetchResult
+from book_store_assistant.sources.search_backend import (
+    DEFAULT_BROWSER_HEADERS,
+    SEARCH_RESULT_LIMIT,
+    PageContentFetcher,
+    SearchBackend,
+    _is_allowed_domain,
+    build_default_search_backend,
+)
 
 BOOKISH_TYPES = {"book", "product", "creativework"}
-DUCKDUCKGO_HTML_SEARCH_URL = "https://html.duckduckgo.com/html/"
-SEARCH_RESULT_LIMIT = 5
-RESULT_LINK_PATTERN = re.compile(
-    r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"',
-    re.IGNORECASE,
-)
 OG_TITLE_PATTERN = re.compile(
     r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\'](.*?)["\']',
     re.IGNORECASE | re.DOTALL,
@@ -47,9 +51,16 @@ EDITORIAL_LABEL_PATTERN = re.compile(
     r"(?:editorial|publisher)\s*[:|]\s*([^\n|]+)",
     re.IGNORECASE,
 )
+AUTHOR_LABEL_PATTERN = re.compile(
+    r"(?:autor(?:es)?|author)\s*[:|]\s*([^\n|]+)",
+    re.IGNORECASE,
+)
+SUBJECT_LABEL_PATTERN = re.compile(
+    r"(?:tem[aá]ticas?|tem[aá]tica|materia(?:s)?|categor[ií]as?|g[eé]nero)\s*[:|]\s*([^\n|]+)",
+    re.IGNORECASE,
+)
 HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 PublisherPageStatusCallback = Callable[[str], None]
-PUBLISHER_PAGE_CACHE_KEY = "publisher_page_lookup_v1"
 PUBLISHER_PAGE_ISBN_MISMATCH = "PUBLISHER_PAGE_ISBN_MISMATCH"
 RETRYABLE_HTTP_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 T = TypeVar("T")
@@ -105,21 +116,38 @@ SUPPORTED_PUBLISHERS_BASE: tuple[PublisherProfile, ...] = (
             "planeta",
             "editorial planeta",
             "planeta de libros",
+            "planeta comic",
+            "planeta cómic",
+            "planeta audio",
             "booket",
             "destino",
+            "ediciones destino",
             "ediciones b",
             "espasa",
+            "espasa libros",
             "seix barral",
             "ariel",
+            "editorial ariel",
             "paidos",
-            "paidos",
+            "paidós",
+            "ediciones paidos",
+            "ediciones paidós",
+            "editorial paidos",
+            "editorial paidós",
             "tusquets",
+            "tusquets editores",
             "austral",
             "alienta",
             "alienta editorial",
+            "gestion 2000",
+            "gestión 2000",
+            "lunwerg",
+            "lunwerg editores",
             "booket",
             "critica",
             "crítica",
+            "editorial critica",
+            "editorial crítica",
             "cupula",
             "cúpula",
             "deusto",
@@ -127,6 +155,7 @@ SUPPORTED_PUBLISHERS_BASE: tuple[PublisherProfile, ...] = (
             "ediciones peninsula",
             "galera",
             "geo planeta",
+            "geoplaneta",
             "grupo planeta",
             "grupo planeta gbs",
             "grupo planeta spain",
@@ -135,6 +164,7 @@ SUPPORTED_PUBLISHERS_BASE: tuple[PublisherProfile, ...] = (
             "peninsula",
             "península",
             "temas de hoy",
+            "ediciones temas de hoy",
         ),
     ),
     PublisherProfile(
@@ -358,7 +388,25 @@ IMPRINT_TO_LOOKUP = {
     "ediciones destino": "planeta",
     "editorial planeta": "planeta",
     "espasa": "planeta",
+    "espasa libros": "planeta",
     "seix barral": "planeta",
+    "editorial ariel": "planeta",
+    "editorial crítica": "planeta",
+    "editorial critica": "planeta",
+    "editorial paidós": "planeta",
+    "editorial paidos": "planeta",
+    "ediciones paidós": "planeta",
+    "ediciones paidos": "planeta",
+    "ediciones temas de hoy": "planeta",
+    "gestión 2000": "planeta",
+    "gestion 2000": "planeta",
+    "geoplaneta": "planeta",
+    "lunwerg": "planeta",
+    "lunwerg editores": "planeta",
+    "paidós": "planeta",
+    "planeta audio": "planeta",
+    "planeta cómic": "planeta",
+    "planeta comic": "planeta",
     "tusquets editores": "planeta",
     "gredos": "rba",
     "integral": "rba",
@@ -577,66 +625,6 @@ SUPPORTED_PUBLISHERS: tuple[PublisherProfile, ...] = _merge_publisher_profiles(
 )
 
 
-class PublisherPageSearcher:
-    def search(
-        self,
-        query: str,
-        allowed_domains: tuple[str, ...],
-        limit: int = 3,
-    ) -> list[str]:
-        raise NotImplementedError
-
-
-class PageContentFetcher:
-    def fetch_text(self, url: str) -> str | None:
-        raise NotImplementedError
-
-
-class DuckDuckGoHtmlSearcher(PublisherPageSearcher):
-    def __init__(self, timeout_seconds: float, client: httpx.Client | None = None) -> None:
-        self.timeout_seconds = timeout_seconds
-        self.client = client
-
-    def search(
-        self,
-        query: str,
-        allowed_domains: tuple[str, ...],
-        limit: int = SEARCH_RESULT_LIMIT,
-    ) -> list[str]:
-        domain_query = " OR ".join(f"site:{domain}" for domain in allowed_domains)
-        full_query = f"{query} ({domain_query})" if domain_query else query
-
-        try:
-            client = self.client or httpx.Client()
-            response = client.get(
-                DUCKDUCKGO_HTML_SEARCH_URL,
-                params={"q": full_query},
-                timeout=self.timeout_seconds,
-                follow_redirects=True,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError:
-            raise
-
-        links: list[str] = []
-        seen: set[str] = set()
-
-        for match in RESULT_LINK_PATTERN.finditer(response.text):
-            link = _decode_search_result_link(unescape(match.group(1)))
-            if link is None or not _is_allowed_domain(link, allowed_domains):
-                continue
-
-            if link in seen:
-                continue
-
-            seen.add(link)
-            links.append(link)
-            if len(links) >= limit:
-                break
-
-        return links
-
-
 def _normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     stripped = "".join(
@@ -677,35 +665,6 @@ def _seed_field_sources(record: SourceBookRecord) -> dict[str, str]:
         field_sources["categories"] = record.source_name
 
     return field_sources
-
-
-def _decode_search_result_link(value: str) -> str | None:
-    if value.startswith("//"):
-        return f"https:{value}"
-
-    if value.startswith("http://") or value.startswith("https://"):
-        parsed = urlparse(value)
-        query = parse_qs(parsed.query)
-        redirected = query.get("uddg")
-        if redirected:
-            return unquote(redirected[0])
-        return value
-
-    return None
-
-
-def _is_allowed_domain(url: str, allowed_domains: tuple[str, ...]) -> bool:
-    hostname = urlparse(url).hostname
-    if hostname is None:
-        return False
-
-    normalized_hostname = hostname.casefold()
-    return any(
-        normalized_hostname == domain or normalized_hostname.endswith(f".{domain}")
-        for domain in allowed_domains
-    )
-
-
 def _looks_like_supported_bookish_item(payload: dict) -> bool:
     raw_type = payload.get("@type")
     if isinstance(raw_type, str):
@@ -746,6 +705,58 @@ def _extract_person_names(value: object) -> str | None:
             return ", ".join(names)
 
     return None
+
+
+def _split_category_text(value: str) -> list[str]:
+    parts = re.split(r"[|;,>/]+", value)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _clean_category_values(values: list[str]) -> list[str]:
+    cleaned_values: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        cleaned = _clean_text(value)
+        if not cleaned:
+            continue
+
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+
+        seen.add(key)
+        cleaned_values.append(cleaned)
+
+    return cleaned_values
+
+
+def _extract_category_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        return _clean_category_values(_split_category_text(value))
+
+    if isinstance(value, dict):
+        extracted = _extract_string(value)
+        if extracted is None:
+            return []
+        return _clean_category_values(_split_category_text(extracted))
+
+    if isinstance(value, list):
+        collected: list[str] = []
+        for item in value:
+            collected.extend(_extract_category_values(item))
+        return _clean_category_values(collected)
+
+    return []
+
+
+def _extract_subject_candidates_from_text(html: str) -> list[str]:
+    text = _clean_text(html)
+    match = SUBJECT_LABEL_PATTERN.search(text)
+    if match is None:
+        return []
+
+    return _clean_category_values(_split_category_text(match.group(1)))
 
 
 def _extract_image_url(value: object) -> str | None:
@@ -847,6 +858,13 @@ def _extract_json_ld_record(html: str, isbn: str) -> SourceBookRecord | None:
                     author=_extract_person_names(bookish.get("author")),
                     editorial=_extract_person_names(bookish.get("publisher")),
                     synopsis=_extract_string(bookish.get("description")),
+                    categories=_clean_category_values(
+                        [
+                            *_extract_category_values(bookish.get("genre")),
+                            *_extract_category_values(bookish.get("keywords")),
+                            *_extract_category_values(bookish.get("about")),
+                        ]
+                    ),
                     cover_url=_coerce_http_url(_extract_image_url(bookish.get("image"))),
                 )
             )
@@ -943,12 +961,42 @@ def _extract_editorial_from_text(html: str) -> str | None:
     return editorial or None
 
 
+def _extract_author_from_text(html: str) -> str | None:
+    text = _clean_text(html)
+    match = AUTHOR_LABEL_PATTERN.search(text)
+    if match is None:
+        return None
+
+    author = match.group(1).strip(" .|")
+    return author or None
+
+
 def _extract_isbn_candidates(html: str) -> set[str]:
     return {
         normalize_isbn(match.group(0))
         for match in ISBN_PATTERN.finditer(_clean_text(html))
         if normalize_isbn(match.group(0))
     }
+
+
+def _publisher_page_validator(
+    html: str,
+    _page_url: str,
+    record: SourceBookRecord,
+    _profile: PublisherProfile,
+) -> tuple[bool, list[str]]:
+    if normalize_isbn(record.isbn) not in _extract_isbn_candidates(html):
+        return False, [PUBLISHER_PAGE_ISBN_MISMATCH]
+
+    return True, []
+
+
+def _publisher_lookup_issue_code(code: str) -> str:
+    if code == "PAGE_SEARCH_BUDGET_EXHAUSTED":
+        return "PUBLISHER_PAGE_SEARCH_BUDGET_EXHAUSTED"
+    if code == "PAGE_FETCH_BUDGET_EXHAUSTED":
+        return "PUBLISHER_PAGE_FETCH_BUDGET_EXHAUSTED"
+    return code
 
 
 def extract_publisher_page_record(
@@ -965,6 +1013,7 @@ def extract_publisher_page_record(
     json_ld_record = _extract_json_ld_record(html, isbn)
     descriptions = extract_description_candidates_from_html(html, source_url=page_url)
     synopsis = descriptions[0][1] if descriptions else None
+    text_categories = _extract_subject_candidates_from_text(html)
 
     if json_ld_record is not None:
         field_sources = _seed_field_sources(json_ld_record)
@@ -975,6 +1024,7 @@ def extract_publisher_page_record(
                 "source_url": _coerce_http_url(page_url),
                 "synopsis": json_ld_record.synopsis or synopsis,
                 "editorial": json_ld_record.editorial or _extract_editorial_from_text(html),
+                "categories": _merge_categories(json_ld_record.categories, text_categories),
                 "language": _extract_html_language(html),
                 "field_sources": field_sources,
             }
@@ -992,8 +1042,10 @@ def extract_publisher_page_record(
         isbn=isbn,
         source_url=_coerce_http_url(page_url),
         title=title,
+        author=_extract_author_from_text(html),
         editorial=_extract_editorial_from_text(html),
         synopsis=synopsis,
+        categories=text_categories,
         cover_url=_coerce_http_url(cover_url),
         language=_extract_html_language(html),
     )
@@ -1007,6 +1059,15 @@ def _should_replace_synopsis(
         return False
 
     if existing_record.synopsis is None:
+        return True
+
+    existing_synopsis = existing_record.synopsis.strip()
+    publisher_synopsis = publisher_record.synopsis.strip()
+    if not existing_synopsis:
+        return True
+
+    # Replace clipped teaser text with a materially richer official synopsis.
+    if len(existing_synopsis) < 140 and len(publisher_synopsis) > len(existing_synopsis) + 40:
         return True
 
     if existing_record.language == "es":
@@ -1122,23 +1183,8 @@ def apply_publisher_page_record(
 
     return merged_record.model_copy(update=updates)
 
-
 def _needs_publisher_lookup(record: SourceBookRecord) -> bool:
-    if not record.editorial:
-        return False
-
-    synopsis_needs_support = (
-        not record.synopsis
-        or record.language is None
-        or not is_spanish_language(record.language)
-    )
-    return not (
-        record.title
-        and record.author
-        and record.editorial
-        and (record.subject or record.categories)
-        and not synopsis_needs_support
-    )
+    return bool(record.editorial) and (not record.title or not record.author)
 
 
 def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherProfile]:
@@ -1146,25 +1192,40 @@ def _candidate_publisher_profiles(record: SourceBookRecord) -> list[PublisherPro
     return [matched_profile] if matched_profile is not None else []
 
 
+def _build_direct_publisher_urls(
+    record: SourceBookRecord,
+    profile: PublisherProfile,
+) -> list[str]:
+    if record.source_url is None:
+        return []
+
+    source_url = str(record.source_url)
+    if not _is_allowed_domain(source_url, profile.domains):
+        return []
+
+    return [source_url]
+
+
 def augment_fetch_results_with_publisher_pages(
     fetch_results: list[FetchResult],
     timeout_seconds: float,
-    searcher: PublisherPageSearcher | None = None,
+    searcher: SearchBackend | None = None,
     page_fetcher: PageContentFetcher | None = None,
     on_status_update: PublisherPageStatusCallback | None = None,
-    cache: FetchResultCache | None = None,
-    cache_ttl_seconds: float | None = None,
     max_retries: int = 2,
     backoff_seconds: float = 0.5,
     sleep: Callable[[float], None] = time.sleep,
     eligible_isbns: set[str] | None = None,
-    ignore_negative_cache: bool = False,
+    force_lookup_isbns: set[str] | None = None,
     max_profiles_per_record: int | None = None,
     max_search_attempts_per_record: int | None = None,
     max_fetch_attempts_per_record: int | None = None,
 ) -> list[FetchResult]:
     with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
-        active_searcher = searcher or DuckDuckGoHtmlSearcher(timeout_seconds, client=client)
+        active_searcher = searcher or build_default_search_backend(
+            timeout_seconds,
+            client=client,
+        )
         active_page_fetcher = page_fetcher or _DefaultPageFetcher(timeout_seconds, client=client)
         augmented_results: list[FetchResult] = []
 
@@ -1182,43 +1243,10 @@ def augment_fetch_results_with_publisher_pages(
                 augmented_results.append(fetch_result)
                 continue
 
-            if not _needs_publisher_lookup(record):
+            force_lookup = force_lookup_isbns is not None and record.isbn in force_lookup_isbns
+            if not force_lookup and not _needs_publisher_lookup(record):
                 augmented_results.append(fetch_result)
                 continue
-
-            cached_entry = cache.get_entry(record.isbn) if cache is not None else None
-            if cached_entry is not None:
-                cached_result = cached_entry.result
-                negative_cache_expired = (
-                    cached_result.record is None
-                    and cache_ttl_seconds is not None
-                    and cache_ttl_seconds >= 0
-                    and (time.time() - cached_entry.cached_at > cache_ttl_seconds)
-                )
-                if not negative_cache_expired and cached_result.record is not None:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "record": apply_publisher_page_record(
-                                    record,
-                                    cached_result.record,
-                                )
-                            }
-                        )
-                    )
-                    continue
-                if not negative_cache_expired and not ignore_negative_cache:
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={
-                                "issue_codes": _merge_issue_codes(
-                                    fetch_result.issue_codes,
-                                    cached_result.issue_codes,
-                                )
-                            }
-                        )
-                    )
-                    continue
 
             candidate_profiles = _candidate_publisher_profiles(record)
             if max_profiles_per_record is not None and max_profiles_per_record >= 0:
@@ -1227,126 +1255,79 @@ def augment_fetch_results_with_publisher_pages(
                 augmented_results.append(fetch_result)
                 continue
 
-            page_url: str | None = None
-            publisher_issue_codes: list[str] = []
-            search_attempts = 0
-            fetch_attempts = 0
             if on_status_update is not None:
                 on_status_update(
                     f"Publisher lookup {index}/{len(fetch_results)}: {record.isbn}"
                 )
-            for profile in candidate_profiles:
-                candidate_urls: list[str] = []
-                for query in build_publisher_search_queries(record, profile):
-                    if (
-                        max_search_attempts_per_record is not None
-                        and max_search_attempts_per_record >= 0
-                        and search_attempts >= max_search_attempts_per_record
-                    ):
-                        publisher_issue_codes = _merge_issue_codes(
-                            publisher_issue_codes,
-                            ["PUBLISHER_PAGE_SEARCH_BUDGET_EXHAUSTED"],
-                        )
-                        break
 
-                    search_attempts += 1
+            attempted_search_queries: list[str] = []
+            attempted_search_domains: list[list[str]] = []
+            candidate_urls: list[str] = []
+            attempted_fetch_urls: list[str] = []
+            fetched_domains: list[str] = []
 
-                    def _search_publisher_pages() -> list[str]:
-                        return active_searcher.search(
-                            query,
-                            profile.domains,
-                            limit=SEARCH_RESULT_LIMIT,
-                        )
+            def _search_with_trace(
+                query: str,
+                allowed_domains: tuple[str, ...],
+                limit: int = SEARCH_RESULT_LIMIT,
+            ) -> list[str]:
+                attempted_search_queries.append(query)
+                attempted_search_domains.append(list(allowed_domains))
+                result_urls = active_searcher.search(query, allowed_domains, limit)
+                for result_url in result_urls:
+                    if result_url not in candidate_urls:
+                        candidate_urls.append(result_url)
+                return result_urls
 
-                    query_candidate_urls, search_issue_codes = _run_with_retry(
-                        _search_publisher_pages,
-                        "publisher_page_search",
-                        max_retries=max_retries,
-                        backoff_seconds=backoff_seconds,
-                        sleep=sleep,
-                    )
-                    if query_candidate_urls is None:
-                        publisher_issue_codes = _merge_issue_codes(
-                            publisher_issue_codes,
-                            search_issue_codes,
-                        )
-                        continue
+            def _fetch_with_trace(url: str) -> str | None:
+                attempted_fetch_urls.append(url)
+                hostname = (urlparse(url).hostname or "").casefold()
+                if hostname and hostname not in fetched_domains:
+                    fetched_domains.append(hostname)
+                return active_page_fetcher.fetch_text(url)
 
-                    candidate_urls = _merge_issue_codes(candidate_urls, query_candidate_urls)
-                    if candidate_urls:
-                        break
+            publisher_record, raw_issue_codes = lookup_exact_page_record(
+                record,
+                candidate_profiles,
+                search_queries=build_publisher_search_queries,
+                direct_query_urls=_build_direct_publisher_urls,
+                extract_record=extract_publisher_page_record,
+                search=_search_with_trace,
+                fetch_text=_fetch_with_trace,
+                run_with_retry=_run_with_retry,
+                rank_candidate_urls=_rank_candidate_urls,
+                is_allowed_domain=_is_allowed_domain,
+                search_issue_source="publisher_page_search",
+                fetch_issue_source="publisher_page_fetch",
+                page_validator=_publisher_page_validator,
+                search_result_limit=SEARCH_RESULT_LIMIT,
+                max_retries=max_retries,
+                backoff_seconds=backoff_seconds,
+                sleep=sleep,
+                max_search_attempts_per_record=max_search_attempts_per_record,
+                max_fetch_attempts_per_record=max_fetch_attempts_per_record,
+            )
+            publisher_issue_codes = [
+                _publisher_lookup_issue_code(code)
+                for code in raw_issue_codes
+            ]
 
-                if not candidate_urls:
-                    continue
-
-                for candidate_url in _rank_candidate_urls(candidate_urls, record):
-                    if (
-                        max_fetch_attempts_per_record is not None
-                        and max_fetch_attempts_per_record >= 0
-                        and fetch_attempts >= max_fetch_attempts_per_record
-                    ):
-                        publisher_issue_codes = _merge_issue_codes(
-                            publisher_issue_codes,
-                            ["PUBLISHER_PAGE_FETCH_BUDGET_EXHAUSTED"],
-                        )
-                        break
-
-                    if not _is_allowed_domain(candidate_url, profile.domains):
-                        continue
-
-                    fetch_attempts += 1
-                    page_html, fetch_issue_codes = _run_with_retry(
-                        lambda: active_page_fetcher.fetch_text(candidate_url),
-                        "publisher_page_fetch",
-                        max_retries=max_retries,
-                        backoff_seconds=backoff_seconds,
-                        sleep=sleep,
-                    )
-                    if page_html is None:
-                        publisher_issue_codes = _merge_issue_codes(
-                            publisher_issue_codes,
-                            fetch_issue_codes,
-                        )
-                        continue
-
-                    if normalize_isbn(record.isbn) not in _extract_isbn_candidates(page_html):
-                        publisher_issue_codes = _merge_issue_codes(
-                            publisher_issue_codes,
-                            [PUBLISHER_PAGE_ISBN_MISMATCH],
-                        )
-                        continue
-
-                    publisher_record = extract_publisher_page_record(
-                        page_html,
-                        candidate_url,
-                        record.isbn,
-                        profile,
-                    )
-                    if publisher_record is None:
-                        continue
-
-                    page_url = candidate_url
-                    if cache is not None:
-                        cache.set(
-                            FetchResult(
-                                isbn=record.isbn,
-                                record=publisher_record,
-                                errors=[],
-                                issue_codes=[],
-                            )
-                        )
-                    augmented_results.append(
-                        fetch_result.model_copy(
-                            update={"record": apply_publisher_page_record(record, publisher_record)}
-                        )
-                    )
-                    break
-
-                if page_url is not None:
-                    break
-
-            if page_url is None:
-                failed_result = fetch_result.model_copy(
+            if publisher_record is None:
+                failed_result = with_diagnostic(
+                    fetch_result,
+                    "publisher_pages",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=len(attempted_fetch_urls),
+                    publisher_match=False,
+                    publisher_profiles=[profile.key for profile in candidate_profiles],
+                    issue_codes=publisher_issue_codes,
+                ).model_copy(
                     update={
                         "issue_codes": _merge_issue_codes(
                             fetch_result.issue_codes,
@@ -1355,12 +1336,36 @@ def augment_fetch_results_with_publisher_pages(
                         )
                     }
                 )
-                if cache is not None:
-                    cache.set(
-                        failed_result.model_copy(update={"record": None}),
-                        allow_empty=True,
-                    )
                 augmented_results.append(failed_result)
+                continue
+
+            merged_record = apply_publisher_page_record(record, publisher_record)
+            augmented_results.append(
+                with_diagnostic(
+                    fetch_result,
+                    "publisher_pages",
+                    "completed",
+                    forced=force_lookup,
+                    search_queries=attempted_search_queries,
+                    search_domains=attempted_search_domains,
+                    search_attempts=len(attempted_search_queries),
+                    candidate_urls=candidate_urls,
+                    fetched_domains=fetched_domains,
+                    fetch_attempts=len(attempted_fetch_urls),
+                    publisher_match=True,
+                    publisher_source=publisher_record.source_name,
+                    publisher_editorial=publisher_record.editorial,
+                    publisher_source_url=(
+                        str(publisher_record.source_url)
+                        if publisher_record.source_url is not None
+                        else None
+                    ),
+                    publisher_profiles=[profile.key for profile in candidate_profiles],
+                    changed_fields=changed_record_fields(record, merged_record),
+                ).model_copy(
+                    update={"record": merged_record}
+                )
+            )
 
         return augmented_results
 
@@ -1375,6 +1380,7 @@ class _DefaultPageFetcher:
             client = self.client or httpx.Client()
             response = client.get(
                 url,
+                headers=DEFAULT_BROWSER_HEADERS,
                 timeout=self.timeout_seconds,
                 follow_redirects=True,
             )

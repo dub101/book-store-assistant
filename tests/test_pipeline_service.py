@@ -1,711 +1,204 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from book_store_assistant.config import AppConfig, ExecutionMode
-from book_store_assistant.enrichment.models import EnrichmentResult, GeneratedSynopsis
-from book_store_assistant.models import BookRecord
-from book_store_assistant.pipeline.service import (
-    _attach_enrichment_results,
-    _attach_publisher_identity_results,
-    _select_best_resolution_results,
-    process_isbn_file,
-)
-from book_store_assistant.publisher_identity.models import PublisherIdentityResult
-from book_store_assistant.resolution.results import ResolutionResult
+from book_store_assistant.bibliographic.models import BibliographicRecord
+from book_store_assistant.config import AppConfig
+from book_store_assistant.pipeline.service import process_isbn_file
+from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
 
 class DummySource:
     def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(isbn=isbn, record=None, errors=["No match"])
-def test_process_isbn_file_uses_injected_source(tmp_path: Path) -> None:
+        return FetchResult(
+            isbn=isbn,
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn=isbn,
+                title="Example Title",
+                subtitle="Example Subtitle",
+                author="Example Author",
+                editorial="Debolsillo",
+            ),
+            errors=[],
+        )
+
+
+class AcceptingValidator:
+    def validate(self, source_record, candidate_record, publisher_identity=None):
+        assert candidate_record.title == "Example Title"
+        return RecordValidationAssessment(accepted=True, confidence=0.97)
+
+
+def test_process_isbn_file_uses_injected_source_and_resolves_bibliographic_record(
+    tmp_path: Path,
+) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\ninvalid\n", encoding="utf-8")
 
-    result = process_isbn_file(input_file, source=DummySource())
+    with patch(
+        "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+        return_value=AcceptingValidator(),
+    ):
+        result = process_isbn_file(input_file, source=DummySource(), config=AppConfig())
 
     assert len(result.input_result.valid_inputs) == 1
     assert result.input_result.invalid_values == ["invalid"]
     assert len(result.fetch_results) == 1
-    assert result.fetch_results[0].errors == ["No match"]
-
-
-class StubEnricher:
-    def enrich(self, record: SourceBookRecord) -> EnrichmentResult:
-        return EnrichmentResult(
-            isbn=record.isbn,
-            source_name=record.source_name,
-            applied=False,
-            skipped_reason="no_enrichment_available",
-        )
-
-
-class StubGenerator:
-    def generate(self, isbn: str, evidence) -> GeneratedSynopsis | None:
-        return GeneratedSynopsis(
-            text="Resumen generado a partir de evidencia textual suficiente y trazable del origen.",
-            evidence_indexes=[0],
-        )
-
-
-class StubSubjectMapper:
-    def map_subject(self, record: SourceBookRecord, allowed_subject_entries) -> str | None:
-        return "FICCION"
-
-
-class DummyResolvedSource:
-    def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(
-            isbn=isbn,
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn=isbn,
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-            ),
-            errors=[],
-        )
-
-
-def test_process_isbn_file_defaults_to_rules_only_mode(tmp_path: Path) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(input_file, source=DummyResolvedSource())
-
-    assert result.enrichment_results == [
-        EnrichmentResult(isbn="9780306406157", skipped_reason="rules_only_mode")
-    ]
-    assert result.publisher_identity_results == [
-        PublisherIdentityResult(
-            isbn="9780306406157",
-            publisher_name="Example Editorial",
-            imprint_name="Example Editorial",
-            source_name="google_books",
-            source_field="editorial",
-            confidence=0.8,
-            resolution_method="editorial_field",
-            evidence=["editorial:Example Editorial"],
-        )
-    ]
-    assert result.resolution_results[0].record is not None
+    assert result.fetch_results[0].publisher_identity is not None
     assert (
-        result.resolution_results[0].publisher_identity
-        == result.publisher_identity_results[0]
+        result.fetch_results[0].publisher_identity.publisher_name
+        == "Penguin Random House Grupo Editorial"
     )
-
-
-def test_attach_publisher_identity_results_attaches_identity_to_resolution_results() -> None:
-    resolution_results = [
-        ResolutionResult(record=None, source_record=None, errors=["fetch failed"])
-    ]
-    publisher_identity_results = [PublisherIdentityResult(isbn="9780306406157")]
-
-    attached_results = _attach_publisher_identity_results(
-        resolution_results,
-        publisher_identity_results,
+    assert isinstance(result.resolution_results[0].record, BibliographicRecord)
+    assert result.resolution_results[0].record.editorial == "Debolsillo"
+    assert (
+        result.resolution_results[0].record.publisher
+        == "Penguin Random House Grupo Editorial"
     )
-
-    assert attached_results[0].publisher_identity == PublisherIdentityResult(
-        isbn="9780306406157"
-    )
-
-
-@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
-def test_process_isbn_file_always_applies_publisher_page_lookup(
-    mock_augment_publisher_pages,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    fetch_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-            ),
-            errors=[],
-        )
-    ]
-    mock_augment_publisher_pages.return_value = fetch_results
-
-    process_isbn_file(
-        input_file,
-        source=DummyResolvedSource(),
-        config=AppConfig(
-            execution_mode=ExecutionMode.RULES_ONLY,
-        ),
-    )
-
-    mock_augment_publisher_pages.assert_called_once()
-    assert mock_augment_publisher_pages.call_args.kwargs["eligible_isbns"] == {
-        "9780306406157"
-    }
 
 
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_discovery")
 @patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
-def test_process_isbn_file_retries_publisher_lookup_after_retailer_editorial_unlock(
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_editorial_search")
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_source_pages")
+def test_process_isbn_file_runs_simplified_retrieval_order(
+    mock_augment_fetch_results_with_source_pages,
+    mock_augment_fetch_results_with_editorial_search,
     mock_augment_publisher_pages,
+    mock_augment_publisher_discovery,
     mock_augment_retailer_editorials,
     tmp_path: Path,
 ) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")
 
-    retailer_augmented_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books + retailer_page:casa_del_libro",
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-                editorial="Planeta",
-                field_sources={"editorial": "retailer_page:casa_del_libro"},
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    final_results = [
-        FetchResult(
-            isbn="9780306406157",
-            record=SourceBookRecord(
-                source_name="google_books + retailer_page:casa_del_libro + publisher_page:planeta",
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-                editorial="Planeta",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-                field_sources={
-                    "editorial": "retailer_page:casa_del_libro",
-                    "synopsis": "publisher_page:planeta",
-                    "subject": "publisher_page:planeta",
-                },
-            ),
-            errors=[],
-            issue_codes=[],
-        )
-    ]
-    mock_augment_publisher_pages.return_value = final_results
-    mock_augment_retailer_editorials.return_value = retailer_augmented_results
-
-    process_isbn_file(
-        input_file,
-        source=DummySource(),
-        config=AppConfig(
-            execution_mode=ExecutionMode.RULES_ONLY,
-        ),
-    )
-
-    assert mock_augment_publisher_pages.call_count == 1
-    assert mock_augment_publisher_pages.call_args.kwargs["eligible_isbns"] == {
-        "9780306406157"
-    }
-    assert mock_augment_publisher_pages.call_args.kwargs["ignore_negative_cache"] is True
-
-
-@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_retailer_editorials")
-@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_publisher_pages")
-def test_process_isbn_file_skips_initial_publisher_lookup_without_editorial_hint(
-    mock_augment_publisher_pages,
-    mock_augment_retailer_editorials,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    unchanged_results = [
+    initial_results = [
         FetchResult(
             isbn="9780306406157",
             record=SourceBookRecord(
                 source_name="google_books",
                 isbn="9780306406157",
                 title="Example Title",
-                author="Example Author",
+                author=None,
+                editorial=None,
             ),
             errors=[],
             issue_codes=[],
         )
     ]
-    mock_augment_retailer_editorials.return_value = unchanged_results
+    stage_order: list[str] = []
 
-    process_isbn_file(
-        input_file,
-        source=DummySource(),
-        config=AppConfig(
-            execution_mode=ExecutionMode.RULES_ONLY,
-        ),
-    )
+    def source_pages(results, **kwargs):
+        stage_order.append("source_pages")
+        del kwargs
+        return results
 
-    mock_augment_publisher_pages.assert_not_called()
-
-
-def test_process_isbn_file_uses_configured_ai_mode(tmp_path: Path) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(
-        input_file,
-        source=DummyResolvedSource(),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        enricher=StubEnricher(),
-    )
-
-    assert result.enrichment_results == [
-        EnrichmentResult(
-            isbn="9780306406157",
-            source_name="google_books",
-            applied=False,
-            skipped_reason="no_enrichment_available",
-                evidence=[
-                    {
-                        "source_name": "google_books",
-                        "evidence_type": "source_synopsis",
-                    "evidence_origin": "direct_source_record",
-                    "text": "Resumen del libro.",
-                    "source_url": None,
-                    "language": None,
-                        "extraction_method": "source_synopsis_field",
-                        "quality_flags": ["trusted_source_synopsis", "unknown_language"],
-                    },
-                    {
-                        "source_name": "google_books",
-                        "evidence_type": "source_title",
-                        "evidence_origin": "direct_source_record",
-                        "text": "Example Title",
-                        "source_url": None,
-                        "language": None,
-                        "extraction_method": "source_title_field",
-                        "quality_flags": ["trusted_source_bibliographic_field", "title"],
-                    },
-                    {
-                        "source_name": "google_books",
-                        "evidence_type": "source_author",
-                        "evidence_origin": "direct_source_record",
-                        "text": "Example Author",
-                        "source_url": None,
-                        "language": None,
-                        "extraction_method": "source_author_field",
-                        "quality_flags": ["trusted_source_bibliographic_field", "author"],
-                    },
-                    {
-                        "source_name": "google_books",
-                        "evidence_type": "source_editorial",
-                        "evidence_origin": "direct_source_record",
-                        "text": "Example Editorial",
-                        "source_url": None,
-                        "language": None,
-                        "extraction_method": "source_editorial_field",
-                        "quality_flags": ["trusted_source_bibliographic_field", "editorial"],
-                    },
-                ],
+    def general_web_search(results, **kwargs):
+        stage_order.append("web_search_editorial")
+        del kwargs
+        return [
+            FetchResult(
+                isbn="9780306406157",
+                record=SourceBookRecord(
+                    source_name="google_books + web_search",
+                    isbn="9780306406157",
+                    title="Example Title",
+                    author=None,
+                    editorial="Planeta",
+                ),
+                errors=[],
+                issue_codes=[],
             )
         ]
 
+    def publisher_pages(results, **kwargs):
+        stage_order.append("publisher_pages")
+        assert kwargs["eligible_isbns"] == {"9780306406157"}
+        return results
 
-class DummyNonSpanishSynopsisSource:
-    def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(
-            isbn=isbn,
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn=isbn,
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis=(
-                    "This detailed source description provides enough grounded evidence to produce "
-                    "a Spanish synopsis without inventing metadata."
-                ),
-                language="en",
-                subject="FICCION",
-            ),
-            errors=[],
-        )
+    def retailer_lookup(results, **kwargs):
+        stage_order.append("retailer_lookup")
+        del kwargs
+        return results
 
+    def publisher_discovery(results, **kwargs):
+        stage_order.append("publisher_discovery")
+        del kwargs
+        return results
 
-class DummyResolvableWithoutAiSource:
-    def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(
-            isbn=isbn,
-            record=SourceBookRecord(
-                source_name="google_books",
-                isbn=isbn,
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-            ),
-            errors=[],
-        )
+    mock_augment_fetch_results_with_source_pages.side_effect = source_pages
+    mock_augment_fetch_results_with_editorial_search.side_effect = general_web_search
+    mock_augment_publisher_pages.side_effect = publisher_pages
+    mock_augment_retailer_editorials.side_effect = retailer_lookup
+    mock_augment_publisher_discovery.side_effect = publisher_discovery
 
+    with patch(
+        "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+        return_value=AcceptingValidator(),
+    ), patch(
+        "book_store_assistant.pipeline.service.fetch_all",
+        return_value=initial_results,
+    ), patch(
+        "book_store_assistant.pipeline.service.build_default_bibliographic_extractor",
+        return_value=object(),
+    ):
+        process_isbn_file(input_file, source=DummySource(), config=AppConfig())
 
-def test_process_isbn_file_applies_generator_in_ai_mode(tmp_path: Path) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(
-        input_file,
-        source=DummyNonSpanishSynopsisSource(),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        generator=StubGenerator(),
-    )
-
-    assert result.fetch_results[0].record is not None
-    assert result.fetch_results[0].record.synopsis == (
-        "Resumen generado a partir de evidencia textual suficiente y trazable del origen."
-    )
-    assert result.fetch_results[0].record.language == "es"
-    assert result.resolution_results[0].record is not None
-
-
-class DummyMissingSubjectSource:
-    def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(
-            isbn=isbn,
-            record=SourceBookRecord(
-                source_name="open_library",
-                isbn=isbn,
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                language="es",
-                categories=["Narrative fiction"],
-            ),
-            errors=[],
-        )
-
-
-def test_process_isbn_file_uses_subject_mapper_in_ai_mode(tmp_path: Path) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(
-        input_file,
-        source=DummyMissingSubjectSource(),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        subject_mapper=StubSubjectMapper(),
-        enricher=StubEnricher(),
-    )
-
-    assert result.resolution_results[0].record is not None
-    assert result.resolution_results[0].record.subject == "FICCION"
-
-
-class DummyUnmappedDirectSubjectSource:
-    def fetch(self, isbn: str) -> FetchResult:
-        return FetchResult(
-            isbn=isbn,
-            record=SourceBookRecord(
-                source_name="open_library",
-                isbn=isbn,
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="Narrativa contemporanea",
-                language="es",
-            ),
-            errors=[],
-        )
-
-
-def test_process_isbn_file_uses_subject_mapper_for_unmapped_direct_subject_in_ai_mode(
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(
-        input_file,
-        source=DummyUnmappedDirectSubjectSource(),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        subject_mapper=StubSubjectMapper(),
-        enricher=StubEnricher(),
-    )
-
-    assert result.resolution_results[0].record is not None
-    assert result.resolution_results[0].record.subject == "FICCION"
-
-
-def test_process_isbn_file_preserves_rules_only_resolution_when_ai_does_not_apply(
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-
-    result = process_isbn_file(
-        input_file,
-        source=DummyResolvableWithoutAiSource(),
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        enricher=StubEnricher(),
-    )
-
-    assert result.fetch_results[0].record is not None
-    assert result.fetch_results[0].record.synopsis == "Resumen del libro."
-    assert result.resolution_results[0].record is not None
-    assert result.resolution_results[0].record.synopsis == "Resumen del libro."
-    assert result.enrichment_results[0].skipped_reason == "no_enrichment_available"
-
-
-def test_attach_enrichment_results_adds_matching_enrichment_to_each_resolution() -> None:
-    resolution_results = [
-        ResolutionResult(
-            record=None,
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-            ),
-            errors=["Synopsis is missing."],
-        )
+    assert stage_order == [
+        "source_pages",
+        "web_search_editorial",
+        "publisher_pages",
+        "retailer_lookup",
+        "publisher_discovery",
     ]
-    enrichment_results = [
-        EnrichmentResult(
+
+
+@patch("book_store_assistant.pipeline.service.augment_fetch_results_with_editorial_search")
+def test_process_isbn_file_runs_editorial_web_search_before_resolution(
+    mock_augment_fetch_results_with_editorial_search,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    initial_results = [
+        FetchResult(
             isbn="9780306406157",
-            skipped_reason="rules_only_mode",
-        )
-    ]
-
-    attached_results = _attach_enrichment_results(
-        resolution_results,
-        enrichment_results,
-    )
-
-    assert attached_results[0].enrichment_result == enrichment_results[0]
-    assert resolution_results[0].enrichment_result is None
-
-
-def test_select_best_resolution_results_prefers_enriched_resolution_when_available() -> None:
-    baseline_results = [
-        ResolutionResult(
-            record=None,
-            source_record=SourceBookRecord(
-                source_name="google_books",
+            record=SourceBookRecord(
+                source_name="bne",
                 isbn="9780306406157",
-            ),
-            errors=["Synopsis is missing."],
-            reason_codes=["MISSING_SYNOPSIS"],
-        )
-    ]
-    enriched_results = [
-        ResolutionResult(
-            record=BookRecord(
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-            ),
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
+                title="BNE Title",
+                author=None,
+                editorial="Barcelona, Planeta",
             ),
             errors=[],
+            issue_codes=[],
         )
     ]
+    mock_augment_fetch_results_with_editorial_search.return_value = initial_results
 
-    selected_results = _select_best_resolution_results(
-        baseline_results,
-        enriched_results,
-    )
-
-    assert selected_results == enriched_results
-
-
-def test_select_best_resolution_results_preserves_baseline_resolution_when_enriched_fails() -> None:
-    baseline_results = [
-        ResolutionResult(
-            record=BookRecord(
-                isbn="9780306406157",
-                title="Example Title",
-                author="Example Author",
-                editorial="Example Editorial",
-                synopsis="Resumen del libro.",
-                subject="FICCION",
-            ),
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-            ),
-            errors=[],
+    with (
+        patch(
+            "book_store_assistant.pipeline.service.fetch_all",
+            return_value=initial_results,
+        ),
+        patch(
+            "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+            return_value=AcceptingValidator(),
+        ),
+        patch(
+            "book_store_assistant.pipeline.service.build_default_bibliographic_extractor",
+            return_value=object(),
+        ),
+    ):
+        process_isbn_file(
+            input_file,
+            source=DummySource(),
+            config=AppConfig(web_search_max_retries=3),
         )
-    ]
-    enriched_results = [
-        ResolutionResult(
-            record=None,
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-            ),
-            errors=["Generated synopsis rejected."],
-            reason_codes=["MISSING_SYNOPSIS"],
-        )
-    ]
 
-    selected_results = _select_best_resolution_results(
-        baseline_results,
-        enriched_results,
-    )
-
-    assert selected_results == baseline_results
-
-
-def test_select_best_resolution_results_keeps_unresolved_enriched_result_when_both_fail() -> None:
-    baseline_results = [
-        ResolutionResult(
-            record=None,
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-            ),
-            errors=["Synopsis is missing."],
-            reason_codes=["MISSING_SYNOPSIS"],
-        )
-    ]
-    enriched_results = [
-        ResolutionResult(
-            record=None,
-            source_record=SourceBookRecord(
-                source_name="google_books",
-                isbn="9780306406157",
-            ),
-            errors=["Subject is missing."],
-            reason_codes=["MISSING_SUBJECT"],
-        )
-    ]
-
-    selected_results = _select_best_resolution_results(
-        baseline_results,
-        enriched_results,
-    )
-
-    assert selected_results == enriched_results
-
-
-@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
-def test_process_isbn_file_passes_fetch_callbacks_through_to_fetch_layer(
-    mock_fetch_with_intermediate_stages,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_with_intermediate_stages.return_value = []
-
-    def on_fetch_start(index: int, total: int, isbn: str) -> None:
-        return None
-
-    def on_fetch_complete(index: int, total: int, result: FetchResult) -> None:
-        return None
-
-    process_isbn_file(
-        input_file,
-        on_fetch_start=on_fetch_start,
-        on_fetch_complete=on_fetch_complete,
-    )
-
-    assert (
-        mock_fetch_with_intermediate_stages.call_args.kwargs["on_fetch_start"]
-        is on_fetch_start
-    )
-    assert (
-        mock_fetch_with_intermediate_stages.call_args.kwargs["on_fetch_complete"]
-        is on_fetch_complete
-    )
-
-
-@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
-def test_process_isbn_file_passes_status_callback_through_to_fetch_layer(
-    mock_fetch_with_intermediate_stages,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_with_intermediate_stages.return_value = []
-
-    def on_status_update(message: str) -> None:
-        return None
-
-    process_isbn_file(
-        input_file,
-        on_status_update=on_status_update,
-    )
-
-    assert (
-        mock_fetch_with_intermediate_stages.call_args.kwargs["on_stage_update"]
-        is on_status_update
-    )
-
-
-@patch("book_store_assistant.pipeline.service.enrich_fetch_results")
-@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
-def test_process_isbn_file_passes_enrichment_callbacks_through_to_enrichment_layer(
-    mock_fetch_with_intermediate_stages,
-    mock_enrich_fetch_results,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_with_intermediate_stages.return_value = []
-    mock_enrich_fetch_results.return_value = ([], [])
-
-    def on_enrichment_start(index: int, total: int, isbn: str) -> None:
-        return None
-
-    def on_enrichment_complete(index: int, total: int, result: EnrichmentResult) -> None:
-        return None
-
-    process_isbn_file(
-        input_file,
-        on_enrichment_start=on_enrichment_start,
-        on_enrichment_complete=on_enrichment_complete,
-    )
-
-    assert (
-        mock_enrich_fetch_results.call_args.kwargs["on_enrichment_start"]
-        is on_enrichment_start
-    )
-    assert (
-        mock_enrich_fetch_results.call_args.kwargs["on_enrichment_complete"]
-        is on_enrichment_complete
-    )
-
-
-@patch("book_store_assistant.pipeline.service.enrich_fetch_results")
-@patch("book_store_assistant.pipeline.service.fetch_with_intermediate_stages")
-def test_process_isbn_file_explicit_mode_overrides_configured_mode(
-    mock_fetch_with_intermediate_stages,
-    mock_enrich_fetch_results,
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "isbns.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
-    mock_fetch_with_intermediate_stages.return_value = []
-    mock_enrich_fetch_results.return_value = (
-        [],
-        [],
-    )
-
-    process_isbn_file(
-        input_file,
-        config=AppConfig(execution_mode=ExecutionMode.AI_ENRICHED),
-        mode=ExecutionMode.RULES_ONLY,
-    )
-
-    assert mock_enrich_fetch_results.call_args.kwargs["mode"] is ExecutionMode.RULES_ONLY
+    assert mock_augment_fetch_results_with_editorial_search.call_count == 1
+    first_call = mock_augment_fetch_results_with_editorial_search.call_args_list[0]
+    assert first_call.kwargs["max_retries"] == 3

@@ -28,14 +28,12 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
         FETCH_ERROR_CODE,
         "MISSING_AUTHOR",
         "MISSING_EDITORIAL",
-        "MISSING_SYNOPSIS",
-        "MISSING_SUBJECT",
+        "MISSING_PUBLISHER",
     ]
     assert results[0].review_details == [
         "Source issue: GOOGLE_BOOKS:GOOGLE_BOOKS_TIMEOUT.",
         "google_books: Timeout",
-        "No source supplied author.",
-        "No source supplied editorial.",
-        "No source supplied synopsis.",
-        "No source supplied subject or usable categories.",
+        "No reliable source supplied author.",
+        "No reliable source supplied editorial.",
+        "No reliable source supplied publisher.",
     ]
