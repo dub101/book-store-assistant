@@ -95,12 +95,6 @@ class AppConfig(BaseModel):
     output_dir: Path = Field(
         default_factory=lambda: Path(_configured_str("output_dir", "data/output"))
     )
-    publisher_page_lookup_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_PUBLISHER_PAGE_LOOKUP_ENABLED", True)
-    )
-    retailer_page_lookup_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_RETAILER_PAGE_LOOKUP_ENABLED", True)
-    )
     source_request_pause_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)
     )
@@ -124,51 +118,6 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_float("BSA_GOOGLE_BOOKS_BACKOFF_SECONDS", 1.0)
     )
     open_library_api_base_url: str = "https://openlibrary.org/api/books"
-    publisher_page_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_TIMEOUT_SECONDS", 6.0)
-    )
-    retailer_page_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_TIMEOUT_SECONDS", 4.0)
-    )
-    publisher_page_max_retries: int = Field(
-        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_RETRIES", 0)
-    )
-    retailer_page_max_retries: int = Field(
-        default_factory=lambda: _env_int("BSA_RETAILER_PAGE_MAX_RETRIES", 0)
-    )
-    publisher_page_backoff_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_PUBLISHER_PAGE_BACKOFF_SECONDS", 0.5)
-    )
-    retailer_page_backoff_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_RETAILER_PAGE_BACKOFF_SECONDS", 0.25)
-    )
-    publisher_page_max_profiles_per_record: int = Field(
-        default_factory=lambda: _env_int("BSA_PUBLISHER_PAGE_MAX_PROFILES_PER_RECORD", 3)
-    )
-    publisher_page_max_search_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_PUBLISHER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            8,
-        )
-    )
-    publisher_page_max_fetch_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_PUBLISHER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            4,
-        )
-    )
-    retailer_page_max_search_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_RETAILER_PAGE_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            6,
-        )
-    )
-    retailer_page_max_fetch_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_RETAILER_PAGE_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            3,
-        )
-    )
     request_timeout_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_REQUEST_TIMEOUT_SECONDS", 10.0)
     )
@@ -178,38 +127,11 @@ class AppConfig(BaseModel):
     llm_record_validation_min_confidence: float = Field(
         default_factory=lambda: _env_float("BSA_LLM_RECORD_VALIDATION_MIN_CONFIDENCE", 0.8)
     )
-    web_search_fallback_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_WEB_SEARCH_FALLBACK_ENABLED", True)
+    llm_enrichment_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_LLM_ENRICHMENT_ENABLED", True)
     )
-    web_search_timeout_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_WEB_SEARCH_TIMEOUT_SECONDS", 10.0)
-    )
-    web_search_max_retries: int = Field(
-        default_factory=lambda: _env_int("BSA_WEB_SEARCH_MAX_RETRIES", 1)
-    )
-    web_search_max_pages_per_record: int = Field(
-        default_factory=lambda: _env_int("BSA_WEB_SEARCH_MAX_PAGES_PER_RECORD", 4)
-    )
-    web_search_max_search_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_WEB_SEARCH_MAX_SEARCH_ATTEMPTS_PER_RECORD",
-            5,
-        )
-    )
-    web_search_max_fetch_attempts_per_record: int = Field(
-        default_factory=lambda: _env_int(
-            "BSA_WEB_SEARCH_MAX_FETCH_ATTEMPTS_PER_RECORD",
-            4,
-        )
-    )
-    web_search_backoff_seconds: float = Field(
-        default_factory=lambda: _env_float("BSA_WEB_SEARCH_BACKOFF_SECONDS", 0.5)
-    )
-    llm_web_extraction_enabled: bool = Field(
-        default_factory=lambda: _env_bool("BSA_LLM_WEB_EXTRACTION_ENABLED", True)
-    )
-    llm_web_extraction_min_confidence: float = Field(
-        default_factory=lambda: _env_float("BSA_LLM_WEB_EXTRACTION_MIN_CONFIDENCE", 0.75)
+    llm_enrichment_timeout_seconds: float = Field(
+        default_factory=lambda: _env_float("BSA_LLM_ENRICHMENT_TIMEOUT_SECONDS", 60.0)
     )
     ai_provider: AIProvider = AIProvider.OPENAI
     openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))

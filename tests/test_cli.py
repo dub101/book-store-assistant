@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,13 +14,6 @@ from book_store_assistant.sources.models import SourceBookRecord
 from book_store_assistant.sources.results import FetchResult
 
 runner = CliRunner()
-
-
-def _cli_env() -> dict[str, str]:
-    env = dict(os.environ)
-    env["BSA_PUBLISHER_PAGE_LOOKUP_ENABLED"] = "0"
-    env["BSA_RETAILER_PAGE_LOOKUP_ENABLED"] = "0"
-    return env
 
 
 @patch("book_store_assistant.cli.process_isbn_file")
@@ -45,6 +37,9 @@ def test_cli_main_reports_bibliographic_pipeline_counts(
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 errors=[],
             )
@@ -56,14 +51,18 @@ def test_cli_main_reports_bibliographic_pipeline_counts(
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Editorial",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 candidate_record=BibliographicRecord(
                     isbn="9780306406157",
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Editorial",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 source_record=SourceBookRecord(
                     source_name="google_books",
@@ -80,7 +79,7 @@ def test_cli_main_reports_bibliographic_pipeline_counts(
         ],
     )
 
-    result = runner.invoke(app, [str(input_file)], env=_cli_env())
+    result = runner.invoke(app, [str(input_file)])
 
     assert result.exit_code == 0
     assert "Valid ISBNs: 1" in result.stdout
@@ -108,7 +107,9 @@ def test_cli_main_exports_upload_review_and_handoff_outputs(
         subtitle="Example Subtitle",
         author="Example Author",
         editorial="Example Editorial",
-        publisher="Example Publisher",
+        synopsis="Sinopsis de ejemplo.",
+        subject="NOVELA",
+        subject_code="20",
     )
     mock_process_isbn_file.return_value = ProcessResult(
         input_result=InputReadResult(
@@ -157,7 +158,6 @@ def test_cli_main_exports_upload_review_and_handoff_outputs(
                     title="Questionable Title",
                     author="Questionable Author",
                     editorial="Questionable Editorial",
-                    publisher="Questionable Publisher",
                 ),
                 source_record=SourceBookRecord(
                     source_name="google_books",
@@ -190,7 +190,6 @@ def test_cli_main_exports_upload_review_and_handoff_outputs(
             "--handoff-output",
             str(handoff_file),
         ],
-        env=_cli_env(),
     )
 
     assert result.exit_code == 0

@@ -12,6 +12,7 @@ class SourceBookRecord(BaseModel):
     editorial: str | None = None
     synopsis: str | None = None
     subject: str | None = None
+    subject_code: str | None = None
     categories: list[str] = Field(default_factory=list)
     cover_url: HttpUrl | None = None
     language: str | None = None

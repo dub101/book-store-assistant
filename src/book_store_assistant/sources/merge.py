@@ -10,6 +10,7 @@ SCALAR_FIELDS = [
     "editorial",
     "synopsis",
     "subject",
+    "subject_code",
     "language",
 ]
 FieldValue = TypeVar("FieldValue")
@@ -194,6 +195,15 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
             record_field_confidence,
             "subject",
         )
+        subject_code = _merge_scalar_field(
+            merged,
+            record,
+            field_sources,
+            field_confidence,
+            record_field_sources,
+            record_field_confidence,
+            "subject_code",
+        )
         language = _merge_scalar_field(
             merged,
             record,
@@ -258,6 +268,7 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
             editorial=editorial,
             synopsis=synopsis,
             subject=subject,
+            subject_code=subject_code,
             categories=categories,
             cover_url=cover_url,
             language=language,

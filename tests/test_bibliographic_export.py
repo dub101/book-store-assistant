@@ -11,7 +11,6 @@ from book_store_assistant.bibliographic.export import (
     export_upload_records,
 )
 from book_store_assistant.bibliographic.models import BibliographicRecord
-from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.resolution.results import ResolutionResult
 from book_store_assistant.sources.models import SourceBookRecord
@@ -27,7 +26,9 @@ def test_export_upload_records_writes_expected_columns_and_row(tmp_path: Path) -
                 subtitle="Example Subtitle",
                 author="Example Author",
                 editorial="Example Editorial",
-                publisher="Example Publisher",
+                synopsis="Sinopsis de ejemplo en español.",
+                subject="NOVELA",
+                subject_code="20",
             ),
             candidate_record=BibliographicRecord(
                 isbn="9780306406157",
@@ -35,7 +36,9 @@ def test_export_upload_records_writes_expected_columns_and_row(tmp_path: Path) -
                 subtitle="Example Subtitle",
                 author="Example Author",
                 editorial="Example Editorial",
-                publisher="Example Publisher",
+                synopsis="Sinopsis de ejemplo en español.",
+                subject="NOVELA",
+                subject_code="20",
             ),
             source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
             errors=[],
@@ -49,14 +52,13 @@ def test_export_upload_records_writes_expected_columns_and_row(tmp_path: Path) -
     workbook = openpyxl.load_workbook(output_file)
     sheet = workbook.active
     assert [cell.value for cell in sheet[1]] == UPLOAD_HEADERS
-    assert [sheet.cell(row=2, column=index).value for index in range(1, 7)] == [
-        "9780306406157",
-        "Example Title",
-        "Example Subtitle",
-        "Example Author",
-        "Example Editorial",
-        "Example Publisher",
-    ]
+    assert sheet.cell(row=2, column=1).value == "9780306406157"
+    assert sheet.cell(row=2, column=2).value == "Example Title"
+    assert sheet.cell(row=2, column=4).value == "Example Author"
+    assert sheet.cell(row=2, column=5).value == "Example Editorial"
+    assert sheet.cell(row=2, column=6).value == "Sinopsis de ejemplo en español."
+    assert sheet.cell(row=2, column=7).value == "NOVELA"
+    assert sheet.cell(row=2, column=8).value == "20"
 
 
 def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -> None:
@@ -69,7 +71,6 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
             title="Questionable Title",
             author="Questionable Author",
             editorial="Questionable Editorial",
-            publisher="Questionable Publisher",
         ),
         source_record=SourceBookRecord(
             source_name="google_books",
@@ -77,10 +78,6 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
             title="Questionable Title",
             author="Questionable Author",
             editorial="Questionable Editorial",
-        ),
-        publisher_identity=PublisherIdentityResult(
-            isbn="9780306406157",
-            publisher_name="Questionable Publisher",
         ),
         validation_assessment=RecordValidationAssessment(
             accepted=False,
@@ -90,7 +87,7 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
         errors=["LLM validation rejected the bibliographic record."],
         reason_codes=["VALIDATION_REJECTED"],
         review_details=["Title is not well supported by the source evidence."],
-        path_summary={"first_material_gain_stage": "retailer_lookup"},
+        path_summary={"first_material_gain_stage": "llm_enrichment"},
     )
 
     export_review_rows([result], review_file)
@@ -100,8 +97,7 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
     sheet = workbook.active
     assert [cell.value for cell in sheet[1]] == REVIEW_HEADERS
     assert sheet.cell(row=2, column=1).value == "9780306406157"
-    assert sheet.cell(row=2, column=6).value == "Questionable Publisher"
-    assert sheet.cell(row=2, column=8).value == "VALIDATION_REJECTED"
-    assert sheet.cell(row=2, column=9).value == "0.45"
+    assert sheet.cell(row=2, column=7).value == "VALIDATION_REJECTED"
+    assert sheet.cell(row=2, column=8).value == "0.45"
     payload = json.loads(handoff_file.read_text(encoding="utf-8").strip())
-    assert payload["path_summary"]["first_material_gain_stage"] == "retailer_lookup"
+    assert payload["path_summary"]["first_material_gain_stage"] == "llm_enrichment"

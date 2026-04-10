@@ -1,24 +1,30 @@
 import re
 
 from book_store_assistant.bibliographic.models import BibliographicRecord
-from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.base import RecordQualityValidator
 from book_store_assistant.resolution.results import ResolutionResult
+from book_store_assistant.resolution.synopsis_resolution import (
+    get_synopsis_review_error,
+    resolve_synopsis,
+)
 from book_store_assistant.sources.models import SourceBookRecord
 
 TITLE_MISSING_ERROR = "Title is missing."
 AUTHOR_MISSING_ERROR = "Author is missing."
 EDITORIAL_MISSING_ERROR = "Editorial is missing."
-PUBLISHER_MISSING_ERROR = "Publisher is missing."
+SYNOPSIS_MISSING_ERROR = "Synopsis is missing."
+SUBJECT_MISSING_ERROR = "Subject is missing."
 VALIDATION_UNAVAILABLE_ERROR = "LLM validation could not be completed."
 VALIDATION_REJECTED_ERROR = "LLM validation rejected the bibliographic record."
 
 TITLE_MISSING_CODE = "MISSING_TITLE"
 AUTHOR_MISSING_CODE = "MISSING_AUTHOR"
 EDITORIAL_MISSING_CODE = "MISSING_EDITORIAL"
-PUBLISHER_MISSING_CODE = "MISSING_PUBLISHER"
+SYNOPSIS_MISSING_CODE = "MISSING_SYNOPSIS"
+SUBJECT_MISSING_CODE = "MISSING_SUBJECT"
 VALIDATION_UNAVAILABLE_CODE = "VALIDATION_UNAVAILABLE"
 VALIDATION_REJECTED_CODE = "VALIDATION_REJECTED"
+
 CATALOG_TITLE_ARTIFACT_PATTERN = re.compile(
     r"\s*\[(?:[^\]]*texto impreso[^\]]*|[^\]]*recurso electr[oó]nico[^\]]*|"
     r"[^\]]*electronic resource[^\]]*)\]\s*",
@@ -29,7 +35,6 @@ CATALOG_TITLE_ARTIFACT_PATTERN = re.compile(
 def _clean_text(value: str | None) -> str | None:
     if value is None:
         return None
-
     cleaned = " ".join(value.split()).strip()
     return cleaned or None
 
@@ -38,7 +43,6 @@ def _clean_catalog_text(value: str | None) -> str | None:
     cleaned = _clean_text(value)
     if cleaned is None:
         return None
-
     normalized = _clean_text(CATALOG_TITLE_ARTIFACT_PATTERN.sub(" ", cleaned))
     return normalized or cleaned
 
@@ -47,7 +51,6 @@ def _clean_title(value: str | None, subtitle: str | None = None) -> str | None:
     cleaned = _clean_catalog_text(value)
     if cleaned is None:
         return None
-
     cleaned_subtitle = _clean_catalog_text(subtitle)
     if cleaned_subtitle:
         normalized_title = cleaned.casefold()
@@ -56,7 +59,6 @@ def _clean_title(value: str | None, subtitle: str | None = None) -> str | None:
             if normalized_title.endswith(suffix.casefold()):
                 stripped = cleaned[: -len(suffix)].rstrip(" :;-")
                 return stripped or cleaned
-
     return cleaned
 
 
@@ -66,52 +68,26 @@ def _review_note_from_assessment(
 ) -> str:
     if explanation:
         return explanation
-
     if issues:
         return f"Validation issues: {', '.join(issues)}"
-
     return "Validation rejected the candidate record."
 
 
-def _coalesce_editorial_and_publisher(
-    source_record: SourceBookRecord,
-    publisher_identity: PublisherIdentityResult | None,
-) -> tuple[str | None, str | None]:
-    editorial = (
-        _clean_text(publisher_identity.imprint_name if publisher_identity is not None else None)
-        or _clean_text(source_record.editorial)
-        or _clean_text(
-            publisher_identity.publisher_name if publisher_identity is not None else None
-        )
-    )
-    publisher = (
-        _clean_text(
-            publisher_identity.publisher_name if publisher_identity is not None else None
-        )
-        or editorial
-    )
-
-    if editorial is None and publisher is not None:
-        editorial = publisher
-    if publisher is None and editorial is not None:
-        publisher = editorial
-
-    return editorial, publisher
-
-
-def _build_candidate_record(
-    source_record: SourceBookRecord,
-    publisher_identity: PublisherIdentityResult | None,
-) -> BibliographicRecord | None:
+def _build_candidate_record(source_record: SourceBookRecord) -> BibliographicRecord | None:
     title = _clean_title(source_record.title, source_record.subtitle)
     author = _clean_text(source_record.author)
-    editorial, publisher = _coalesce_editorial_and_publisher(
-        source_record,
-        publisher_identity,
-    )
+    editorial = _clean_text(source_record.editorial)
 
-    if not title or not author or not editorial or not publisher:
+    if not title or not author or not editorial:
         return None
+
+    synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
+
+    try:
+        from pydantic import HttpUrl
+        cover_url = source_record.cover_url
+    except Exception:
+        cover_url = None
 
     return BibliographicRecord(
         isbn=source_record.isbn,
@@ -119,27 +95,34 @@ def _build_candidate_record(
         subtitle=_clean_catalog_text(source_record.subtitle),
         author=author,
         editorial=editorial,
-        publisher=publisher,
+        synopsis=synopsis,
+        subject=_clean_text(source_record.subject),
+        subject_code=_clean_text(source_record.subject_code),
+        cover_url=cover_url,
     )
 
 
 def resolve_bibliographic_record(
     source_record: SourceBookRecord,
-    publisher_identity: PublisherIdentityResult | None = None,
     validator: RecordQualityValidator | None = None,
 ) -> ResolutionResult:
     reason_codes: list[str] = []
     review_details: list[str] = []
     errors: list[str] = []
-    candidate_record = _build_candidate_record(source_record, publisher_identity)
-    editorial, publisher = _coalesce_editorial_and_publisher(source_record, publisher_identity)
 
-    if not _clean_title(source_record.title, source_record.subtitle):
+    title = _clean_title(source_record.title, source_record.subtitle)
+    author = _clean_text(source_record.author)
+    editorial = _clean_text(source_record.editorial)
+    synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
+    synopsis_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
+    subject = _clean_text(source_record.subject)
+
+    if not title:
         reason_codes.append(TITLE_MISSING_CODE)
         errors.append(TITLE_MISSING_ERROR)
         review_details.append("No reliable source supplied title.")
 
-    if not _clean_text(source_record.author):
+    if not author:
         reason_codes.append(AUTHOR_MISSING_CODE)
         errors.append(AUTHOR_MISSING_ERROR)
         review_details.append("No reliable source supplied author.")
@@ -149,18 +132,29 @@ def resolve_bibliographic_record(
         errors.append(EDITORIAL_MISSING_ERROR)
         review_details.append("No reliable source supplied editorial.")
 
-    if not publisher:
-        reason_codes.append(PUBLISHER_MISSING_CODE)
-        errors.append(PUBLISHER_MISSING_ERROR)
-        review_details.append("No reliable source supplied publisher.")
+    if not synopsis:
+        code = SYNOPSIS_MISSING_CODE
+        reason_codes.append(code)
+        if synopsis_error:
+            errors.append(synopsis_error)
+            review_details.append(synopsis_error)
+        else:
+            errors.append(SYNOPSIS_MISSING_ERROR)
+            review_details.append("No reliable source supplied a Spanish synopsis.")
 
-    if candidate_record is None:
+    if not subject:
+        reason_codes.append(SUBJECT_MISSING_CODE)
+        errors.append(SUBJECT_MISSING_ERROR)
+        review_details.append("No reliable source supplied subject.")
+
+    candidate_record = _build_candidate_record(source_record)
+
+    if candidate_record is None or reason_codes:
         return ResolutionResult(
             record=None,
-            candidate_record=None,
+            candidate_record=candidate_record,
             source_record=source_record,
-            publisher_identity=publisher_identity,
-            errors=[*errors, *review_details],
+            errors=errors,
             reason_codes=reason_codes,
             review_details=review_details,
         )
@@ -171,24 +165,18 @@ def resolve_bibliographic_record(
             record=None,
             candidate_record=candidate_record,
             source_record=source_record,
-            publisher_identity=publisher_identity,
             errors=[VALIDATION_UNAVAILABLE_ERROR, review_note],
             reason_codes=[VALIDATION_UNAVAILABLE_CODE],
             review_details=[review_note],
         )
 
-    assessment = validator.validate(
-        source_record,
-        candidate_record,
-        publisher_identity=publisher_identity,
-    )
+    assessment = validator.validate(source_record, candidate_record)
     if assessment is None:
         review_note = "LLM validator returned no decision."
         return ResolutionResult(
             record=None,
             candidate_record=candidate_record,
             source_record=source_record,
-            publisher_identity=publisher_identity,
             validation_assessment=None,
             errors=[VALIDATION_UNAVAILABLE_ERROR, review_note],
             reason_codes=[VALIDATION_UNAVAILABLE_CODE],
@@ -196,15 +184,11 @@ def resolve_bibliographic_record(
         )
 
     if not assessment.accepted:
-        review_note = _review_note_from_assessment(
-            assessment.issues,
-            assessment.explanation,
-        )
+        review_note = _review_note_from_assessment(assessment.issues, assessment.explanation)
         return ResolutionResult(
             record=None,
             candidate_record=candidate_record,
             source_record=source_record,
-            publisher_identity=publisher_identity,
             validation_assessment=assessment,
             errors=[VALIDATION_REJECTED_ERROR, review_note],
             reason_codes=[VALIDATION_REJECTED_CODE],
@@ -215,7 +199,6 @@ def resolve_bibliographic_record(
         record=candidate_record,
         candidate_record=candidate_record,
         source_record=source_record,
-        publisher_identity=publisher_identity,
         validation_assessment=assessment,
         errors=[],
         reason_codes=[],

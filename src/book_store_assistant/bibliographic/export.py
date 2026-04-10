@@ -12,7 +12,10 @@ UPLOAD_HEADERS = [
     "Subtitle",
     "Author",
     "Editorial",
-    "Publisher",
+    "Synopsis",
+    "Subject",
+    "SubjectCode",
+    "CoverURL",
 ]
 REVIEW_HEADERS = [
     "ISBN",
@@ -20,7 +23,6 @@ REVIEW_HEADERS = [
     "Subtitle",
     "Author",
     "Editorial",
-    "Publisher",
     "Status",
     "ReasonCode",
     "ValidatorConfidence",
@@ -29,7 +31,7 @@ REVIEW_HEADERS = [
 
 
 def _validate_upload_row(row: list[str | None]) -> None:
-    required_indexes = [0, 1, 3, 4, 5]
+    required_indexes = [0, 1, 3, 4]
     for index in required_indexes:
         value = row[index]
         if value is None or not value.strip():
@@ -43,14 +45,14 @@ def _upload_row(record: BibliographicRecord) -> list[str | None]:
         record.subtitle,
         record.author,
         record.editorial,
-        record.publisher,
+        record.synopsis,
+        record.subject,
+        record.subject_code,
+        str(record.cover_url) if record.cover_url else None,
     ]
 
 
-def _review_value(
-    result: ResolutionResult,
-    field_name: str,
-) -> str | None:
+def _review_value(result: ResolutionResult, field_name: str) -> str | None:
     if result.candidate_record is not None and hasattr(result.candidate_record, field_name):
         value = getattr(result.candidate_record, field_name)
         if isinstance(value, str) and value.strip():
@@ -60,12 +62,6 @@ def _review_value(
         value = getattr(result.source_record, field_name, None)
         if isinstance(value, str) and value.strip():
             return value
-
-    if field_name == "publisher" and result.publisher_identity is not None:
-        return result.publisher_identity.publisher_name
-
-    if field_name == "editorial" and result.publisher_identity is not None:
-        return result.publisher_identity.imprint_name or result.publisher_identity.publisher_name
 
     return None
 
@@ -86,7 +82,6 @@ def _review_row(result: ResolutionResult) -> list[str | None]:
         _review_value(result, "subtitle"),
         _review_value(result, "author"),
         _review_value(result, "editorial"),
-        _review_value(result, "publisher"),
         "review",
         ", ".join(result.reason_codes) if result.reason_codes else None,
         validator_confidence,
@@ -127,7 +122,7 @@ def export_upload_records(results: list[ResolutionResult], output_path: Path) ->
         _validate_upload_row(row)
         sheet.append(row)
 
-    _apply_sheet_basics(sheet, freeze_panes="A2")
+    _apply_sheet_basics(sheet, freeze_panes="A2", wrap_columns=(6, 6))
     workbook.save(output_path)
 
 
@@ -142,7 +137,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
             continue
         sheet.append(_review_row(result))
 
-    _apply_sheet_basics(sheet, freeze_panes="A2", wrap_columns=(10, 10))
+    _apply_sheet_basics(sheet, freeze_panes="A2", wrap_columns=(9, 9))
     workbook.save(output_path)
 
 

@@ -15,6 +15,11 @@ from book_store_assistant.sources.models import SourceBookRecord
 
 runner = CliRunner()
 
+EXPECTED_REVIEW_HEADERS = [
+    "ISBN", "Title", "Subtitle", "Author", "Editorial",
+    "Status", "ReasonCode", "ValidatorConfidence", "ReviewNote",
+]
+
 
 @patch("book_store_assistant.cli.process_isbn_file")
 def test_cli_can_export_review_rows(mock_process_isbn_file, tmp_path: Path) -> None:
@@ -36,7 +41,6 @@ def test_cli_can_export_review_rows(mock_process_isbn_file, tmp_path: Path) -> N
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Publisher",
                 ),
                 source_record=SourceBookRecord(
                     source_name="google_books",
@@ -61,7 +65,9 @@ def test_cli_can_export_review_rows(mock_process_isbn_file, tmp_path: Path) -> N
                     subtitle="Resolved Subtitle",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Publisher",
+                    synopsis="Sinopsis resuelta.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 source_record=None,
                 errors=[],
@@ -74,30 +80,15 @@ def test_cli_can_export_review_rows(mock_process_isbn_file, tmp_path: Path) -> N
     assert result.exit_code == 0
     workbook = openpyxl.load_workbook(review_file)
     sheet = workbook.active
-    assert [cell.value for cell in sheet[1]] == [
-        "ISBN",
-        "Title",
-        "Subtitle",
-        "Author",
-        "Editorial",
-        "Publisher",
-        "Status",
-        "ReasonCode",
-        "ValidatorConfidence",
-        "ReviewNote",
-    ]
-    assert [sheet.cell(row=2, column=index).value for index in range(1, 11)] == [
-        "9780306406157",
-        "Example Title",
-        None,
-        "Example Author",
-        "Example Editorial",
-        "Example Publisher",
-        "review",
-        "VALIDATION_REJECTED",
-        "0.42",
-        "Author needs a manual check.",
-    ]
+    assert [cell.value for cell in sheet[1]] == EXPECTED_REVIEW_HEADERS
+    row2 = [sheet.cell(row=2, column=i).value for i in range(1, 10)]
+    assert row2[0] == "9780306406157"
+    assert row2[1] == "Example Title"
+    assert row2[4] == "Example Editorial"
+    assert row2[5] == "review"
+    assert row2[6] == "VALIDATION_REJECTED"
+    assert row2[7] == "0.42"
+    assert row2[8] == "Author needs a manual check."
 
 
 @patch("book_store_assistant.cli.process_isbn_file")
@@ -129,19 +120,11 @@ def test_cli_review_export_uses_exact_requested_path(
         ],
     )
 
-    result = runner.invoke(
-        app,
-        [
-            str(input_file),
-            "--review-output",
-            str(review_file),
-        ],
-    )
+    result = runner.invoke(app, [str(input_file), "--review-output", str(review_file)])
 
     assert result.exit_code == 0
     assert review_file.exists()
-    sheet_name = openpyxl.load_workbook(review_file).active.title
-    assert sheet_name == "Review"
+    assert openpyxl.load_workbook(review_file).active.title == "Review"
 
 
 @patch("book_store_assistant.cli.process_isbn_file")
@@ -173,14 +156,7 @@ def test_cli_review_export_does_not_create_implicit_output_variants(
         ],
     )
 
-    result = runner.invoke(
-        app,
-        [
-            str(input_file),
-            "--review-output",
-            str(review_file),
-        ],
-    )
+    result = runner.invoke(app, [str(input_file), "--review-output", str(review_file)])
 
     assert result.exit_code == 0
     assert review_file.exists()

@@ -13,6 +13,11 @@ from book_store_assistant.resolution.results import ResolutionResult
 
 runner = CliRunner()
 
+EXPECTED_UPLOAD_HEADERS = [
+    "ISBN", "Title", "Subtitle", "Author", "Editorial",
+    "Synopsis", "Subject", "SubjectCode", "CoverURL",
+]
+
 
 @patch("book_store_assistant.cli.process_isbn_file")
 def test_cli_export_writes_resolved_records(mock_process_isbn_file, tmp_path: Path) -> None:
@@ -34,7 +39,9 @@ def test_cli_export_writes_resolved_records(mock_process_isbn_file, tmp_path: Pa
                     subtitle="Example Subtitle",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Publisher",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 source_record=None,
                 errors=[],
@@ -47,22 +54,14 @@ def test_cli_export_writes_resolved_records(mock_process_isbn_file, tmp_path: Pa
     assert result.exit_code == 0
     workbook = openpyxl.load_workbook(output_file)
     sheet = workbook.active
-    assert [cell.value for cell in sheet[1]] == [
-        "ISBN",
-        "Title",
-        "Subtitle",
-        "Author",
-        "Editorial",
-        "Publisher",
-    ]
-    assert [sheet.cell(row=2, column=index).value for index in range(1, 7)] == [
-        "9780306406157",
-        "Example Title",
-        "Example Subtitle",
-        "Example Author",
-        "Example Editorial",
-        "Example Publisher",
-    ]
+    assert [cell.value for cell in sheet[1]] == EXPECTED_UPLOAD_HEADERS
+    assert sheet.cell(row=2, column=1).value == "9780306406157"
+    assert sheet.cell(row=2, column=2).value == "Example Title"
+    assert sheet.cell(row=2, column=4).value == "Example Author"
+    assert sheet.cell(row=2, column=5).value == "Example Editorial"
+    assert sheet.cell(row=2, column=6).value == "Sinopsis de ejemplo."
+    assert sheet.cell(row=2, column=7).value == "NOVELA"
+    assert sheet.cell(row=2, column=8).value == "20"
 
 
 @patch("book_store_assistant.cli.process_isbn_file")
@@ -88,7 +87,9 @@ def test_cli_export_writes_default_handoff_next_to_upload_output(
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Publisher",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 source_record=None,
                 errors=[],
@@ -96,14 +97,7 @@ def test_cli_export_writes_default_handoff_next_to_upload_output(
         ],
     )
 
-    result = runner.invoke(
-        app,
-        [
-            str(input_file),
-            "--output",
-            str(output_file),
-        ],
-    )
+    result = runner.invoke(app, [str(input_file), "--output", str(output_file)])
 
     assert result.exit_code == 0
     assert output_file.exists()
@@ -134,7 +128,9 @@ def test_cli_export_respects_explicit_handoff_output_path(
                     title="Example Title",
                     author="Example Author",
                     editorial="Example Editorial",
-                    publisher="Example Publisher",
+                    synopsis="Sinopsis de ejemplo.",
+                    subject="NOVELA",
+                    subject_code="20",
                 ),
                 source_record=None,
                 errors=[],
@@ -144,13 +140,7 @@ def test_cli_export_respects_explicit_handoff_output_path(
 
     result = runner.invoke(
         app,
-        [
-            str(input_file),
-            "--output",
-            str(output_file),
-            "--handoff-output",
-            str(handoff_file),
-        ],
+        [str(input_file), "--output", str(output_file), "--handoff-output", str(handoff_file)],
     )
 
     assert result.exit_code == 0

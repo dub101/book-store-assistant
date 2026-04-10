@@ -12,14 +12,12 @@ FETCH_ERROR_CODE = "FETCH_ERROR"
 def _merge_unique(*values: list[str]) -> list[str]:
     merged: list[str] = []
     seen: set[str] = set()
-
     for items in values:
         for item in items:
             if item in seen:
                 continue
             seen.add(item)
             merged.append(item)
-
     return merged
 
 
@@ -56,7 +54,6 @@ def resolve_all(
 
         resolved_result = resolve_bibliographic_record(
             fetch_result.record,
-            publisher_identity=fetch_result.publisher_identity,
             validator=validator,
         )
 
@@ -75,7 +72,6 @@ def resolve_all(
                     record=None,
                     candidate_record=resolved_result.candidate_record,
                     source_record=resolved_result.source_record,
-                    publisher_identity=resolved_result.publisher_identity,
                     validation_assessment=resolved_result.validation_assessment,
                     errors=_merge_unique(fetch_result.errors, resolved_result.errors),
                     reason_codes=merged_reason_codes,

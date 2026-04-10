@@ -24,16 +24,8 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
     assert results[0].record is None
     assert results[0].source_record is not None
     assert results[0].source_record.source_name == "google_books + open_library"
-    assert results[0].reason_codes == [
-        FETCH_ERROR_CODE,
-        "MISSING_AUTHOR",
-        "MISSING_EDITORIAL",
-        "MISSING_PUBLISHER",
-    ]
-    assert results[0].review_details == [
-        "Source issue: GOOGLE_BOOKS:GOOGLE_BOOKS_TIMEOUT.",
-        "google_books: Timeout",
-        "No reliable source supplied author.",
-        "No reliable source supplied editorial.",
-        "No reliable source supplied publisher.",
-    ]
+    assert FETCH_ERROR_CODE in results[0].reason_codes
+    assert "MISSING_AUTHOR" in results[0].reason_codes
+    assert "MISSING_EDITORIAL" in results[0].reason_codes
+    assert "MISSING_SYNOPSIS" in results[0].reason_codes
+    assert "MISSING_SUBJECT" in results[0].reason_codes

@@ -4,7 +4,6 @@ import re
 import httpx
 
 from book_store_assistant.bibliographic.models import BibliographicRecord
-from book_store_assistant.publisher_identity.models import PublisherIdentityResult
 from book_store_assistant.resolution.base import RecordQualityValidator
 from book_store_assistant.resolution.models import RecordValidationAssessment
 from book_store_assistant.sources.models import SourceBookRecord
@@ -15,7 +14,6 @@ JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 def _build_messages(
     source_record: SourceBookRecord,
     candidate_record: BibliographicRecord,
-    publisher_identity: PublisherIdentityResult | None = None,
 ) -> list[dict[str, object]]:
     source_lines = [
         f"ISBN: {source_record.isbn}",
@@ -28,35 +26,22 @@ def _build_messages(
         f"Source categories: {', '.join(source_record.categories)}",
         f"Field sources: {source_record.field_sources}",
     ]
-    if publisher_identity is not None:
-        source_lines.extend(
-            [
-                f"Resolved imprint/editorial: {publisher_identity.imprint_name or ''}",
-                f"Resolved publisher/group: {publisher_identity.publisher_name or ''}",
-                f"Publisher identity confidence: {publisher_identity.confidence}",
-                f"Publisher identity method: {publisher_identity.resolution_method or ''}",
-                f"Publisher identity evidence: {', '.join(publisher_identity.evidence)}",
-            ]
-        )
     candidate_lines = [
         f"ISBN: {candidate_record.isbn}",
         f"Title: {candidate_record.title}",
         f"Subtitle: {candidate_record.subtitle or ''}",
         f"Author: {candidate_record.author}",
         f"Editorial: {candidate_record.editorial}",
-        f"Publisher: {candidate_record.publisher}",
+        f"Synopsis: {candidate_record.synopsis or ''}",
+        f"Subject: {candidate_record.subject or ''}",
+        f"SubjectCode: {candidate_record.subject_code or ''}",
     ]
     system_prompt = (
         "You validate bookstore upload rows for bibliographic correctness. "
         "Use the source evidence only. "
         "Accept the row unless there is a clear reason that title, subtitle, author, editorial, "
-        "or publisher is unsupported, corrupted, hallucinated, mismatched to the ISBN, "
+        "synopsis, or subject is unsupported, corrupted, hallucinated, mismatched to the ISBN, "
         "or obviously scraped site boilerplate. "
-        "Editorial can be an imprint or sello while publisher can be the parent publisher or "
-        "publisher group. Those may differ and can both be correct when the evidence or "
-        "publisher-identity normalization supports that mapping. "
-        "It is acceptable for editorial and publisher to be the same value when the evidence "
-        "supports only one trusted publishing name. "
         "Return only valid JSON with keys accepted, confidence, issues, and explanation."
     )
     user_prompt = "\n".join(
@@ -99,10 +84,7 @@ def _extract_output_text(payload: dict) -> str | None:
             if isinstance(text_value, str) and text_value.strip():
                 text_parts.append(text_value.strip())
 
-    if not text_parts:
-        return None
-
-    return "\n".join(text_parts)
+    return "\n".join(text_parts) if text_parts else None
 
 
 def _parse_validation_response(text: str) -> RecordValidationAssessment | None:
@@ -163,7 +145,6 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
         self,
         source_record: SourceBookRecord,
         candidate_record: BibliographicRecord,
-        publisher_identity: PublisherIdentityResult | None = None,
     ) -> RecordValidationAssessment | None:
         try:
             response = httpx.post(
@@ -174,11 +155,7 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
                 },
                 json={
                     "model": self.model,
-                    "input": _build_messages(
-                        source_record,
-                        candidate_record,
-                        publisher_identity=publisher_identity,
-                    ),
+                    "input": _build_messages(source_record, candidate_record),
                 },
                 timeout=self.timeout_seconds,
             )
