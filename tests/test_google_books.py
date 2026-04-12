@@ -149,3 +149,69 @@ def test_google_books_source_stops_retrying_after_configured_attempts(
     assert result.issue_codes == ["GOOGLE_BOOKS_HTTP_429", "GOOGLE_BOOKS_RATE_LIMITED"]
     assert mock_get.call_count == 3
     assert mock_sleep.call_args_list == [call(0.5), call(1.0)]
+
+
+@patch("book_store_assistant.sources.google_books.time.sleep")
+@patch("book_store_assistant.sources.google_books.httpx.get")
+def test_google_books_source_retries_on_429_with_retry_after_header(
+    mock_get: Mock,
+    mock_sleep: Mock,
+) -> None:
+    request = httpx.Request("GET", "https://example.com")
+    rate_limited_response = httpx.Response(
+        429,
+        headers={"Retry-After": "3.5"},
+        request=request,
+    )
+    success_response = Mock()
+    success_response.json.return_value = {
+        "items": [
+            {
+                "volumeInfo": {
+                    "title": "Retried Book",
+                    "authors": ["Author"],
+                    "publisher": "Publisher",
+                }
+            }
+        ]
+    }
+    success_response.raise_for_status.return_value = None
+    mock_get.side_effect = [
+        httpx.HTTPStatusError(
+            "rate limited",
+            request=request,
+            response=rate_limited_response,
+        ),
+        success_response,
+    ]
+
+    source = GoogleBooksSource()
+
+    result = source.fetch("9780000000001")
+
+    assert result.record is not None
+    assert result.record.title == "Retried Book"
+    mock_sleep.assert_called_once_with(3.5)
+
+
+@patch("book_store_assistant.sources.google_books.time.sleep")
+@patch("book_store_assistant.sources.google_books.httpx.get")
+def test_google_books_source_gives_up_after_max_retries(
+    mock_get: Mock,
+    mock_sleep: Mock,
+) -> None:
+    request = httpx.Request("GET", "https://example.com")
+    response_429 = httpx.Response(429, request=request)
+    error = httpx.HTTPStatusError("rate limited", request=request, response=response_429)
+    mock_get.side_effect = [error, error, error, error]
+
+    source = GoogleBooksSource(
+        AppConfig(google_books_max_retries=3, google_books_backoff_seconds=0.1)
+    )
+
+    result = source.fetch("9780000000002")
+
+    assert result.record is None
+    assert result.errors == ["rate limited"]
+    assert mock_get.call_count == 4
+    assert mock_sleep.call_count == 3

@@ -35,7 +35,10 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=book_store_assistant --cov-report=term-missing"
+addopts = "--cov=book_store_assistant --cov-report=term-missing --cov-config=pyproject.toml"
+
+[tool.coverage.run]
+omit = ["src/book_store_assistant/gui.py"]
 
 [tool.ruff]
 line-length = 100
@@ -43,6 +46,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/book_store_assistant/sources/llm_enrichment.py" = ["E501"]
+"tests/test_bne_parser.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

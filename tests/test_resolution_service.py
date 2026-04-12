@@ -150,3 +150,76 @@ def test_resolve_all_resolves_record_without_subject() -> None:
     assert results[0].record is not None
     assert results[0].record.title == "Example Title"
     assert results[0].record.synopsis == "Sinopsis de ejemplo."
+
+
+def test_resolve_all_fetch_result_record_none_creates_fetch_error_record() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=None,
+            errors=["Connection timed out."],
+            issue_codes=["GOOGLE_BOOKS_TIMEOUT"],
+        ),
+    ]
+
+    results = resolve_all(fetch_results)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.record is None
+    assert result.source_record is not None
+    assert result.source_record.source_name == "fetch_error"
+    assert result.source_record.isbn == "9780306406157"
+    assert "FETCH_ERROR" in result.reason_codes
+    assert "Connection timed out." in result.errors
+    assert any("GOOGLE_BOOKS_TIMEOUT" in d for d in result.review_details)
+
+
+def test_resolve_all_preserves_diagnostics_in_output() -> None:
+    diag = [{"stage": "google_books", "action": "started"}]
+    fetch_results = [
+        FetchResult(
+            isbn="0306406152",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="0306406152",
+                title="Example Title",
+                author="Example Author",
+                editorial="Example Editorial",
+            ),
+            errors=[],
+            diagnostics=diag,
+        ),
+    ]
+
+    results = resolve_all(fetch_results, validator=AcceptingValidator())
+
+    assert results[0].diagnostics == diag
+    assert results[0].path_summary["stages_seen"] == ["google_books"]
+
+
+def test_resolve_all_with_fetch_errors_and_resolution_errors_merges_both() -> None:
+    """When record exists but resolution fails AND fetch had errors, both merge."""
+    fetch_results = [
+        FetchResult(
+            isbn="0306406152",
+            record=SourceBookRecord(
+                source_name="google_books",
+                isbn="0306406152",
+                title="Example Title",
+                author=None,
+                editorial="Example Editorial",
+            ),
+            errors=["Partial data returned."],
+            issue_codes=["GOOGLE_BOOKS_PARTIAL"],
+        ),
+    ]
+
+    results = resolve_all(fetch_results)
+
+    result = results[0]
+    assert result.record is None
+    assert "FETCH_ERROR" in result.reason_codes
+    assert "MISSING_AUTHOR" in result.reason_codes
+    assert "Partial data returned." in result.errors
+    assert any("GOOGLE_BOOKS_PARTIAL" in d for d in result.review_details)

@@ -76,10 +76,12 @@ class ColombiaISBNSource:
                 raw_payload=html,
             )
 
+        from pydantic import HttpUrl
+
         record = SourceBookRecord(
             source_name=self.source_name,
             isbn=isbn,
-            source_url=url,
+            source_url=HttpUrl(url),
             title=title,
             author=author,
             editorial=editorial,
