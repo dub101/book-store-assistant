@@ -11,7 +11,7 @@ def test_parse_bne_sru_payload_extracts_book_metadata() -> None:
           <title>La sombra del viento</title>
           <creator>Carlos Ruiz Zafon</creator>
           <publisher>Planeta</publisher>
-          <description>Una novela ambientada en la Barcelona de posguerra.</description>
+          <description>Una novela ambientada en la Barcelona de posguerra, llena de misterio, intriga y aventuras literarias.</description>
           <subject>Novela espanola</subject>
           <language>spa</language>
           <identifier>https://catalogo.bne.es/discovery/fulldisplay?docid=alma99123</identifier>
@@ -29,7 +29,10 @@ def test_parse_bne_sru_payload_extracts_book_metadata() -> None:
     assert record.title == "La sombra del viento"
     assert record.author == "Carlos Ruiz Zafon"
     assert record.editorial == "Planeta"
-    assert record.synopsis == "Una novela ambientada en la Barcelona de posguerra."
+    assert record.synopsis == (
+        "Una novela ambientada en la Barcelona de posguerra,"
+        " llena de misterio, intriga y aventuras literarias."
+    )
     assert record.categories == ["Novela espanola"]
     assert record.language == "es"
 

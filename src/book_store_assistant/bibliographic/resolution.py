@@ -3,25 +3,18 @@ import re
 from book_store_assistant.bibliographic.models import BibliographicRecord
 from book_store_assistant.resolution.base import RecordQualityValidator
 from book_store_assistant.resolution.results import ResolutionResult
-from book_store_assistant.resolution.synopsis_resolution import (
-    get_synopsis_review_error,
-    resolve_synopsis,
-)
+from book_store_assistant.resolution.synopsis_resolution import resolve_synopsis
 from book_store_assistant.sources.models import SourceBookRecord
 
 TITLE_MISSING_ERROR = "Title is missing."
 AUTHOR_MISSING_ERROR = "Author is missing."
 EDITORIAL_MISSING_ERROR = "Editorial is missing."
-SYNOPSIS_MISSING_ERROR = "Synopsis is missing."
-SUBJECT_MISSING_ERROR = "Subject is missing."
 VALIDATION_UNAVAILABLE_ERROR = "LLM validation could not be completed."
 VALIDATION_REJECTED_ERROR = "LLM validation rejected the bibliographic record."
 
 TITLE_MISSING_CODE = "MISSING_TITLE"
 AUTHOR_MISSING_CODE = "MISSING_AUTHOR"
 EDITORIAL_MISSING_CODE = "MISSING_EDITORIAL"
-SYNOPSIS_MISSING_CODE = "MISSING_SYNOPSIS"
-SUBJECT_MISSING_CODE = "MISSING_SUBJECT"
 VALIDATION_UNAVAILABLE_CODE = "VALIDATION_UNAVAILABLE"
 VALIDATION_REJECTED_CODE = "VALIDATION_REJECTED"
 
@@ -76,7 +69,11 @@ def _strip_city_prefix(value: str) -> str:
 def _pick_best_editorial_segment(value: str) -> str:
     if ";" not in value:
         return value
-    segments = [s.strip().strip(",").strip() for s in value.split(";") if s.strip().strip(",").strip()]
+    segments = [
+        s.strip().strip(",").strip()
+        for s in value.split(";")
+        if s.strip().strip(",").strip()
+    ]
     if not segments:
         return value
     return segments[-1] or value
@@ -175,12 +172,6 @@ def _build_candidate_record(source_record: SourceBookRecord) -> BibliographicRec
 
     synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
 
-    try:
-        from pydantic import HttpUrl
-        cover_url = source_record.cover_url
-    except Exception:
-        cover_url = None
-
     return BibliographicRecord(
         isbn=source_record.isbn,
         title=title,
@@ -190,7 +181,7 @@ def _build_candidate_record(source_record: SourceBookRecord) -> BibliographicRec
         synopsis=synopsis,
         subject=_clean_text(source_record.subject),
         subject_code=_clean_text(source_record.subject_code),
-        cover_url=cover_url,
+        cover_url=source_record.cover_url,
     )
 
 
@@ -205,9 +196,6 @@ def resolve_bibliographic_record(
     title = _clean_title(source_record.title, source_record.subtitle)
     author = _clean_author(source_record.author)
     editorial = _clean_editorial(source_record.editorial)
-    synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
-    synopsis_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
-    subject = _clean_text(source_record.subject)
 
     if not title:
         reason_codes.append(TITLE_MISSING_CODE)

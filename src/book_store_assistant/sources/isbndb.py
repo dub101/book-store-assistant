@@ -11,12 +11,24 @@ from book_store_assistant.sources.results import FetchResult
 
 class ISBNdbSource:
     source_name = "isbndb"
+    max_retries = 3
 
     def __init__(self, config: AppConfig | None = None) -> None:
         self.config = config or AppConfig()
+        self._backoff_seconds = 0.0
 
-    def _should_retry(self, exc: httpx.HTTPStatusError, attempt: int) -> bool:
-        return exc.response.status_code == 429 and attempt < 1
+    @property
+    def adaptive_pause(self) -> float:
+        return max(self.config.source_request_pause_seconds, self._backoff_seconds)
+
+    def _retry_delay(self, attempt: int, response: httpx.Response) -> float:
+        retry_after = response.headers.get("Retry-After")
+        if retry_after is not None:
+            try:
+                return max(float(retry_after), 1.0)
+            except ValueError:
+                pass
+        return 2.0 * (2 ** attempt)
 
     def fetch(self, isbn: str) -> FetchResult:
         """Fetch metadata for an ISBN from ISBNdb."""
@@ -31,7 +43,7 @@ class ISBNdbSource:
         issue_codes: list[str] = []
         response: httpx.Response | None = None
 
-        for attempt in range(2):
+        for attempt in range(self.max_retries + 1):
             try:
                 response = httpx.get(
                     f"https://api2.isbndb.com/book/{isbn}",
@@ -44,8 +56,10 @@ class ISBNdbSource:
                     if issue_code not in issue_codes:
                         issue_codes.append(issue_code)
 
-                if self._should_retry(exc, attempt):
-                    time.sleep(2.0)
+                if exc.response.status_code == 429 and attempt < self.max_retries:
+                    delay = self._retry_delay(attempt, exc.response)
+                    self._backoff_seconds = max(self._backoff_seconds, 0.5)
+                    time.sleep(delay)
                     continue
 
                 return FetchResult(

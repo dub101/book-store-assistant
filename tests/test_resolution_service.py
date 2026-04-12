@@ -107,7 +107,7 @@ def test_resolve_all_strips_catalog_suffixes_from_titles() -> None:
     assert results[0].record.subtitle == "ensayo"
 
 
-def test_resolve_all_flags_missing_synopsis_as_incomplete() -> None:
+def test_resolve_all_resolves_record_without_synopsis() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -124,11 +124,11 @@ def test_resolve_all_flags_missing_synopsis_as_incomplete() -> None:
 
     results = resolve_all(fetch_results, validator=AcceptingValidator())
 
-    assert results[0].record is None
-    assert "MISSING_SYNOPSIS" in results[0].reason_codes
+    assert results[0].record is not None
+    assert results[0].record.title == "Example Title"
 
 
-def test_resolve_all_flags_missing_subject_as_incomplete() -> None:
+def test_resolve_all_resolves_record_without_subject() -> None:
     fetch_results = [
         FetchResult(
             isbn="9780306406157",
@@ -147,5 +147,6 @@ def test_resolve_all_flags_missing_subject_as_incomplete() -> None:
 
     results = resolve_all(fetch_results, validator=AcceptingValidator())
 
-    assert results[0].record is None
-    assert "MISSING_SUBJECT" in results[0].reason_codes
+    assert results[0].record is not None
+    assert results[0].record.title == "Example Title"
+    assert results[0].record.synopsis == "Sinopsis de ejemplo."

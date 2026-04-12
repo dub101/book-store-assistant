@@ -1,5 +1,6 @@
 import json
 import re
+import time
 
 import httpx
 
@@ -175,11 +176,9 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
         source_record: SourceBookRecord,
         candidate_record: BibliographicRecord,
     ) -> RecordValidationAssessment | None:
-        import time
-
         assessment = self._call_api(source_record, candidate_record)
         if assessment is None:
-            time.sleep(2)
+            time.sleep(self.timeout_seconds / 5)
             assessment = self._call_api(source_record, candidate_record)
         if assessment is None:
             return None

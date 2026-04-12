@@ -1,6 +1,5 @@
 import time
 from collections.abc import Callable
-from pathlib import Path
 
 from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.contracts import ISBNInput
@@ -86,14 +85,12 @@ def _needs_additional_metadata(result: FetchResult | None) -> bool:
 
 
 def fetch_with_stages(
-    input_path: Path,
     inputs: list[ISBNInput],
     config: AppConfig,
     on_fetch_start: FetchStartCallback | None = None,
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
-    del input_path
     isbndb = ISBNdbSource(config)
     open_library = OpenLibrarySource(config)
     google_books = GoogleBooksSource(config)
@@ -125,8 +122,8 @@ def fetch_with_stages(
         for index, isbn in enumerate(isbndb_candidates):
             if on_stage_update is not None:
                 on_stage_update(f"ISBNdb {index + 1}/{len(isbndb_candidates)}: {isbn}")
-            if index > 0 and config.source_request_pause_seconds > 0:
-                time.sleep(config.source_request_pause_seconds)
+            if index > 0:
+                time.sleep(isbndb.adaptive_pause)
 
             result = isbndb.fetch(isbn)
             isbndb_stage_results.append(result)

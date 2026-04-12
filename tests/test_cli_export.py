@@ -15,7 +15,6 @@ runner = CliRunner()
 
 EXPECTED_UPLOAD_HEADERS = [
     "ISBN", "Title", "Subtitle", "Author", "Editorial",
-    "Synopsis", "Subject", "SubjectCode", "CoverURL",
 ]
 
 
@@ -59,9 +58,6 @@ def test_cli_export_writes_resolved_records(mock_process_isbn_file, tmp_path: Pa
     assert sheet.cell(row=2, column=2).value == "Example Title"
     assert sheet.cell(row=2, column=4).value == "Example Author"
     assert sheet.cell(row=2, column=5).value == "Example Editorial"
-    assert sheet.cell(row=2, column=6).value == "Sinopsis de ejemplo."
-    assert sheet.cell(row=2, column=7).value == "NOVELA"
-    assert sheet.cell(row=2, column=8).value == "20"
 
 
 @patch("book_store_assistant.cli.process_isbn_file")

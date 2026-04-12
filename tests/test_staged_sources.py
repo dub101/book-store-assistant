@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import patch
 
 from book_store_assistant.config import AppConfig
@@ -33,11 +32,7 @@ def _make_national_source_mock(isbn: str, title: str | None = None):
     return source
 
 
-def test_fetch_with_stages_queries_sources_for_incomplete_bibliographic_records(
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "sample.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
+def test_fetch_with_stages_queries_sources_for_incomplete_bibliographic_records() -> None:
     config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10)
 
     national_source = _make_national_source_mock("9780306406157", title="National Title")
@@ -75,7 +70,6 @@ def test_fetch_with_stages_queries_sources_for_incomplete_bibliographic_records(
         )
 
         results = fetch_with_stages(
-            input_file,
             [ISBNInput(isbn="9780306406157")],
             config,
         )
@@ -89,9 +83,7 @@ def test_fetch_with_stages_queries_sources_for_incomplete_bibliographic_records(
     assert results[0].record.editorial == "Google Editorial"
 
 
-def test_fetch_with_stages_skips_national_routing_when_disabled(tmp_path: Path) -> None:
-    input_file = tmp_path / "sample.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
+def test_fetch_with_stages_skips_national_routing_when_disabled() -> None:
     config = AppConfig(
         source_request_pause_seconds=0.0,
         open_library_batch_size=10,
@@ -131,7 +123,6 @@ def test_fetch_with_stages_skips_national_routing_when_disabled(tmp_path: Path) 
         )
 
         results = fetch_with_stages(
-            input_file,
             [ISBNInput(isbn="9780306406157")],
             config,
         )
@@ -141,11 +132,7 @@ def test_fetch_with_stages_skips_national_routing_when_disabled(tmp_path: Path) 
     assert results[0].record.title == "Open Library Title"
 
 
-def test_fetch_with_stages_skips_google_once_bibliographic_fields_are_complete(
-    tmp_path: Path,
-) -> None:
-    input_file = tmp_path / "sample.csv"
-    input_file.write_text("9780306406157\n", encoding="utf-8")
+def test_fetch_with_stages_skips_google_once_bibliographic_fields_are_complete() -> None:
     config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10)
 
     national_source = _make_national_source_mock("9780306406157", title="Complete Title")
@@ -172,7 +159,6 @@ def test_fetch_with_stages_skips_google_once_bibliographic_fields_are_complete(
         mock_batch.return_value = []
 
         results = fetch_with_stages(
-            input_file,
             [ISBNInput(isbn="9780306406157")],
             config,
         )

@@ -27,5 +27,3 @@ def test_resolve_all_preserves_fetch_errors_for_unresolved_records() -> None:
     assert FETCH_ERROR_CODE in results[0].reason_codes
     assert "MISSING_AUTHOR" in results[0].reason_codes
     assert "MISSING_EDITORIAL" in results[0].reason_codes
-    assert "MISSING_SYNOPSIS" in results[0].reason_codes
-    assert "MISSING_SUBJECT" in results[0].reason_codes

@@ -11,7 +11,6 @@ from book_store_assistant.resolution.providers import (
 from book_store_assistant.resolution.service import resolve_all
 from book_store_assistant.sources.base import MetadataSource
 from book_store_assistant.sources.llm_enrichment import augment_fetch_results_with_llm_enrichment
-from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import (
     FetchCompleteCallback,
     FetchStartCallback,
@@ -38,7 +37,6 @@ def process_isbn_file(
 
     if source is None:
         fetch_results = fetch_with_stages(
-            input_path,
             input_result.valid_inputs,
             app_config,
             on_fetch_start=on_fetch_start,

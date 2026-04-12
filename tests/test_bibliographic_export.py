@@ -56,9 +56,6 @@ def test_export_upload_records_writes_expected_columns_and_row(tmp_path: Path) -
     assert sheet.cell(row=2, column=2).value == "Example Title"
     assert sheet.cell(row=2, column=4).value == "Example Author"
     assert sheet.cell(row=2, column=5).value == "Example Editorial"
-    assert sheet.cell(row=2, column=6).value == "Sinopsis de ejemplo en español."
-    assert sheet.cell(row=2, column=7).value == "NOVELA"
-    assert sheet.cell(row=2, column=8).value == "20"
 
 
 def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -> None:

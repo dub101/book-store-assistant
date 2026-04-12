@@ -2,6 +2,8 @@
 import csv
 import json
 import re
+import time
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 
@@ -131,7 +133,6 @@ def _parse_enrichment_response(response_json: dict) -> dict | None:
 
 
 def _strip_accents(text: str) -> str:
-    import unicodedata
     nfkd = unicodedata.normalize("NFD", text)
     return "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
 
@@ -203,13 +204,14 @@ def _build_enriched_record(
         field_sources["cover_url"] = LLM_ENRICHMENT_SOURCE_NAME
         field_confidence["cover_url"] = 0.8
 
+    from pydantic import HttpUrl, ValidationError
+
     try:
-        from pydantic import HttpUrl
         cover_url: HttpUrl | None = HttpUrl(cover_url_raw) if cover_url_raw else None
-    except Exception:
+    except ValidationError:
         cover_url = None
 
-    # Preserve language and categories from existing record
+    language = existing.language if existing else None
     language = existing.language if existing else None
     categories = existing.categories if existing else []
 
@@ -290,8 +292,7 @@ class LLMWebEnricher:
         messages = _build_enrichment_prompt(isbn, partial, self.catalog_text)
         data = self._call_api(messages)
         if data is None:
-            import time
-            time.sleep(2)
+            time.sleep(self.timeout_seconds / 10)
             data = self._call_api(messages)
         if data is None:
             return None

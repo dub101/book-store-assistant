@@ -30,35 +30,30 @@ class TestNeedsEnrichment:
         result = _make_empty_result("9780306406157")
         assert _needs_enrichment(result) is True
 
-    def test_needs_enrichment_when_synopsis_is_missing(self) -> None:
+    def test_does_not_need_enrichment_when_title_author_editorial_present(self) -> None:
         result = _make_result(
             "9780306406157",
             title="Title",
             author="Author",
             editorial="Editorial",
-        )
-        assert _needs_enrichment(result) is True
-
-    def test_needs_enrichment_when_subject_is_missing(self) -> None:
-        result = _make_result(
-            "9780306406157",
-            title="Title",
-            author="Author",
-            editorial="Editorial",
-            synopsis="Sinopsis.",
-        )
-        assert _needs_enrichment(result) is True
-
-    def test_does_not_need_enrichment_when_all_fields_present(self) -> None:
-        result = _make_result(
-            "9780306406157",
-            title="Title",
-            author="Author",
-            editorial="Editorial",
-            synopsis="Sinopsis completa.",
-            subject="NOVELA",
         )
         assert _needs_enrichment(result) is False
+
+    def test_needs_enrichment_when_editorial_is_missing(self) -> None:
+        result = _make_result(
+            "9780306406157",
+            title="Title",
+            author="Author",
+        )
+        assert _needs_enrichment(result) is True
+
+    def test_needs_enrichment_when_author_is_missing(self) -> None:
+        result = _make_result(
+            "9780306406157",
+            title="Title",
+            editorial="Editorial",
+        )
+        assert _needs_enrichment(result) is True
 
 
 class TestLoadSubjectCatalog:
@@ -77,10 +72,20 @@ class TestLoadSubjectCatalog:
 
 class TestFormatCatalogForPrompt:
     def test_formats_catalog_as_table(self) -> None:
-        catalog = [{"Subject": "20", "Description": "NOVELA", "Subject_Type": "L0"}]
+        catalog = [{"Subject": "2000", "Description": "NOVELA", "Subject_Type": "L0"}]
         text = _format_catalog_for_prompt(catalog)
-        assert "20" in text
+        assert "2000" in text
         assert "NOVELA" in text
+
+    def test_filters_short_codes_from_catalog(self) -> None:
+        catalog = [
+            {"Subject": "20", "Description": "NOVELA", "Subject_Type": "L0"},
+            {"Subject": "2000", "Description": "NOVELA CONTEMPORANEA", "Subject_Type": "L1"},
+        ]
+        text = _format_catalog_for_prompt(catalog)
+        assert "20 |" not in text
+        assert "2000" in text
+        assert "NOVELA CONTEMPORANEA" in text
 
     def test_returns_header_even_for_empty_catalog(self) -> None:
         text = _format_catalog_for_prompt([])
@@ -171,8 +176,6 @@ class TestAugmentFetchResultsWithLLMEnrichment:
             title="Title",
             author="Author",
             editorial="Editorial",
-            synopsis="Sinopsis.",
-            subject="NOVELA",
         )
         enricher = MagicMock()
         output = augment_fetch_results_with_llm_enrichment([result], enricher)
@@ -214,7 +217,7 @@ class TestAugmentFetchResultsWithLLMEnrichment:
 class TestLLMWebEnricherInit:
     def test_loads_catalog_on_init(self, tmp_path: Path) -> None:
         tsv = tmp_path / "subjects.tsv"
-        tsv.write_text("Subject\tDescription\tSubject_Type\n20\tNOVELA\tL0\n", encoding="utf-8")
+        tsv.write_text("Subject\tDescription\tSubject_Type\n2000\tNOVELA\tL0\n", encoding="utf-8")
         enricher = LLMWebEnricher(
             api_key="test",
             base_url="https://api.openai.com/v1",
