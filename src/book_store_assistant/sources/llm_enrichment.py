@@ -16,7 +16,7 @@ LLMEnrichmentStatusCallback = Callable[[str], None]
 
 LLM_ENRICHMENT_SOURCE_NAME = "llm_web_search"
 
-_SUBJECTS_PATH = Path(__file__).parent.parent.parent.parent.parent / "data" / "reference" / "subjects.tsv"
+_SUBJECTS_PATH = Path(__file__).parent.parent.parent.parent / "data" / "reference" / "subjects.tsv"
 
 JSON_OBJECT_PATTERN = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -57,13 +57,12 @@ def _load_subject_catalog(path: Path | None = None) -> list[dict[str, str]]:
 
 
 def _format_catalog_for_prompt(catalog: list[dict[str, str]]) -> str:
-    lines = ["Code | Subject | Type"]
+    lines = ["Code | Subject"]
     for row in catalog:
         code = row.get("Subject", "").strip()
         description = row.get("Description", "").strip()
-        subject_type = row.get("Subject_Type", "").strip()
-        if code and description:
-            lines.append(f"{code} | {description} | {subject_type}")
+        if code and description and len(code) >= 4:
+            lines.append(f"{code} | {description}")
     return "\n".join(lines)
 
 
@@ -100,11 +99,11 @@ Return the following fields:
 - author: author name(s) as they appear on the cover
 - editorial: the specific imprint or editorial label (e.g. "Debolsillo", "Alfaguara", "Planeta") — not the parent group
 - synopsis: a book synopsis or description IN SPANISH. Search for a Spanish-language description. If only a non-Spanish description exists, translate it to Spanish. Return null only if no description can be found anywhere.
-- subject_name: pick the single best matching subject from this catalog (use the Description value exactly as written):
+- subject_name: pick the single best matching subject from this catalog. You MUST use the Description value (second column) exactly as written — copy it verbatim. Pick the most specific category that fits the book. For classic literature (pre-1950), use CLASICOS. For Latin American authors, use LITERATURA LATINOAMERICANA. For crime/mystery/thriller, use THRILLER O NOVELA NEGRA.
 
 {catalog_text}
 
-- subject_code: the Code value (first column) corresponding to the chosen subject_name. Must match exactly.
+- subject_code: the Code value (first column) for the chosen subject. Must be a 4-digit number from the catalog above.
 - cover_url: a direct URL to the book cover image, or null if not found.
 
 Return null for any field you cannot determine with confidence. Do not invent data."""
@@ -131,10 +130,43 @@ def _parse_enrichment_response(response_json: dict) -> dict | None:
     return None
 
 
+def _strip_accents(text: str) -> str:
+    import unicodedata
+    nfkd = unicodedata.normalize("NFD", text)
+    return "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+
+
+def _match_catalog_subject(
+    subject_name: str | None,
+    subject_code: str | None,
+    catalog: list[dict[str, str]],
+) -> tuple[str | None, str | None]:
+    if not catalog:
+        return subject_name, subject_code
+
+    if subject_code:
+        for row in catalog:
+            if row.get("Subject", "").strip() == subject_code.strip():
+                return row.get("Description", "").strip() or subject_name, subject_code
+    if subject_name:
+        name_norm = _strip_accents(subject_name.strip().lower())
+        for row in catalog:
+            desc = row.get("Description", "").strip()
+            if _strip_accents(desc.lower()) == name_norm:
+                return desc, row.get("Subject", "").strip()
+        for row in catalog:
+            desc = row.get("Description", "").strip()
+            desc_norm = _strip_accents(desc.lower())
+            if name_norm in desc_norm or desc_norm in name_norm:
+                return desc, row.get("Subject", "").strip()
+    return subject_name, subject_code
+
+
 def _build_enriched_record(
     isbn: str,
     data: dict,
     existing: SourceBookRecord | None,
+    catalog: list[dict[str, str]] | None = None,
 ) -> SourceBookRecord | None:
     title = (data.get("title") or "").strip() or None
     subtitle = (data.get("subtitle") or "").strip() or None
@@ -144,6 +176,9 @@ def _build_enriched_record(
     subject = (data.get("subject_name") or "").strip() or None
     subject_code = (data.get("subject_code") or "").strip() or None
     cover_url_raw = (data.get("cover_url") or "").strip() or None
+
+    if catalog:
+        subject, subject_code = _match_catalog_subject(subject, subject_code, catalog)
 
     if not any((title, author, editorial, synopsis, subject)):
         return None
@@ -204,8 +239,6 @@ def _needs_enrichment(result: FetchResult) -> bool:
         bool((record.title or "").strip())
         and bool((record.author or "").strip())
         and bool((record.editorial or "").strip())
-        and bool((record.synopsis or "").strip())
-        and bool((record.subject or "").strip())
     )
 
 
@@ -225,8 +258,7 @@ class LLMWebEnricher:
         self.catalog = _load_subject_catalog(catalog_path)
         self.catalog_text = _format_catalog_for_prompt(self.catalog)
 
-    def enrich(self, isbn: str, partial: SourceBookRecord | None) -> SourceBookRecord | None:
-        messages = _build_enrichment_prompt(isbn, partial, self.catalog_text)
+    def _call_api(self, messages: list[dict[str, object]]) -> dict | None:
         try:
             response = httpx.post(
                 f"{self.base_url}/responses",
@@ -252,12 +284,19 @@ class LLMWebEnricher:
             response.raise_for_status()
         except httpx.HTTPError:
             return None
+        return _parse_enrichment_response(response.json())
 
-        data = _parse_enrichment_response(response.json())
+    def enrich(self, isbn: str, partial: SourceBookRecord | None) -> SourceBookRecord | None:
+        messages = _build_enrichment_prompt(isbn, partial, self.catalog_text)
+        data = self._call_api(messages)
+        if data is None:
+            import time
+            time.sleep(2)
+            data = self._call_api(messages)
         if data is None:
             return None
 
-        return _build_enriched_record(isbn, data, partial)
+        return _build_enriched_record(isbn, data, partial, catalog=self.catalog)
 
 
 def augment_fetch_results_with_llm_enrichment(
@@ -289,6 +328,11 @@ def augment_fetch_results_with_llm_enrichment(
 
         enriched_record = enricher.enrich(fetch_result.isbn, fetch_result.record)
         if enriched_record is None:
+            result_by_isbn[fetch_result.isbn] = with_diagnostic(
+                fetch_result,
+                "llm_enrichment",
+                "enrichment_failed",
+            )
             continue
 
         if fetch_result.record is not None:

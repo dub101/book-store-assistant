@@ -26,10 +26,63 @@ VALIDATION_UNAVAILABLE_CODE = "VALIDATION_UNAVAILABLE"
 VALIDATION_REJECTED_CODE = "VALIDATION_REJECTED"
 
 CATALOG_TITLE_ARTIFACT_PATTERN = re.compile(
-    r"\s*\[(?:[^\]]*texto impreso[^\]]*|[^\]]*recurso electr[oó]nico[^\]]*|"
-    r"[^\]]*electronic resource[^\]]*)\]\s*",
+    r"\s*(?:"
+    r"\[(?:[^\]]*texto impreso[^\]]*|[^\]]*recurso electr[oó]nico[^\]]*|"
+    r"[^\]]*electronic resource[^\]]*)\]"
+    r"|"
+    r"\((?:[^)]*(?:[Ee]dici[oó]n|[Cc]olecci[oó]n)[^)]*)\)"
+    r")\s*",
     re.IGNORECASE,
 )
+
+TITLE_ALT_LANGUAGE_PATTERN = re.compile(
+    r"\s*[=/]\s*[\(\[]?\s*[A-Z].*$",
+)
+TITLE_SERIES_PREFIX_PATTERN = re.compile(
+    r"^.*?\d+\.\s+",
+)
+
+EDITORIAL_CITY_PREFIX_PATTERN = re.compile(
+    r"^\s*\[[^\]]*\]\s*,?\s*",
+)
+
+_BNE_CITY_NAMES = {
+    "madrid", "barcelona", "buenos aires", "méxico", "mexico",
+    "bogotá", "bogota", "santiago", "lima", "montevideo",
+    "caracas", "quito", "sevilla", "valencia", "bilbao",
+    "salamanca", "león", "leon", "málaga", "malaga",
+    "pontevedra", "vigo", "girona", "zaragoza", "granada",
+    "córdoba", "cordoba", "pamplona", "san sebastián",
+    "sant feliu de guíxols",
+    "boadilla del monte",
+}
+
+
+def _strip_city_prefix(value: str) -> str:
+    result = value
+    changed = True
+    while changed:
+        changed = False
+        parts = result.split(",", 1)
+        if len(parts) == 2:
+            raw_candidate = parts[0].strip().rstrip(";").strip()
+            candidate = re.sub(r"\s*\([^)]*\)", "", raw_candidate).strip().lower()
+            if candidate in _BNE_CITY_NAMES:
+                result = parts[1].strip()
+                changed = True
+    return result
+
+
+def _pick_best_editorial_segment(value: str) -> str:
+    if ";" not in value:
+        return value
+    segments = [s.strip().strip(",").strip() for s in value.split(";") if s.strip().strip(",").strip()]
+    if not segments:
+        return value
+    return segments[-1] or value
+
+
+AUTHOR_INITIAL_PATTERN = re.compile(r"\b([A-ZÁÉÍÓÚÑ])\.\s+(?=[A-ZÁÉÍÓÚÑ]\.)")
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -37,6 +90,37 @@ def _clean_text(value: str | None) -> str | None:
         return None
     cleaned = " ".join(value.split()).strip()
     return cleaned or None
+
+
+def _clean_author(value: str | None) -> str | None:
+    cleaned = _clean_text(value)
+    if cleaned is None:
+        return None
+    return AUTHOR_INITIAL_PATTERN.sub(r"\1.", cleaned)
+
+
+_EDITORIAL_PREFIX_PATTERN = re.compile(
+    r"^(?:Editorial|Ediciones|Edición|Edicion)\s+",
+    re.IGNORECASE,
+)
+
+
+def _normalize_editorial_name(value: str) -> str:
+    result = _EDITORIAL_PREFIX_PATTERN.sub("", value).strip()
+    if len(result) < 2:
+        return value
+    return result or value
+
+
+def _clean_editorial(value: str | None) -> str | None:
+    cleaned = _clean_text(value)
+    if cleaned is None:
+        return None
+    segmented = _pick_best_editorial_segment(cleaned)
+    stripped = EDITORIAL_CITY_PREFIX_PATTERN.sub("", segmented).strip()
+    stripped = _strip_city_prefix(stripped) if stripped else segmented
+    stripped = _normalize_editorial_name(stripped) if stripped else segmented
+    return stripped or cleaned
 
 
 def _clean_catalog_text(value: str | None) -> str | None:
@@ -59,6 +143,14 @@ def _clean_title(value: str | None, subtitle: str | None = None) -> str | None:
             if normalized_title.endswith(suffix.casefold()):
                 stripped = cleaned[: -len(suffix)].rstrip(" :;-")
                 return stripped or cleaned
+    alt_stripped = TITLE_ALT_LANGUAGE_PATTERN.sub("", cleaned).strip()
+    if alt_stripped and len(alt_stripped) >= 3:
+        cleaned = alt_stripped
+    series_match = TITLE_SERIES_PREFIX_PATTERN.match(cleaned)
+    if series_match:
+        remainder = cleaned[series_match.end():]
+        if remainder and len(remainder) >= 5:
+            cleaned = remainder
     return cleaned
 
 
@@ -75,8 +167,8 @@ def _review_note_from_assessment(
 
 def _build_candidate_record(source_record: SourceBookRecord) -> BibliographicRecord | None:
     title = _clean_title(source_record.title, source_record.subtitle)
-    author = _clean_text(source_record.author)
-    editorial = _clean_text(source_record.editorial)
+    author = _clean_author(source_record.author)
+    editorial = _clean_editorial(source_record.editorial)
 
     if not title or not author or not editorial:
         return None
@@ -111,8 +203,8 @@ def resolve_bibliographic_record(
     errors: list[str] = []
 
     title = _clean_title(source_record.title, source_record.subtitle)
-    author = _clean_text(source_record.author)
-    editorial = _clean_text(source_record.editorial)
+    author = _clean_author(source_record.author)
+    editorial = _clean_editorial(source_record.editorial)
     synopsis = resolve_synopsis(source_record.synopsis, source_record.language)
     synopsis_error = get_synopsis_review_error(source_record.synopsis, source_record.language)
     subject = _clean_text(source_record.subject)
@@ -131,21 +223,6 @@ def resolve_bibliographic_record(
         reason_codes.append(EDITORIAL_MISSING_CODE)
         errors.append(EDITORIAL_MISSING_ERROR)
         review_details.append("No reliable source supplied editorial.")
-
-    if not synopsis:
-        code = SYNOPSIS_MISSING_CODE
-        reason_codes.append(code)
-        if synopsis_error:
-            errors.append(synopsis_error)
-            review_details.append(synopsis_error)
-        else:
-            errors.append(SYNOPSIS_MISSING_ERROR)
-            review_details.append("No reliable source supplied a Spanish synopsis.")
-
-    if not subject:
-        reason_codes.append(SUBJECT_MISSING_CODE)
-        errors.append(SUBJECT_MISSING_ERROR)
-        review_details.append("No reliable source supplied subject.")
 
     candidate_record = _build_candidate_record(source_record)
 

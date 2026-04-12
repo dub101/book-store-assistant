@@ -26,6 +26,7 @@ dev = [
 
 [project.scripts]
 book-store-assistant = "book_store_assistant.cli:app"
+book-store-assistant-gui = "book_store_assistant.gui:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

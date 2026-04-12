@@ -104,11 +104,18 @@ class AppConfig(BaseModel):
     bne_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_BNE_LOOKUP_ENABLED", True)
     )
+    national_agency_routing_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_NATIONAL_AGENCY_ROUTING_ENABLED", True)
+    )
     bne_sru_base_url: str = Field(
         default_factory=lambda: _configured_str(
             "bne_sru_base_url",
             "https://catalogo.bne.es/view/sru/34BNE_INST",
         )
+    )
+    isbndb_api_key: str | None = Field(default_factory=lambda: os.getenv("ISBNDB_API_KEY"))
+    isbndb_lookup_enabled: bool = Field(
+        default_factory=lambda: _env_bool("BSA_ISBNDB_LOOKUP_ENABLED", True)
     )
     google_books_api_base_url: str = "https://www.googleapis.com/books/v1/volumes"
     google_books_max_retries: int = Field(

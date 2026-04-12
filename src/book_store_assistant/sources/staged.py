@@ -4,8 +4,9 @@ from pathlib import Path
 
 from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.contracts import ISBNInput
-from book_store_assistant.sources.bne import BneSruSource
 from book_store_assistant.sources.google_books import GoogleBooksSource
+from book_store_assistant.sources.isbn_routing import get_national_source
+from book_store_assistant.sources.isbndb import ISBNdbSource
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.open_library import OpenLibrarySource
 from book_store_assistant.sources.results import FetchResult
@@ -93,7 +94,7 @@ def fetch_with_stages(
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
     del input_path
-    bne = BneSruSource(config)
+    isbndb = ISBNdbSource(config)
     open_library = OpenLibrarySource(config)
     google_books = GoogleBooksSource(config)
 
@@ -109,36 +110,81 @@ def fetch_with_stages(
         result.isbn: result
         for result in cache_stage_results
     }
-    merged_after_bne = merged_after_cache
-    if config.bne_lookup_enabled:
-        bne_candidates = [
+
+    merged_after_isbndb = merged_after_cache
+    if config.isbndb_lookup_enabled and config.isbndb_api_key:
+        isbndb_candidates = [
             item.isbn
             for item in inputs
             if _needs_additional_metadata(merged_after_cache.get(item.isbn))
         ]
         if on_stage_update is not None:
-            on_stage_update(f"Stage: querying BNE for {len(bne_candidates)} ISBNs")
+            on_stage_update(f"Stage: querying ISBNdb for {len(isbndb_candidates)} ISBNs")
 
-        bne_stage_results: list[FetchResult] = []
-        for index, isbn in enumerate(bne_candidates):
+        isbndb_stage_results: list[FetchResult] = []
+        for index, isbn in enumerate(isbndb_candidates):
             if on_stage_update is not None:
-                on_stage_update(f"BNE {index + 1}/{len(bne_candidates)}: {isbn}")
+                on_stage_update(f"ISBNdb {index + 1}/{len(isbndb_candidates)}: {isbn}")
             if index > 0 and config.source_request_pause_seconds > 0:
                 time.sleep(config.source_request_pause_seconds)
 
-            result = bne.fetch(isbn)
-            bne_stage_results.append(result)
-        bne_by_isbn = {
-            result.isbn: _prefix_result(result, bne.source_name)
-            for result in bne_stage_results
+            result = isbndb.fetch(isbn)
+            isbndb_stage_results.append(result)
+        isbndb_by_isbn = {
+            result.isbn: _prefix_result(result, isbndb.source_name)
+            for result in isbndb_stage_results
         }
 
-        merged_after_bne = {}
+        merged_after_isbndb = {}
         for item in inputs:
             isbn = item.isbn
-            merged_after_bne[isbn] = _merge_stage_results(
+            merged_after_isbndb[isbn] = _merge_stage_results(
                 merged_after_cache[isbn],
-                bne_by_isbn.get(
+                isbndb_by_isbn.get(
+                    isbn,
+                    FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
+                ),
+            )
+
+    merged_after_national = merged_after_isbndb
+    if config.national_agency_routing_enabled:
+        national_candidates = [
+            item.isbn
+            for item in inputs
+            if _needs_additional_metadata(merged_after_isbndb.get(item.isbn))
+        ]
+        if on_stage_update is not None:
+            on_stage_update(
+                f"Stage: querying national agencies for {len(national_candidates)} ISBNs"
+            )
+
+        national_stage_results: list[FetchResult] = []
+        for index, isbn in enumerate(national_candidates):
+            source = get_national_source(isbn, config)
+            if source is None:
+                continue
+            if on_stage_update is not None:
+                on_stage_update(
+                    f"National ({source.source_name}) "
+                    f"{index + 1}/{len(national_candidates)}: {isbn}"
+                )
+            if national_stage_results and config.source_request_pause_seconds > 0:
+                time.sleep(config.source_request_pause_seconds)
+
+            result = source.fetch(isbn)
+            national_stage_results.append(
+                _prefix_result(result, source.source_name)
+            )
+        national_by_isbn = {
+            result.isbn: result for result in national_stage_results
+        }
+
+        merged_after_national = {}
+        for item in inputs:
+            isbn = item.isbn
+            merged_after_national[isbn] = _merge_stage_results(
+                merged_after_isbndb[isbn],
+                national_by_isbn.get(
                     isbn,
                     FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
                 ),
@@ -147,7 +193,7 @@ def fetch_with_stages(
     open_library_candidates = [
         item.isbn
         for item in inputs
-        if _needs_additional_metadata(merged_after_bne.get(item.isbn))
+        if _needs_additional_metadata(merged_after_national.get(item.isbn))
     ]
     if on_stage_update is not None:
         on_stage_update(
@@ -177,7 +223,7 @@ def fetch_with_stages(
     merged_after_open_library: dict[str, FetchResult] = {}
     for item in inputs:
         isbn = item.isbn
-        cache_result = merged_after_bne[isbn]
+        cache_result = merged_after_national[isbn]
         open_library_result = open_library_by_isbn.get(
             isbn,
             FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),

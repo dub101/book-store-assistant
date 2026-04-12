@@ -12,10 +12,6 @@ UPLOAD_HEADERS = [
     "Subtitle",
     "Author",
     "Editorial",
-    "Synopsis",
-    "Subject",
-    "SubjectCode",
-    "CoverURL",
 ]
 REVIEW_HEADERS = [
     "ISBN",
@@ -45,10 +41,6 @@ def _upload_row(record: BibliographicRecord) -> list[str | None]:
         record.subtitle,
         record.author,
         record.editorial,
-        record.synopsis,
-        record.subject,
-        record.subject_code,
-        str(record.cover_url) if record.cover_url else None,
     ]
 
 
@@ -122,7 +114,7 @@ def export_upload_records(results: list[ResolutionResult], output_path: Path) ->
         _validate_upload_row(row)
         sheet.append(row)
 
-    _apply_sheet_basics(sheet, freeze_panes="A2", wrap_columns=(6, 6))
+    _apply_sheet_basics(sheet, freeze_panes="A2")
     workbook.save(output_path)
 
 

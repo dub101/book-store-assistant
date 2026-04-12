@@ -18,10 +18,10 @@ def _build_messages(
     source_lines = [
         f"ISBN: {source_record.isbn}",
         f"Source name: {source_record.source_name}",
-        f"Source title: {source_record.title or ''}",
-        f"Source subtitle: {source_record.subtitle or ''}",
-        f"Source author: {source_record.author or ''}",
-        f"Source editorial: {source_record.editorial or ''}",
+        f"Source title: {candidate_record.title}",
+        f"Source subtitle: {candidate_record.subtitle or ''}",
+        f"Source author: {candidate_record.author}",
+        f"Source editorial: {candidate_record.editorial}",
         f"Source language: {source_record.language or ''}",
         f"Source categories: {', '.join(source_record.categories)}",
         f"Field sources: {source_record.field_sources}",
@@ -141,7 +141,7 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
         self.timeout_seconds = timeout_seconds
         self.min_confidence = min_confidence
 
-    def validate(
+    def _call_api(
         self,
         source_record: SourceBookRecord,
         candidate_record: BibliographicRecord,
@@ -168,7 +168,19 @@ class OpenAIBibliographicValidator(RecordQualityValidator):
         if not isinstance(output_text, str) or not output_text.strip():
             return None
 
-        assessment = _parse_validation_response(output_text)
+        return _parse_validation_response(output_text)
+
+    def validate(
+        self,
+        source_record: SourceBookRecord,
+        candidate_record: BibliographicRecord,
+    ) -> RecordValidationAssessment | None:
+        import time
+
+        assessment = self._call_api(source_record, candidate_record)
+        if assessment is None:
+            time.sleep(2)
+            assessment = self._call_api(source_record, candidate_record)
         if assessment is None:
             return None
 
