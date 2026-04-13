@@ -1,309 +1,235 @@
 # Book Store Assistant
 
-Book Store Assistant is currently focused on Stage 1 of the split pipeline:
+Book Store Assistant is a bibliographic enrichment pipeline that transforms a CSV of ISBNs into upload-ready Excel workbooks for bookstore inventory systems.
 
-- input: a CSV with ISBNs
-- output 1: an upload-ready Excel workbook
-- output 2: a JSONL handoff for Stage 2
-- optional output 3: a compact review workbook for rows that still need human attention
+## What It Does
 
-The active Stage 1 upload columns are:
+1. Read and normalize ISBNs from CSV or Excel.
+2. Fetch bibliographic metadata from a cascade of sources (cheapest/best-fit first):
+   - **ISBNdb** — commercial API with ~99% coverage ($15/month)
+   - **National ISBN agencies** — routed by ISBN prefix (BNE for Spain, Cámara Colombiana del Libro for Colombia, stubs for 11 other Latin American countries)
+   - **Open Library** — free, batch-capable
+   - **Google Books** — free, with retry on rate limiting
+3. Fall back to **LLM web enrichment** (OpenAI Responses API with web search) only when deterministic sources cannot provide title, author, or editorial (~2% of rows).
+4. Run an **LLM validator** on the candidate row to catch hallucinated or mismatched data.
+5. Export accepted rows to an **upload workbook** and rejected/incomplete rows to a **review workbook**.
+6. Persist all per-row results to a **JSONL handoff** for downstream processing.
+
+## Upload Columns
 
 - `ISBN`
 - `Title`
 - `Subtitle`
 - `Author`
 - `Editorial`
-- `Publisher`
 
-Stage 1 does not generate synopsis or subject data anymore.
-Those belong to the later Stage 2 pipeline that will consume the JSONL handoff.
+Synopsis, Subject, and SubjectCode are available in the JSONL handoff for Stage 2 but are not required for upload.
 
-## Goal
+## Source Cascade
 
-Stage 1 is optimized for bibliographic correctness first and throughput second.
+```
+ISBNdb → National Agency (by ISBN prefix) → Open Library → Google Books → LLM (fallback only)
+```
 
-The active runtime does this:
+### ISBN Prefix Routing
 
-1. Read and normalize ISBNs from CSV.
-2. Fetch bibliographic metadata in stages from BNE, Open Library, and Google Books.
-3. Run one general grounded web-search pass for rows that still lack Stage 1 fields.
-4. If editorial data exists, target publisher and editorial pages directly.
-5. If rows are still incomplete, target retailer pages.
-6. If rows are still incomplete after that, search across the full supported publisher list.
-8. Resolve editorial and publisher identity.
-9. Build a candidate upload row with:
-   - `ISBN`
-   - `Title`
-   - `Subtitle`
-   - `Author`
-   - `Editorial`
-   - `Publisher`
-10. Run an LLM validator on the candidate row when validation is enabled and an OpenAI key is available.
-11. Send accepted rows to the upload workbook.
-12. Send rejected or incomplete rows to the review workbook.
-13. Persist all per-row Stage 1 results to JSONL for Stage 2.
+The ISBN registration group (digits after the 978/979 prefix) maps to national agencies:
 
-Current rule of thumb:
+| Prefix | Country | Source |
+|--------|---------|--------|
+| 84 | Spain | BNE SRU |
+| 607, 968, 970 | Mexico | Stub |
+| 950, 987 | Argentina | Stub |
+| 958 | Colombia | Cámara Colombiana del Libro |
+| 956 | Chile | Stub |
+| 85, 65 | Brazil | Stub |
+| 612, 9972 | Peru | Stub |
+| 980 | Venezuela | Stub |
+| 9974 | Uruguay | Stub |
+| 9978 | Ecuador | Stub |
 
-- deterministic sources remain the first pass
-- grounded web retrieval comes before targeted publisher, retailer, and publisher-sweep checks
-- the final upload row still goes through validation before acceptance
-
-## Current Runtime
-
-The main orchestration entry point is:
-
-- `src/book_store_assistant/pipeline/service.py`
-
-The active CLI entry point is:
-
-- `src/book_store_assistant/cli.py`
-
-Main Stage 1 components:
-
-- `src/book_store_assistant/sources/staged.py`
-  - staged metadata fetch from BNE, Open Library, and Google Books
-- `src/book_store_assistant/sources/web_search.py`
-  - general grounded web retrieval and evidence-backed extraction for incomplete rows
-- `src/book_store_assistant/sources/retailer_pages.py`
-  - retailer lookup for rows still missing bibliographic fields
-- `src/book_store_assistant/sources/publisher_pages.py`
-  - targeted publisher page lookup when editorial data is available
-- `src/book_store_assistant/sources/publisher_discovery.py`
-  - final publisher sweep for remaining incomplete rows
-- `src/book_store_assistant/publisher_identity/service.py`
-  - editorial/publisher normalization
-- `src/book_store_assistant/bibliographic/resolution.py`
-  - Stage 1 candidate construction and acceptance/review routing
-- `src/book_store_assistant/resolution/openai_bibliographic_validator.py`
-  - LLM validation for upload rows only
-- `src/book_store_assistant/bibliographic/export.py`
-  - upload Excel, review Excel, and JSONL handoff export
-
-Compact flow:
-
-`Input -> Staged Fetch -> Web Search -> Publisher Pages -> Retailer Lookup -> Publisher Discovery -> Publisher Identity -> Candidate Row -> LLM Validation -> Upload/Review/Handoff`
+Stub sources return gracefully with a `NOT_IMPLEMENTED` issue code. The routing infrastructure is in place for future implementation.
 
 ## Outputs
 
 ### Upload Workbook
 
-Sheet name: `Upload`
-
-Columns:
-
-- `ISBN`
-- `Title`
-- `Subtitle`
-- `Author`
-- `Editorial`
-- `Publisher`
+Sheet: `Upload` — columns: ISBN, Title, Subtitle, Author, Editorial.
 
 ### Review Workbook
 
-Sheet name: `Review`
-
-Columns:
-
-- `ISBN`
-- `Title`
-- `Subtitle`
-- `Author`
-- `Editorial`
-- `Publisher`
-- `Status`
-- `ReasonCode`
-- `ValidatorConfidence`
-- `ReviewNote`
-
-The review workbook is intentionally minimal.
-Detailed provenance and diagnostics live in the JSONL handoff, not in the spreadsheet.
+Sheet: `Review` — columns: ISBN, Title, Subtitle, Author, Editorial, Status, ReasonCode, ValidatorConfidence, ReviewNote.
 
 ### JSONL Handoff
 
-The JSONL handoff contains one serialized Stage 1 result per line.
-It preserves:
+One JSON object per line with source records, diagnostics, path summaries, and validation assessments. This is the input boundary for Stage 2.
 
-- source record data
-- publisher identity
-- validator assessment
-- accepted candidate row when available
-- reason codes and review details
-- per-stage diagnostics and a path summary of where the row improved
+## Desktop GUI
 
-This handoff is the intended input boundary for Stage 2.
+A tkinter-based desktop interface for librarians:
 
-## No Cache Policy
+- File picker for CSV or Excel input
+- Progress bar with per-ISBN status updates
+- Outputs saved alongside the input file
+- Spanish-language interface
 
-The active Stage 1 runtime no longer uses cache files.
-
-Removed from the active path:
-
-- staged fetch cache
-- retailer page cache
-- publisher page cache
-- hidden intermediate stage snapshots
-
-Runs now reflect live source behavior instead of stale cached data.
-
-## Development
-
-Create the virtual environment:
+Launch:
 
 ```bash
-python -m venv .venv
+.venv/bin/book-store-assistant-gui
 ```
 
-Install dependencies:
+Or directly:
 
 ```bash
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m book_store_assistant.gui
 ```
-
-Run targeted tests for the current Stage 1 path:
-
-```bash
-.venv/bin/pytest tests/test_pipeline_service.py tests/test_web_search_fallback.py tests/test_publisher_pages.py tests/test_retailer_pages.py tests/test_resolution_service.py tests/test_cli.py
-```
-
-Run lint and type checks when needed:
-
-```bash
-.venv/bin/ruff check .
-.venv/bin/mypy src
-```
-
-## Configuration
-
-Non-secret operational settings can live in `bsa.toml`.
-An example file is included as `bsa.toml.example`.
-
-Operational settings precedence:
-
-1. `BSA_*` environment variables
-2. `bsa.toml`
-3. code defaults
-
-CLI arguments only control the input and output file paths.
-OpenAI credentials and model selection use `OPENAI_*` environment variables.
-
-Common `bsa.toml` overrides:
-
-```toml
-input_dir = "data/input"
-output_dir = "data/output"
-bne_lookup_enabled = true
-publisher_page_lookup_enabled = true
-retailer_page_lookup_enabled = true
-web_search_fallback_enabled = true
-publisher_page_timeout_seconds = 6.0
-retailer_page_timeout_seconds = 4.0
-publisher_page_max_retries = 0
-retailer_page_max_retries = 0
-publisher_page_backoff_seconds = 0.5
-retailer_page_backoff_seconds = 0.25
-publisher_page_max_search_attempts_per_record = 8
-publisher_page_max_fetch_attempts_per_record = 4
-retailer_page_max_search_attempts_per_record = 6
-retailer_page_max_fetch_attempts_per_record = 3
-web_search_timeout_seconds = 10.0
-web_search_max_retries = 1
-web_search_backoff_seconds = 0.5
-web_search_max_pages_per_record = 4
-web_search_max_search_attempts_per_record = 5
-web_search_max_fetch_attempts_per_record = 4
-source_request_pause_seconds = 0.5
-open_library_batch_size = 25
-request_timeout_seconds = 10.0
-llm_web_extraction_enabled = true
-llm_web_extraction_min_confidence = 0.75
-llm_record_validation_enabled = true
-llm_record_validation_min_confidence = 0.80
-```
-
-`web_search_fallback_enabled` is a legacy config name. In the current pipeline it controls the single general web-search stage.
-
-Minimum AI environment variables:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-export OPENAI_MODEL="gpt-4o-mini"
-```
-
-The app does not load `.env` files by itself.
-
-After `.venv/bin/pip install -e ".[dev]"`, the package also exposes an installed CLI entry point:
-
-```bash
-.venv/bin/book-store-assistant --help
-```
-
-Preferred helper on this machine:
-
-```bash
-bsa() {
-  cd "$HOME/Documents/projects/pet_projects/book-store-assistant" || return
-  OPENAI_API_KEY="$OPENAI_API_KEY_BOOK_STORE_ASSISTANT" \
-  OPENAI_MODEL="gpt-4o-mini" \
-  ./.venv/bin/python -m book_store_assistant.cli "$@"
-}
-```
-
-`bsa` is the preferred way to run the project here because it maps the repo-specific OpenAI key into `OPENAI_API_KEY` before launching the CLI.
 
 ## CLI
 
-Preferred invocation:
+Preferred invocation (uses `bsa` shell function from `.bashrc`):
 
 ```bash
-bsa data/input/sample_1.csv --output data/output/upload.xlsx --review-output data/output/review.xlsx --handoff-output data/output/handoff.jsonl
+bsa data/input/sample_1.csv \
+  --output data/output/sample_1_upload.xlsx \
+  --review-output data/output/sample_1_review.xlsx \
+  --handoff-output data/output/sample_1_handoff.jsonl
 ```
 
-Installed entry point:
+Direct invocation:
 
 ```bash
-.venv/bin/book-store-assistant data/input/sample_1.csv --output data/output/upload.xlsx --review-output data/output/review.xlsx --handoff-output data/output/handoff.jsonl
+.venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv \
+  --output data/output/upload.xlsx \
+  --review-output data/output/review.xlsx \
+  --handoff-output data/output/handoff.jsonl
 ```
 
-Equivalent direct invocation:
+If `--output` is provided and `--handoff-output` is omitted, the CLI derives a handoff path automatically.
+
+## Configuration
+
+Non-secret settings live in `bsa.toml` (see `bsa.toml.example`).
+
+Precedence: `BSA_*` environment variables > `bsa.toml` > code defaults.
+
+### Required Environment Variables
 
 ```bash
-.venv/bin/python -m book_store_assistant.cli data/input/sample_1.csv --output data/output/upload.xlsx --review-output data/output/review.xlsx --handoff-output data/output/handoff.jsonl
+export OPENAI_API_KEY="sk-..."       # For LLM enrichment and validation
+export OPENAI_MODEL="gpt-4o-mini"    # Model for LLM calls
+export ISBNDB_API_KEY="..."          # ISBNdb API key ($15/month Premium plan)
 ```
 
-Included sample inputs live under `data/input/`:
+### Key Configuration Options
 
-- `sample_1.csv`
-- `sample_2.csv`
-- `sample_3.csv`
-- `sample_4.csv`
-- `sample_5.csv`
+```toml
+bne_lookup_enabled = true
+isbndb_lookup_enabled = true
+national_agency_routing_enabled = true
+llm_enrichment_enabled = true
+llm_record_validation_enabled = true
+source_request_pause_seconds = 0.5
+llm_enrichment_timeout_seconds = 60.0
+llm_record_validation_min_confidence = 0.80
+```
 
-For example, to run the full `sample_5.csv` flow:
+## Development
+
+### Setup
 
 ```bash
-bsa data/input/sample_5.csv --output data/output/sample_5_upload.xlsx --review-output data/output/sample_5_review.xlsx --handoff-output data/output/sample_5_handoff.jsonl
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 ```
 
-Current CLI behavior:
+### Tests
 
-- prints valid and invalid input counts
-- prints invalid raw input values
-- prints fetched, resolved, and unresolved counts
-- prints aggregated source issue-code counts
-- warns explicitly when Google Books rate limiting is detected
-- prints first-material-gain stage counts
-- prints unresolved source counts
-- prints unresolved reason-code counts
-- logs per-ISBN fetch outcomes
-- logs per-ISBN final resolution status
+Tests are organized into unit and integration suites:
 
-If `--output` is provided and `--handoff-output` is omitted, the CLI derives a handoff path automatically by appending `.handoff.jsonl` to the upload workbook stem.
-If no output flags are provided, the CLI prints progress and summary information but does not write files.
+```bash
+# Run all tests
+.venv/bin/pytest tests/
+
+# Run only unit tests
+.venv/bin/pytest tests/unit/
+
+# Run only integration tests
+.venv/bin/pytest tests/integration/
+
+# Run with coverage
+.venv/bin/pytest tests/ --cov=book_store_assistant --cov-report=term-missing
+```
+
+**362 tests, 95% coverage** (GUI excluded from coverage — tkinter not testable in headless CI).
+
+Unit tests (14 files): parsers, routing, confidence, cleaning, diagnostics, validation, providers.
+
+Integration tests (18 files): sources with mocked HTTP, CLI flows, pipeline orchestration, export formats.
+
+### Linting and Type Checking
+
+```bash
+.venv/bin/ruff check src/ tests/
+.venv/bin/mypy src/
+```
+
+### Project Structure
+
+```
+src/book_store_assistant/
+├── bibliographic/          # Resolution, export, models
+│   ├── export.py           # Upload/review/handoff export
+│   ├── models.py           # BibliographicRecord
+│   └── resolution.py       # Candidate building, field cleaning
+├── pipeline/               # Orchestration
+│   ├── input.py            # ISBN CSV parsing
+│   └── service.py          # Main pipeline entry point
+├── resolution/             # Validation
+│   ├── openai_bibliographic_validator.py
+│   ├── providers.py        # Validator/enricher factory
+│   └── synopsis_resolution.py
+├── sources/                # Data sources
+│   ├── bne.py              # BNE SRU (Spain)
+│   ├── google_books.py     # Google Books API
+│   ├── isbndb.py           # ISBNdb API
+│   ├── isbn_routing.py     # ISBN prefix → national agency
+│   ├── llm_enrichment.py   # OpenAI web search enrichment
+│   ├── merge.py            # Source record merging
+│   ├── national/           # National agency sources
+│   │   ├── base.py         # Stub source
+│   │   └── colombia.py     # Cámara Colombiana del Libro
+│   ├── open_library.py     # Open Library API
+│   └── staged.py           # Cascade orchestrator
+├── cli.py                  # CLI entry point
+├── config.py               # AppConfig with toml/env loading
+├── gui.py                  # Desktop GUI (tkinter)
+└── isbn.py                 # ISBN validation and prefix routing
+
+tests/
+├── unit/                   # 14 files — isolated function tests
+└── integration/            # 18 files — multi-module tests with mocked I/O
+```
+
+## Performance
+
+Benchmarked against 200 hand-curated ISBNs (8 themed batches of 25):
+
+| Metric | Value |
+|--------|-------|
+| Upload rate | 199/200 (99.5%) |
+| LLM fallback rate | 4/200 (2%) |
+| Title accuracy | 92% |
+| Author accuracy | 94% |
+| Editorial accuracy | 74% |
+| Cost per 200 ISBNs | ~$4.32 (was ~$20 before ISBNdb) |
+| Time per 25 ISBNs | ~80 seconds |
+
+ISBNdb provides 97% of all field values. LLM enrichment is only needed for ~2% of rows where no deterministic source has the data.
 
 ## Notes
 
-- `Editorial` and `Publisher` are exported as separate columns in Stage 1.
-- When only one trusted publishing name is available, the validator is allowed to accept the same value in both fields.
-- Stage 2 is intentionally not part of the active runtime yet.
+- ISBNdb has a rate limit of 3 requests/second on the Premium plan. The pipeline uses 0.5s pauses and exponential backoff on 429s.
+- BNE editorial values often include city prefixes ("[Barcelona], Debolsillo") — the pipeline strips these automatically.
+- BNE descriptions that are catalog metadata (original titles, narrator credits, <80 chars) are filtered out.
+- The LLM validator compares cleaned candidate values against cleaned source evidence to prevent false rejections from normalization differences.
