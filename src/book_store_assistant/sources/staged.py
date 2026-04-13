@@ -1,5 +1,8 @@
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from typing import Protocol
 
 from book_store_assistant.config import AppConfig
 from book_store_assistant.pipeline.contracts import ISBNInput
@@ -12,6 +15,14 @@ from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
 
 StageUpdateCallback = Callable[[str], None]
+
+MAX_CONCURRENT_REQUESTS = 3
+
+
+class ISBNFetcher(Protocol):
+    source_name: str
+
+    def fetch(self, isbn: str) -> FetchResult: ...
 
 
 def _prefix_result(result: FetchResult, source_name: str) -> FetchResult:
@@ -68,6 +79,7 @@ def _chunked(values: list[str], size: int) -> list[list[str]]:
 
     return [values[index : index + size] for index in range(0, len(values), size)]
 
+
 def _has_text(value: str | None) -> bool:
     return value is not None and bool(value.strip())
 
@@ -84,6 +96,77 @@ def _needs_additional_metadata(result: FetchResult | None) -> bool:
     )
 
 
+@dataclass
+class _StageResult:
+    isbn: str
+    result: FetchResult
+
+
+def _fetch_one(
+    isbn: str,
+    source: ISBNFetcher,
+    pause_seconds: float,
+    rate_limiter: list[float],
+) -> _StageResult:
+    now = time.monotonic()
+    if rate_limiter:
+        elapsed = now - rate_limiter[0]
+        if elapsed < pause_seconds:
+            time.sleep(pause_seconds - elapsed)
+    rate_limiter.clear()
+    rate_limiter.append(time.monotonic())
+    result = source.fetch(isbn)
+    return _StageResult(isbn=isbn, result=_prefix_result(result, source.source_name))
+
+
+def _run_stage_concurrent(
+    candidates: list[str],
+    source: ISBNFetcher,
+    pause_seconds: float,
+    on_status_update: StageUpdateCallback | None,
+    stage_label: str,
+) -> dict[str, FetchResult]:
+    if not candidates:
+        return {}
+
+    rate_limiter: list[float] = []
+    results: dict[str, FetchResult] = {}
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        futures = {}
+        for index, isbn in enumerate(candidates):
+            if on_status_update is not None:
+                on_status_update(f"{stage_label} {index + 1}/{len(candidates)}: {isbn}")
+            future = executor.submit(
+                _fetch_one, isbn, source, pause_seconds, rate_limiter
+            )
+            futures[future] = isbn
+
+        for future in as_completed(futures):
+            stage_result = future.result()
+            results[stage_result.isbn] = stage_result.result
+
+    return results
+
+
+def _merge_stage_into(
+    inputs: list[ISBNInput],
+    current: dict[str, FetchResult],
+    stage_results: dict[str, FetchResult],
+) -> dict[str, FetchResult]:
+    merged: dict[str, FetchResult] = {}
+    for item in inputs:
+        isbn = item.isbn
+        merged[isbn] = _merge_stage_results(
+            current[isbn],
+            stage_results.get(
+                isbn,
+                FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
+            ),
+        )
+    return merged
+
+
 def fetch_with_stages(
     inputs: list[ISBNInput],
     config: AppConfig,
@@ -91,71 +174,36 @@ def fetch_with_stages(
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
-    isbndb = ISBNdbSource(config)
-    open_library = OpenLibrarySource(config)
-    google_books = GoogleBooksSource(config)
-
     if on_stage_update is not None:
         on_stage_update(f"Stage: initializing fetch for {len(inputs)} ISBNs")
 
-    cache_stage_results = [
-        FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
+    current = {
+        item.isbn: FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
         for item in inputs
-    ]
-
-    merged_after_cache = {
-        result.isbn: result
-        for result in cache_stage_results
     }
+    pause = config.source_request_pause_seconds
 
-    merged_after_isbndb = merged_after_cache
+    # --- Stage 1: ISBNdb ---
     if config.isbndb_lookup_enabled and config.isbndb_api_key:
-        isbndb_candidates = [
-            item.isbn
-            for item in inputs
-            if _needs_additional_metadata(merged_after_cache.get(item.isbn))
-        ]
+        isbndb = ISBNdbSource(config)
+        candidates = [i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))]
         if on_stage_update is not None:
-            on_stage_update(f"Stage: querying ISBNdb for {len(isbndb_candidates)} ISBNs")
+            on_stage_update(f"Stage: querying ISBNdb for {len(candidates)} ISBNs")
+        stage_results = _run_stage_concurrent(
+            candidates, isbndb, isbndb.adaptive_pause, on_stage_update, "ISBNdb"
+        )
+        current = _merge_stage_into(inputs, current, stage_results)
 
-        isbndb_stage_results: list[FetchResult] = []
-        for index, isbn in enumerate(isbndb_candidates):
-            if on_stage_update is not None:
-                on_stage_update(f"ISBNdb {index + 1}/{len(isbndb_candidates)}: {isbn}")
-            if index > 0:
-                time.sleep(isbndb.adaptive_pause)
-
-            result = isbndb.fetch(isbn)
-            isbndb_stage_results.append(result)
-        isbndb_by_isbn = {
-            result.isbn: _prefix_result(result, isbndb.source_name)
-            for result in isbndb_stage_results
-        }
-
-        merged_after_isbndb = {}
-        for item in inputs:
-            isbn = item.isbn
-            merged_after_isbndb[isbn] = _merge_stage_results(
-                merged_after_cache[isbn],
-                isbndb_by_isbn.get(
-                    isbn,
-                    FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
-                ),
-            )
-
-    merged_after_national = merged_after_isbndb
+    # --- Stage 2: National agencies ---
     if config.national_agency_routing_enabled:
         national_candidates = [
-            item.isbn
-            for item in inputs
-            if _needs_additional_metadata(merged_after_isbndb.get(item.isbn))
+            i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))
         ]
         if on_stage_update is not None:
             on_stage_update(
                 f"Stage: querying national agencies for {len(national_candidates)} ISBNs"
             )
-
-        national_stage_results: list[FetchResult] = []
+        national_results: dict[str, FetchResult] = {}
         for index, isbn in enumerate(national_candidates):
             source = get_national_source(isbn, config)
             if source is None:
@@ -165,92 +213,46 @@ def fetch_with_stages(
                     f"National ({source.source_name}) "
                     f"{index + 1}/{len(national_candidates)}: {isbn}"
                 )
-            if national_stage_results and config.source_request_pause_seconds > 0:
-                time.sleep(config.source_request_pause_seconds)
-
+            if national_results and pause > 0:
+                time.sleep(pause)
             result = source.fetch(isbn)
-            national_stage_results.append(
-                _prefix_result(result, source.source_name)
-            )
-        national_by_isbn = {
-            result.isbn: result for result in national_stage_results
-        }
+            national_results[isbn] = _prefix_result(result, source.source_name)
+        current = _merge_stage_into(inputs, current, national_results)
 
-        merged_after_national = {}
-        for item in inputs:
-            isbn = item.isbn
-            merged_after_national[isbn] = _merge_stage_results(
-                merged_after_isbndb[isbn],
-                national_by_isbn.get(
-                    isbn,
-                    FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
-                ),
-            )
-
-    open_library_candidates = [
-        item.isbn
-        for item in inputs
-        if _needs_additional_metadata(merged_after_national.get(item.isbn))
-    ]
+    # --- Stage 3: Open Library (batch) ---
+    ol_candidates = [i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))]
     if on_stage_update is not None:
+        batches = _chunked(ol_candidates, config.open_library_batch_size)
         on_stage_update(
-            "Stage: querying Open Library for "
-            f"{len(open_library_candidates)} ISBNs "
-            f"in {len(_chunked(open_library_candidates, config.open_library_batch_size))} batch(es)"
+            f"Stage: querying Open Library for {len(ol_candidates)} ISBNs "
+            f"in {len(batches)} batch(es)"
         )
-
-    open_library_stage_results: list[FetchResult] = []
-    for index, batch in enumerate(
-        _chunked(open_library_candidates, config.open_library_batch_size)
-    ):
+    open_library = OpenLibrarySource(config)
+    ol_results_list: list[FetchResult] = []
+    for index, batch in enumerate(_chunked(ol_candidates, config.open_library_batch_size)):
         if on_stage_update is not None and batch:
-            on_stage_update(
-                f"Open Library batch {index + 1}: {len(batch)} ISBNs"
-            )
-        if index > 0 and config.source_request_pause_seconds > 0:
-            time.sleep(config.source_request_pause_seconds)
-
-        batch_results = open_library.fetch_batch(batch)
-        open_library_stage_results.extend(batch_results)
-    open_library_by_isbn = {
-        result.isbn: _prefix_result(result, open_library.source_name)
-        for result in open_library_stage_results
+            on_stage_update(f"Open Library batch {index + 1}: {len(batch)} ISBNs")
+        if index > 0 and pause > 0:
+            time.sleep(pause)
+        ol_results_list.extend(open_library.fetch_batch(batch))
+    ol_by_isbn = {
+        r.isbn: _prefix_result(r, open_library.source_name) for r in ol_results_list
     }
+    current = _merge_stage_into(inputs, current, ol_by_isbn)
 
-    merged_after_open_library: dict[str, FetchResult] = {}
-    for item in inputs:
-        isbn = item.isbn
-        cache_result = merged_after_national[isbn]
-        open_library_result = open_library_by_isbn.get(
-            isbn,
-            FetchResult(isbn=isbn, record=None, errors=[], issue_codes=[]),
-        )
-        merged_after_open_library[isbn] = _merge_stage_results(cache_result, open_library_result)
-
+    # --- Stage 4: Google Books ---
     google_candidates = [
-        item.isbn
-        for item in inputs
-        if _needs_additional_metadata(merged_after_open_library.get(item.isbn))
+        i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))
     ]
     if on_stage_update is not None:
         on_stage_update(f"Stage: querying Google Books for {len(google_candidates)} ISBNs")
+    google_books = GoogleBooksSource(config)
+    google_results = _run_stage_concurrent(
+        google_candidates, google_books, pause, on_stage_update, "Google Books"
+    )
+    current = _merge_stage_into(inputs, current, google_results)
 
-    google_stage_results: list[FetchResult] = []
-    for index, isbn in enumerate(google_candidates):
-        if on_stage_update is not None:
-            on_stage_update(
-                f"Google Books {index + 1}/{len(google_candidates)}: {isbn}"
-            )
-        if index > 0 and config.source_request_pause_seconds > 0:
-            time.sleep(config.source_request_pause_seconds)
-
-        result = google_books.fetch(isbn)
-        google_stage_results.append(result)
-    google_by_isbn = {
-        result.isbn: _prefix_result(result, google_books.source_name)
-        for result in google_stage_results
-    }
-
+    # --- Final merge and callbacks ---
     final_results: list[FetchResult] = []
     total = len(inputs)
     if on_stage_update is not None:
@@ -258,17 +260,8 @@ def fetch_with_stages(
     for index, item in enumerate(inputs, start=1):
         if on_fetch_start is not None:
             on_fetch_start(index, total, item.isbn)
-
-        result = _merge_stage_results(
-            merged_after_open_library[item.isbn],
-            google_by_isbn.get(
-                item.isbn,
-                FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[]),
-            ),
-        )
-        final_results.append(result)
-
+        final_results.append(current[item.isbn])
         if on_fetch_complete is not None:
-            on_fetch_complete(index, total, result)
+            on_fetch_complete(index, total, current[item.isbn])
 
     return final_results

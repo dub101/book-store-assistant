@@ -223,3 +223,142 @@ def test_resolve_all_with_fetch_errors_and_resolution_errors_merges_both() -> No
     assert "MISSING_AUTHOR" in result.reason_codes
     assert "Partial data returned." in result.errors
     assert any("GOOGLE_BOOKS_PARTIAL" in d for d in result.review_details)
+
+
+class TrackingValidator:
+    """Validator that tracks calls and accepts everything."""
+
+    def __init__(self):
+        self.calls = []
+
+    def validate(self, source_record, candidate_record):
+        self.calls.append(source_record.isbn)
+        return RecordValidationAssessment(accepted=True, confidence=0.95)
+
+
+def test_resolve_all_skips_validation_for_high_confidence_single_source() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="isbndb",
+                isbn="9780306406157",
+                title="ISBNdb Title",
+                author="ISBNdb Author",
+                editorial="ISBNdb Editorial",
+                field_sources={
+                    "title": "isbndb",
+                    "author": "isbndb",
+                    "editorial": "isbndb",
+                },
+                field_confidence={
+                    "title": 0.9,
+                    "author": 0.9,
+                    "editorial": 0.9,
+                },
+            ),
+            errors=[],
+        ),
+    ]
+
+    tracker = TrackingValidator()
+    results = resolve_all(fetch_results, validator=tracker)
+
+    assert results[0].record is not None
+    assert tracker.calls == []
+
+
+def test_resolve_all_validates_when_llm_contributed() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="isbndb + llm_web_search",
+                isbn="9780306406157",
+                title="ISBNdb Title",
+                author="ISBNdb Author",
+                editorial="LLM Editorial",
+                field_sources={
+                    "title": "isbndb",
+                    "author": "isbndb",
+                    "editorial": "llm_web_search",
+                },
+                field_confidence={
+                    "title": 0.9,
+                    "author": 0.9,
+                    "editorial": 0.85,
+                },
+            ),
+            errors=[],
+        ),
+    ]
+
+    tracker = TrackingValidator()
+    results = resolve_all(fetch_results, validator=tracker)
+
+    assert results[0].record is not None
+    assert tracker.calls == ["9780306406157"]
+
+
+def test_resolve_all_validates_when_low_confidence() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="open_library",
+                isbn="9780306406157",
+                title="OL Title",
+                author="OL Author",
+                editorial="OL Editorial",
+                field_sources={
+                    "title": "open_library",
+                    "author": "open_library",
+                    "editorial": "open_library",
+                },
+                field_confidence={
+                    "title": 0.6,
+                    "author": 0.6,
+                    "editorial": 0.6,
+                },
+            ),
+            errors=[],
+        ),
+    ]
+
+    tracker = TrackingValidator()
+    results = resolve_all(fetch_results, validator=tracker)
+
+    assert results[0].record is not None
+    assert tracker.calls == ["9780306406157"]
+
+
+def test_resolve_all_validates_when_multiple_sources_disagree() -> None:
+    fetch_results = [
+        FetchResult(
+            isbn="9780306406157",
+            record=SourceBookRecord(
+                source_name="isbndb + bne",
+                isbn="9780306406157",
+                title="ISBNdb Title",
+                author="BNE Author",
+                editorial="ISBNdb Editorial",
+                field_sources={
+                    "title": "isbndb",
+                    "author": "bne",
+                    "editorial": "isbndb",
+                },
+                field_confidence={
+                    "title": 0.9,
+                    "author": 1.0,
+                    "editorial": 0.9,
+                },
+            ),
+            errors=[],
+        ),
+    ]
+
+    tracker = TrackingValidator()
+    results = resolve_all(fetch_results, validator=tracker)
+
+    assert results[0].record is not None
+    assert tracker.calls == ["9780306406157"]

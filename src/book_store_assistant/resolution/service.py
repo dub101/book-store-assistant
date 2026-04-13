@@ -8,6 +8,9 @@ from book_store_assistant.sources.results import FetchResult
 
 FETCH_ERROR_CODE = "FETCH_ERROR"
 
+HIGH_CONFIDENCE_SOURCES = {"bne", "isbndb"}
+VALIDATION_CONFIDENCE_THRESHOLD = 0.85
+
 
 def _merge_unique(*values: list[str]) -> list[str]:
     merged: list[str] = []
@@ -19,6 +22,32 @@ def _merge_unique(*values: list[str]) -> list[str]:
             seen.add(item)
             merged.append(item)
     return merged
+
+
+def _needs_validation(source_record: SourceBookRecord) -> bool:
+    field_sources = source_record.field_sources
+    field_confidence = source_record.field_confidence
+
+    for field_name in ("title", "author", "editorial"):
+        source = field_sources.get(field_name, "")
+        parts = [p.strip().casefold() for p in source.split("+")]
+        if any(p == "llm_web_search" or p == "ai_enriched" for p in parts):
+            return True
+
+    for field_name in ("title", "author", "editorial"):
+        confidence = field_confidence.get(field_name, 0.0)
+        if confidence < VALIDATION_CONFIDENCE_THRESHOLD:
+            return True
+
+    core_sources = set()
+    for field_name in ("title", "author", "editorial"):
+        source = field_sources.get(field_name, "unknown")
+        base = source.split("+")[0].strip().casefold()
+        core_sources.add(base)
+    if len(core_sources) > 1:
+        return True
+
+    return False
 
 
 def resolve_all(
@@ -52,9 +81,12 @@ def resolve_all(
             )
             continue
 
+        skip = validator is not None and not _needs_validation(fetch_result.record)
+
         resolved_result = resolve_bibliographic_record(
             fetch_result.record,
             validator=validator,
+            skip_validation=skip,
         )
 
         if resolved_result.record is None and fetch_result.errors:

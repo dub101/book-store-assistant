@@ -188,6 +188,7 @@ def _build_candidate_record(source_record: SourceBookRecord) -> BibliographicRec
 def resolve_bibliographic_record(
     source_record: SourceBookRecord,
     validator: RecordQualityValidator | None = None,
+    skip_validation: bool = False,
 ) -> ResolutionResult:
     reason_codes: list[str] = []
     review_details: list[str] = []
@@ -222,6 +223,16 @@ def resolve_bibliographic_record(
             errors=errors,
             reason_codes=reason_codes,
             review_details=review_details,
+        )
+
+    if skip_validation:
+        return ResolutionResult(
+            record=candidate_record,
+            candidate_record=candidate_record,
+            source_record=source_record,
+            errors=[],
+            reason_codes=[],
+            review_details=[],
         )
 
     if validator is None:
