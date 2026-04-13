@@ -11,6 +11,10 @@ from book_store_assistant.sources.isbn_routing import get_national_source
 from book_store_assistant.sources.isbndb import ISBNdbSource
 from book_store_assistant.sources.merge import merge_source_records
 from book_store_assistant.sources.open_library import OpenLibrarySource
+from book_store_assistant.sources.publisher_normalization import (
+    fix_publisher_typos,
+    is_corporate_name,
+)
 from book_store_assistant.sources.results import FetchResult
 from book_store_assistant.sources.service import FetchCompleteCallback, FetchStartCallback
 
@@ -82,6 +86,32 @@ def _chunked(values: list[str], size: int) -> list[list[str]]:
 
 def _has_text(value: str | None) -> bool:
     return value is not None and bool(value.strip())
+
+
+def _fix_isbndb_editorial(result: FetchResult) -> FetchResult:
+    record = result.record
+    if record is None or not record.editorial:
+        return result
+    fixed = fix_publisher_typos(record.editorial)
+    updates: dict = {}
+    if fixed != record.editorial:
+        updates["editorial"] = fixed
+    if is_corporate_name(fixed):
+        new_confidence = dict(record.field_confidence)
+        new_confidence["editorial"] = 0.3
+        updates["field_confidence"] = new_confidence
+    if updates:
+        return result.model_copy(
+            update={"record": record.model_copy(update=updates)}
+        )
+    return result
+
+
+def _needs_editorial_improvement(result: FetchResult | None) -> bool:
+    if result is None or result.record is None:
+        return False
+    confidence = result.record.field_confidence.get("editorial", 1.0)
+    return confidence < 0.5
 
 
 def _needs_additional_metadata(result: FetchResult | None) -> bool:
@@ -192,12 +222,18 @@ def fetch_with_stages(
         stage_results = _run_stage_concurrent(
             candidates, isbndb, isbndb.adaptive_pause, on_stage_update, "ISBNdb"
         )
+        stage_results = {
+            isbn: _fix_isbndb_editorial(result)
+            for isbn, result in stage_results.items()
+        }
         current = _merge_stage_into(inputs, current, stage_results)
 
     # --- Stage 2: National agencies ---
     if config.national_agency_routing_enabled:
         national_candidates = [
-            i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))
+            i.isbn for i in inputs
+            if _needs_additional_metadata(current.get(i.isbn))
+            or _needs_editorial_improvement(current.get(i.isbn))
         ]
         if on_stage_update is not None:
             on_stage_update(

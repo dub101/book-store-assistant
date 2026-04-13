@@ -3,6 +3,10 @@ from book_store_assistant.bibliographic.resolution import (
     _clean_editorial,
     _clean_title,
 )
+from book_store_assistant.sources.publisher_normalization import (
+    fix_publisher_typos,
+    is_corporate_name,
+)
 
 # -- _clean_editorial --
 
@@ -109,3 +113,37 @@ def test_clean_author_none_returns_none() -> None:
 def test_clean_author_strips_extra_whitespace() -> None:
     result = _clean_author("  Gabriel   Garcia   Marquez  ")
     assert result == "Gabriel Garcia Marquez"
+
+
+
+class TestPublisherNormalization:
+    def test_fix_debols_llo_typo(self) -> None:
+        assert fix_publisher_typos("Debols!llo") == "Debolsillo"
+
+    def test_no_fix_for_clean_name(self) -> None:
+        assert fix_publisher_typos("Alfaguara") == "Alfaguara"
+
+    def test_is_corporate_penguin(self) -> None:
+        assert is_corporate_name("Penguin Random House Grupo Editorial") is True
+
+    def test_is_corporate_national_geographic(self) -> None:
+        assert is_corporate_name("National Geographic Books") is True
+
+    def test_is_corporate_planeta_publishing(self) -> None:
+        assert is_corporate_name("Planeta Publishing Corporation") is True
+
+    def test_is_corporate_random_house_mondadori(self) -> None:
+        assert is_corporate_name("Random House Mondadori") is True
+
+    def test_is_not_corporate_debolsillo(self) -> None:
+        assert is_corporate_name("Debolsillo") is False
+
+    def test_is_not_corporate_salamandra(self) -> None:
+        assert is_corporate_name("Salamandra") is False
+
+    def test_is_not_corporate_alfaguara(self) -> None:
+        assert is_corporate_name("Alfaguara") is False
+
+    def test_case_insensitive(self) -> None:
+        assert is_corporate_name("PENGUIN RANDOM HOUSE") is True
+        assert is_corporate_name("national geographic books") is True
