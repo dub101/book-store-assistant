@@ -2,8 +2,16 @@ from book_store_assistant.config import AppConfig
 from book_store_assistant.isbn import registration_group
 from book_store_assistant.sources.bne import BneSruSource
 from book_store_assistant.sources.isbn_routing import get_national_source
+from book_store_assistant.sources.national.argentina import ArgentinaISBNSource
 from book_store_assistant.sources.national.base import StubNationalSource
+from book_store_assistant.sources.national.brazil import BrazilISBNSource
+from book_store_assistant.sources.national.chile import ChileISBNSource
 from book_store_assistant.sources.national.colombia import ColombiaISBNSource
+from book_store_assistant.sources.national.ecuador import EcuadorISBNSource
+from book_store_assistant.sources.national.mexico import MexicoISBNSource
+from book_store_assistant.sources.national.peru import PeruISBNSource
+from book_store_assistant.sources.national.uruguay import UruguayISBNSource
+from book_store_assistant.sources.national.venezuela import VenezuelaISBNSource
 
 
 def _make_config() -> AppConfig:
@@ -151,68 +159,60 @@ def test_get_national_source_co_returns_colombia() -> None:
     assert isinstance(source, ColombiaISBNSource)
 
 
-def test_get_national_source_mx_returns_stub() -> None:
+def test_get_national_source_mx_returns_mexico() -> None:
     config = _make_config()
     source = get_national_source("9786071600011", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "MX"
+    assert isinstance(source, MexicoISBNSource)
 
 
-def test_get_national_source_ar_returns_stub() -> None:
+def test_get_national_source_ar_returns_argentina() -> None:
     config = _make_config()
     source = get_national_source("9789500286442", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "AR"
+    assert isinstance(source, ArgentinaISBNSource)
 
 
-def test_get_national_source_cl_returns_stub() -> None:
+def test_get_national_source_cl_returns_chile() -> None:
     config = _make_config()
     source = get_national_source("9789561234567", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "CL"
+    assert isinstance(source, ChileISBNSource)
 
 
-def test_get_national_source_br_returns_stub() -> None:
+def test_get_national_source_br_returns_brazil() -> None:
     config = _make_config()
     source = get_national_source("9788535914849", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "BR"
+    assert isinstance(source, BrazilISBNSource)
 
 
-def test_get_national_source_pe_returns_stub() -> None:
+def test_get_national_source_pe_returns_peru() -> None:
     config = _make_config()
     source = get_national_source("9786121234567", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "PE"
+    assert isinstance(source, PeruISBNSource)
 
 
-def test_get_national_source_ve_returns_stub() -> None:
+def test_get_national_source_ve_returns_venezuela() -> None:
     config = _make_config()
     source = get_national_source("9789801234567", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "VE"
+    assert isinstance(source, VenezuelaISBNSource)
 
 
-def test_get_national_source_uy_returns_stub() -> None:
+def test_get_national_source_uy_returns_uruguay() -> None:
     config = _make_config()
     source = get_national_source("9789974123456", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "UY"
+    assert isinstance(source, UruguayISBNSource)
 
 
-def test_get_national_source_ec_returns_stub() -> None:
+def test_get_national_source_ec_returns_ecuador() -> None:
     config = _make_config()
     source = get_national_source("9789978123456", config)
 
-    assert isinstance(source, StubNationalSource)
-    assert source.country_code == "EC"
+    assert isinstance(source, EcuadorISBNSource)
 
 
 def test_get_national_source_bo_returns_stub() -> None:
