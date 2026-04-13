@@ -197,6 +197,16 @@ def _merge_stage_into(
     return merged
 
 
+def _deduplicate_inputs(inputs: list[ISBNInput]) -> list[ISBNInput]:
+    seen: set[str] = set()
+    unique: list[ISBNInput] = []
+    for item in inputs:
+        if item.isbn not in seen:
+            seen.add(item.isbn)
+            unique.append(item)
+    return unique
+
+
 def fetch_with_stages(
     inputs: list[ISBNInput],
     config: AppConfig,
@@ -204,19 +214,24 @@ def fetch_with_stages(
     on_fetch_complete: FetchCompleteCallback | None = None,
     on_stage_update: StageUpdateCallback | None = None,
 ) -> list[FetchResult]:
+    unique_inputs = _deduplicate_inputs(inputs)
+
     if on_stage_update is not None:
-        on_stage_update(f"Stage: initializing fetch for {len(inputs)} ISBNs")
+        msg = f"Stage: initializing fetch for {len(inputs)} ISBNs"
+        if len(unique_inputs) < len(inputs):
+            msg += f" ({len(unique_inputs)} unique)"
+        on_stage_update(msg)
 
     current = {
         item.isbn: FetchResult(isbn=item.isbn, record=None, errors=[], issue_codes=[])
-        for item in inputs
+        for item in unique_inputs
     }
     pause = config.source_request_pause_seconds
 
     # --- Stage 1: ISBNdb ---
     if config.isbndb_lookup_enabled and config.isbndb_api_key:
         isbndb = ISBNdbSource(config)
-        candidates = [i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))]
+        candidates = [i.isbn for i in unique_inputs if _needs_additional_metadata(current.get(i.isbn))]
         if on_stage_update is not None:
             on_stage_update(f"Stage: querying ISBNdb for {len(candidates)} ISBNs")
         stage_results = _run_stage_concurrent(
@@ -226,12 +241,12 @@ def fetch_with_stages(
             isbn: _fix_isbndb_editorial(result)
             for isbn, result in stage_results.items()
         }
-        current = _merge_stage_into(inputs, current, stage_results)
+        current = _merge_stage_into(unique_inputs, current, stage_results)
 
     # --- Stage 2: National agencies ---
     if config.national_agency_routing_enabled:
         national_candidates = [
-            i.isbn for i in inputs
+            i.isbn for i in unique_inputs
             if _needs_additional_metadata(current.get(i.isbn))
             or _needs_editorial_improvement(current.get(i.isbn))
         ]
@@ -253,10 +268,10 @@ def fetch_with_stages(
                 time.sleep(pause)
             result = source.fetch(isbn)
             national_results[isbn] = _prefix_result(result, source.source_name)
-        current = _merge_stage_into(inputs, current, national_results)
+        current = _merge_stage_into(unique_inputs, current, national_results)
 
     # --- Stage 3: Open Library (batch) ---
-    ol_candidates = [i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))]
+    ol_candidates = [i.isbn for i in unique_inputs if _needs_additional_metadata(current.get(i.isbn))]
     if on_stage_update is not None:
         batches = _chunked(ol_candidates, config.open_library_batch_size)
         on_stage_update(
@@ -274,11 +289,11 @@ def fetch_with_stages(
     ol_by_isbn = {
         r.isbn: _prefix_result(r, open_library.source_name) for r in ol_results_list
     }
-    current = _merge_stage_into(inputs, current, ol_by_isbn)
+    current = _merge_stage_into(unique_inputs, current, ol_by_isbn)
 
     # --- Stage 4: Google Books ---
     google_candidates = [
-        i.isbn for i in inputs if _needs_additional_metadata(current.get(i.isbn))
+        i.isbn for i in unique_inputs if _needs_additional_metadata(current.get(i.isbn))
     ]
     if on_stage_update is not None:
         on_stage_update(f"Stage: querying Google Books for {len(google_candidates)} ISBNs")
@@ -286,7 +301,7 @@ def fetch_with_stages(
     google_results = _run_stage_concurrent(
         google_candidates, google_books, pause, on_stage_update, "Google Books"
     )
-    current = _merge_stage_into(inputs, current, google_results)
+    current = _merge_stage_into(unique_inputs, current, google_results)
 
     # --- Final merge and callbacks ---
     final_results: list[FetchResult] = []

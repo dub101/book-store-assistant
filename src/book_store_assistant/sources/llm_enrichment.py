@@ -305,7 +305,14 @@ def augment_fetch_results_with_llm_enrichment(
     enricher: LLMWebEnricher,
     on_status_update: LLMEnrichmentStatusCallback | None = None,
 ) -> list[FetchResult]:
-    targeted = [r for r in fetch_results if _needs_enrichment(r)]
+    result_by_isbn: dict[str, FetchResult] = {}
+    unique_results: list[FetchResult] = []
+    for r in fetch_results:
+        if r.isbn not in result_by_isbn:
+            result_by_isbn[r.isbn] = r
+            unique_results.append(r)
+
+    targeted = [r for r in unique_results if _needs_enrichment(r)]
     if not targeted:
         return fetch_results
 
@@ -314,10 +321,8 @@ def augment_fetch_results_with_llm_enrichment(
             f"Stage: LLM web enrichment for {len(targeted)} records"
         )
 
-    result_by_isbn = {r.isbn: r for r in fetch_results}
-
     targeted_index = 0
-    for fetch_result in fetch_results:
+    for fetch_result in unique_results:
         if not _needs_enrichment(fetch_result):
             continue
 

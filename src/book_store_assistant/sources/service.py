@@ -15,13 +15,19 @@ def fetch_all(
     on_fetch_complete: FetchCompleteCallback | None = None,
 ) -> list[FetchResult]:
     fetch_results: list[FetchResult] = []
+    fetched_by_isbn: dict[str, FetchResult] = {}
     total = len(inputs)
 
     for index, item in enumerate(inputs, start=1):
         if on_fetch_start is not None:
             on_fetch_start(index, total, item.isbn)
 
-        result = source.fetch(item.isbn)
+        if item.isbn in fetched_by_isbn:
+            result = fetched_by_isbn[item.isbn]
+        else:
+            result = source.fetch(item.isbn)
+            fetched_by_isbn[item.isbn] = result
+
         fetch_results.append(result)
 
         if on_fetch_complete is not None:
