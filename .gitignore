@@ -20,3 +20,4 @@ data/intermediate/*
 !data/intermediate/.gitkeep
 
 .coverage
+.claude/
