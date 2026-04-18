@@ -1,5 +1,4 @@
 SPANISH_LANGUAGE_CODES = {"es", "spa"}
-NON_SPANISH_SYNOPSIS_REVIEW_ERROR = "Synopsis is not in Spanish and requires review."
 
 
 def is_spanish_language(language: str | None) -> bool:
@@ -14,11 +13,3 @@ def resolve_synopsis(synopsis: str | None, language: str | None) -> str | None:
     if language is not None and not is_spanish_language(language):
         return None
     return synopsis.strip()
-
-
-def get_synopsis_review_error(synopsis: str | None, language: str | None) -> str | None:
-    if not synopsis or not synopsis.strip():
-        return None
-    if language is not None and not is_spanish_language(language):
-        return NON_SPANISH_SYNOPSIS_REVIEW_ERROR
-    return None

@@ -1,30 +1,29 @@
+# Copy this file to bsa.toml and fill in your API keys.
+# Precedence: BSA_* / OPENAI_* / ISBNDB_* environment variables > bsa.toml > built-in defaults.
+
+# --- Secrets (env vars override these) ---
+# openai_api_key = "sk-..."
+# isbndb_api_key = "..."
+
+# --- I/O paths ---
 input_dir = "data/input"
 output_dir = "data/output"
+
+# --- Source cascade toggles ---
+isbndb_lookup_enabled = true
+national_agency_routing_enabled = true
 bne_lookup_enabled = true
-publisher_page_lookup_enabled = true
-retailer_page_lookup_enabled = true
-web_search_fallback_enabled = true
-source_request_pause_seconds = 0.5
-open_library_batch_size = 25
-publisher_page_timeout_seconds = 6.0
-retailer_page_timeout_seconds = 4.0
-publisher_page_max_retries = 0
-retailer_page_max_retries = 0
-publisher_page_backoff_seconds = 0.5
-retailer_page_backoff_seconds = 0.25
-publisher_page_max_profiles_per_record = 3
-publisher_page_max_search_attempts_per_record = 8
-publisher_page_max_fetch_attempts_per_record = 4
-retailer_page_max_search_attempts_per_record = 6
-retailer_page_max_fetch_attempts_per_record = 3
-web_search_timeout_seconds = 10.0
-web_search_max_retries = 1
-web_search_backoff_seconds = 0.5
-web_search_max_pages_per_record = 4
-web_search_max_search_attempts_per_record = 5
-web_search_max_fetch_attempts_per_record = 4
-request_timeout_seconds = 10.0
-llm_web_extraction_enabled = true
-llm_web_extraction_min_confidence = 0.75
+llm_enrichment_enabled = true
 llm_record_validation_enabled = true
+
+# --- Source endpoints / tuning ---
+bne_sru_base_url = "https://catalogo.bne.es/view/sru/34BNE_INST"
+source_request_pause_seconds = 0.5
+request_timeout_seconds = 10.0
+open_library_batch_size = 25
+google_books_max_retries = 2
+google_books_backoff_seconds = 1.0
+
+# --- LLM thresholds ---
+llm_enrichment_timeout_seconds = 60.0
 llm_record_validation_min_confidence = 0.80
