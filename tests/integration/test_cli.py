@@ -199,3 +199,89 @@ def test_cli_main_exports_upload_review_and_handoff_outputs(
     assert "Exported upload records" in result.stdout
     assert "Exported review records" in result.stdout
     assert "Exported handoff results" in result.stdout
+
+
+@patch("book_store_assistant.cli.process_isbn_file")
+def test_cli_main_reports_duplicate_count_when_any_removed(
+    mock_process_isbn_file,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    mock_process_isbn_file.return_value = ProcessResult(
+        input_result=InputReadResult(
+            valid_inputs=[ISBNInput(isbn="9780306406157")],
+            invalid_values=[],
+            duplicate_count=3,
+        ),
+        fetch_results=[
+            FetchResult(
+                isbn="9780306406157",
+                record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
+                errors=[],
+            )
+        ],
+        resolution_results=[
+            ResolutionResult(
+                record=None,
+                candidate_record=None,
+                source_record=SourceBookRecord(
+                    source_name="google_books", isbn="9780306406157"
+                ),
+                errors=[],
+                reason_codes=[],
+                review_details=[],
+            )
+        ],
+    )
+
+    result = runner.invoke(app, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "Duplicates removed: 3" in result.stdout
+
+
+@patch("book_store_assistant.cli.process_isbn_file")
+def test_cli_main_warns_when_google_books_rate_limited_and_reports_first_gain_stages(
+    mock_process_isbn_file,
+    tmp_path: Path,
+) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text("9780306406157\n", encoding="utf-8")
+    mock_process_isbn_file.return_value = ProcessResult(
+        input_result=InputReadResult(
+            valid_inputs=[ISBNInput(isbn="9780306406157")],
+            invalid_values=[],
+        ),
+        fetch_results=[
+            FetchResult(
+                isbn="9780306406157",
+                record=None,
+                errors=["rate limited"],
+                issue_codes=["GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED"],
+            )
+        ],
+        resolution_results=[
+            ResolutionResult(
+                record=None,
+                candidate_record=None,
+                source_record=SourceBookRecord(
+                    source_name="google_books", isbn="9780306406157"
+                ),
+                errors=[],
+                reason_codes=["NO_RECORD"],
+                review_details=[],
+                path_summary={"first_material_gain_stage": "isbndb"},
+            )
+        ],
+    )
+
+    result = runner.invoke(app, [str(input_file)])
+
+    assert result.exit_code == 0
+    assert "GOOGLE_BOOKS:GOOGLE_BOOKS_RATE_LIMITED: 1" in result.stdout
+    assert "Google Books rate limiting was detected" in result.stdout
+    assert "First material gain by stage:" in result.stdout
+    assert "- isbndb: 1" in result.stdout
+    assert "Unresolved sources:" in result.stdout
+    assert "Unresolved reasons:" in result.stdout

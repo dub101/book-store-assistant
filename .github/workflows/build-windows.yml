@@ -1,0 +1,61 @@
+name: build-windows
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install project and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Run tests
+        run: |
+          pip install pytest pytest-cov
+          pytest tests/ --no-cov -q
+
+      - name: Build GUI bundle (onedir)
+        shell: pwsh
+        run: |
+          pyinstaller `
+            --onedir `
+            --windowed `
+            --name BookStoreAssistant `
+            --noconfirm `
+            --collect-submodules defusedxml `
+            --collect-submodules openpyxl `
+            src/book_store_assistant/gui.py
+
+      - name: Assemble distribution folder
+        shell: pwsh
+        run: |
+          $dist = "dist/BookStoreAssistant"
+          Copy-Item bsa.toml.example "$dist/bsa.toml"
+          Copy-Item packaging/README.txt "$dist/README.txt"
+          New-Item -ItemType Directory -Path "$dist/data/input" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$dist/data/output" -Force | Out-Null
+          "Coloque aqui los archivos CSV de ISBNs." | Out-File -FilePath "$dist/data/input/LEEME.txt" -Encoding utf8
+          "Los archivos generados apareceran en esta carpeta." | Out-File -FilePath "$dist/data/output/LEEME.txt" -Encoding utf8
+
+      - name: Zip distribution
+        shell: pwsh
+        run: Compress-Archive -Path dist/BookStoreAssistant -DestinationPath BookStoreAssistant-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BookStoreAssistant-windows
+          path: BookStoreAssistant-windows.zip
+          if-no-files-found: error
+          retention-days: 30
