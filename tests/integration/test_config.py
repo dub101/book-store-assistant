@@ -88,6 +88,50 @@ def test_app_config_reads_runtime_overrides_from_environment(monkeypatch) -> Non
     assert config.openai_model == "gpt-4.1-mini"
 
 
+def test_app_config_reads_api_keys_from_config_file(monkeypatch, tmp_path: Path) -> None:
+    config_file = tmp_path / "bsa.toml"
+    config_file.write_text(
+        "\n".join(
+            [
+                'openai_api_key = "sk-from-file"',
+                'isbndb_api_key = "isbndb-from-file"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BSA_CONFIG_FILE", str(config_file))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ISBNDB_API_KEY", raising=False)
+    config_module._load_config_file.cache_clear()
+
+    config = AppConfig()
+
+    assert config.openai_api_key == "sk-from-file"
+    assert config.isbndb_api_key == "isbndb-from-file"
+
+
+def test_app_config_env_api_keys_override_config_file(monkeypatch, tmp_path: Path) -> None:
+    config_file = tmp_path / "bsa.toml"
+    config_file.write_text(
+        "\n".join(
+            [
+                'openai_api_key = "sk-from-file"',
+                'isbndb_api_key = "isbndb-from-file"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BSA_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
+    monkeypatch.setenv("ISBNDB_API_KEY", "isbndb-from-env")
+    config_module._load_config_file.cache_clear()
+
+    config = AppConfig()
+
+    assert config.openai_api_key == "sk-from-env"
+    assert config.isbndb_api_key == "isbndb-from-env"
+
+
 def test_app_config_falls_back_when_environment_overrides_are_invalid(monkeypatch) -> None:
     monkeypatch.delenv("BSA_CONFIG_FILE", raising=False)
     config_module._load_config_file.cache_clear()

@@ -1,4 +1,5 @@
 import os
+import sys
 import tomllib
 from enum import Enum
 from functools import lru_cache
@@ -11,9 +12,21 @@ class AIProvider(str, Enum):
     OPENAI = "openai"
 
 
+def _default_config_path() -> Path:
+    override = os.getenv("BSA_CONFIG_FILE")
+    if override:
+        return Path(override)
+    # When bundled by PyInstaller, sys.frozen is set and sys.executable points
+    # to the .exe. Resolve bsa.toml next to the executable so double-clicking
+    # from any working directory still finds the shipped config.
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "bsa.toml"
+    return Path("bsa.toml")
+
+
 @lru_cache(maxsize=1)
 def _load_config_file() -> dict[str, object]:
-    config_path = Path(os.getenv("BSA_CONFIG_FILE", "bsa.toml"))
+    config_path = _default_config_path()
     if not config_path.exists():
         return {}
 
@@ -28,6 +41,16 @@ def _load_config_file() -> dict[str, object]:
 
 def _config_value(name: str, default: object) -> object:
     return _load_config_file().get(name, default)
+
+
+def _secret_from_env_or_file(env_name: str, file_key: str) -> str | None:
+    raw_value = os.getenv(env_name)
+    if raw_value:
+        return raw_value
+    file_value = _config_value(file_key, None)
+    if isinstance(file_value, str) and file_value:
+        return file_value
+    return None
 
 
 def _configured_str(name: str, default: str) -> str:
@@ -113,7 +136,9 @@ class AppConfig(BaseModel):
             "https://catalogo.bne.es/view/sru/34BNE_INST",
         )
     )
-    isbndb_api_key: str | None = Field(default_factory=lambda: os.getenv("ISBNDB_API_KEY"))
+    isbndb_api_key: str | None = Field(
+        default_factory=lambda: _secret_from_env_or_file("ISBNDB_API_KEY", "isbndb_api_key")
+    )
     isbndb_lookup_enabled: bool = Field(
         default_factory=lambda: _env_bool("BSA_ISBNDB_LOOKUP_ENABLED", True)
     )
@@ -141,7 +166,9 @@ class AppConfig(BaseModel):
         default_factory=lambda: _env_float("BSA_LLM_ENRICHMENT_TIMEOUT_SECONDS", 60.0)
     )
     ai_provider: AIProvider = AIProvider.OPENAI
-    openai_api_key: str | None = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    openai_api_key: str | None = Field(
+        default_factory=lambda: _secret_from_env_or_file("OPENAI_API_KEY", "openai_api_key")
+    )
     openai_api_base_url: str = Field(
         default_factory=lambda: os.getenv("OPENAI_API_BASE_URL", "https://api.openai.com/v1")
     )
