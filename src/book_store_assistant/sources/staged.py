@@ -20,8 +20,6 @@ from book_store_assistant.sources.service import FetchCompleteCallback, FetchSta
 
 StageUpdateCallback = Callable[[str], None]
 
-MAX_CONCURRENT_REQUESTS = 3
-
 
 class ISBNFetcher(Protocol):
     source_name: str
