@@ -114,6 +114,22 @@ class BookStoreAssistantApp:
             messagebox.showerror("Error", f"El archivo no existe:\n{input_path}")
             return
 
+        upload_path, review_path, handoff_path = self._output_paths(input_path)
+        existing = [p for p in (upload_path, review_path, handoff_path) if p.exists()]
+        if existing:
+            existing_names = "\n  ".join(p.name for p in existing)
+            confirm = messagebox.askyesno(
+                "Archivos existentes",
+                (
+                    "Los siguientes archivos ya existen y serán sobrescritos:\n\n"
+                    f"  {existing_names}\n\n"
+                    "¿Desea continuar?"
+                ),
+            )
+            if not confirm:
+                self.status_var.set("Operación cancelada.")
+                return
+
         # Disable button and reset UI
         self.process_button.configure(state=tk.DISABLED)
         self.progress_var.set(0.0)
