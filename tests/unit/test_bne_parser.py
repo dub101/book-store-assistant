@@ -1,3 +1,6 @@
+import pytest
+from defusedxml.common import EntitiesForbidden
+
 from book_store_assistant.sources.bne_parser import _is_bne_catalog_note, parse_bne_sru_payload
 
 
@@ -133,3 +136,21 @@ def test_parse_bne_sru_payload_keeps_genuine_synopsis() -> None:
 
     assert record is not None
     assert record.synopsis == genuine_synopsis
+
+
+def test_parse_bne_sru_payload_rejects_entity_expansion_attack() -> None:
+    """A hostile or MITM'd BNE response cannot trigger a billion-laughs DoS."""
+    payload = """\
+<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+]>
+<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/">
+  <records><record><recordData><dc><title>&lol3;</title></dc></recordData></record></records>
+</searchRetrieveResponse>
+"""
+
+    with pytest.raises(EntitiesForbidden):
+        parse_bne_sru_payload(payload, "9780000000002")

@@ -1,5 +1,6 @@
-import xml.etree.ElementTree as ET
+from xml.etree.ElementTree import Element
 
+from defusedxml import ElementTree as ET
 from pydantic import HttpUrl, TypeAdapter
 
 from book_store_assistant.sources.language_codes import normalize_language_code
@@ -41,7 +42,7 @@ def _is_bne_catalog_note(text: str) -> bool:
     return False
 
 
-def _find_first_text(element: ET.Element, field_name: str) -> str | None:
+def _find_first_text(element: Element, field_name: str) -> str | None:
     for value in element.findall(f".//{DC_NAMESPACE}{field_name}"):
         if value.text and value.text.strip():
             return value.text.strip()
@@ -49,7 +50,7 @@ def _find_first_text(element: ET.Element, field_name: str) -> str | None:
     return None
 
 
-def _find_all_text(element: ET.Element, field_name: str) -> list[str]:
+def _find_all_text(element: Element, field_name: str) -> list[str]:
     values: list[str] = []
 
     for node in element.findall(f".//{DC_NAMESPACE}{field_name}"):

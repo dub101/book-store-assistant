@@ -11,7 +11,6 @@ from book_store_assistant.sources.national.ecuador import EcuadorISBNSource
 from book_store_assistant.sources.national.mexico import MexicoISBNSource
 from book_store_assistant.sources.national.peru import PeruISBNSource
 from book_store_assistant.sources.national.uruguay import UruguayISBNSource
-from book_store_assistant.sources.national.venezuela import VenezuelaISBNSource
 
 
 def _make_config() -> AppConfig:
@@ -194,11 +193,13 @@ def test_get_national_source_pe_returns_peru() -> None:
     assert isinstance(source, PeruISBNSource)
 
 
-def test_get_national_source_ve_returns_venezuela() -> None:
+def test_get_national_source_ve_returns_stub_to_avoid_plaintext_http() -> None:
+    """Venezuela agency endpoint is HTTP-only; we route 980 ISBNs to the stub."""
     config = _make_config()
     source = get_national_source("9789801234567", config)
 
-    assert isinstance(source, VenezuelaISBNSource)
+    assert isinstance(source, StubNationalSource)
+    assert source.country_code == "VE"
 
 
 def test_get_national_source_uy_returns_uruguay() -> None:

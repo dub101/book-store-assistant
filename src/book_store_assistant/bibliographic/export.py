@@ -6,6 +6,25 @@ from openpyxl.styles import Alignment
 from book_store_assistant.bibliographic.models import BibliographicRecord
 from book_store_assistant.resolution.results import ResolutionResult
 
+# Leading characters that Excel interprets as the start of a formula / command.
+# A cell starting with any of these is prefixed with a single apostrophe so the
+# value is rendered as a literal string instead of an executable formula. See
+# OWASP "CSV Injection" for background.
+_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize_formula(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value:
+        return value
+    if value[0] in _FORMULA_TRIGGER_CHARS:
+        return "'" + value
+    return value
+
+
+def _neutralize_row(row: list[str | None]) -> list[str | None]:
+    return [_neutralize_formula(cell) for cell in row]
+
+
 UPLOAD_HEADERS = [
     "ISBN",
     "Title",
@@ -112,7 +131,7 @@ def export_upload_records(results: list[ResolutionResult], output_path: Path) ->
             raise TypeError("Stage 1 upload export requires bibliographic records.")
         row = _upload_row(result.record)
         _validate_upload_row(row)
-        sheet.append(row)
+        sheet.append(_neutralize_row(row))
 
     _apply_sheet_basics(sheet, freeze_panes="A2")
     workbook.save(output_path)
@@ -127,7 +146,7 @@ def export_review_rows(results: list[ResolutionResult], output_path: Path) -> No
     for result in results:
         if result.record is not None:
             continue
-        sheet.append(_review_row(result))
+        sheet.append(_neutralize_row(_review_row(result)))
 
     _apply_sheet_basics(sheet, freeze_panes="A2", wrap_columns=(9, 9))
     workbook.save(output_path)

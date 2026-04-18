@@ -98,3 +98,89 @@ def test_export_review_rows_and_handoff_write_expected_outputs(tmp_path: Path) -
     assert sheet.cell(row=2, column=8).value == "0.45"
     payload = json.loads(handoff_file.read_text(encoding="utf-8").strip())
     assert payload["path_summary"]["first_material_gain_stage"] == "llm_enrichment"
+
+
+def test_export_upload_neutralizes_excel_formula_injection(tmp_path: Path) -> None:
+    output_file = tmp_path / "upload.xlsx"
+    results = [
+        ResolutionResult(
+            record=BibliographicRecord(
+                isbn="9780306406157",
+                title="=HYPERLINK(\"http://attacker.tld\",\"click\")",
+                subtitle="+cmd|' /C calc'!A0",
+                author="-2+3+cmd|' /C calc'!A0",
+                editorial="@SUM(1+9)",
+            ),
+            candidate_record=None,
+            source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
+            errors=[],
+            reason_codes=[],
+            review_details=[],
+        )
+    ]
+
+    export_upload_records(results, output_file)
+
+    workbook = openpyxl.load_workbook(output_file)
+    sheet = workbook.active
+    assert sheet.cell(row=2, column=2).value.startswith("'=HYPERLINK")
+    assert sheet.cell(row=2, column=3).value.startswith("'+cmd")
+    assert sheet.cell(row=2, column=4).value.startswith("'-2+3")
+    assert sheet.cell(row=2, column=5).value.startswith("'@SUM")
+
+
+def test_export_upload_leaves_benign_values_untouched(tmp_path: Path) -> None:
+    output_file = tmp_path / "upload.xlsx"
+    results = [
+        ResolutionResult(
+            record=BibliographicRecord(
+                isbn="9780306406157",
+                title="La sombra del viento",
+                subtitle=None,
+                author="Carlos Ruiz Zafón",
+                editorial="Planeta",
+            ),
+            candidate_record=None,
+            source_record=SourceBookRecord(source_name="google_books", isbn="9780306406157"),
+            errors=[],
+            reason_codes=[],
+            review_details=[],
+        )
+    ]
+
+    export_upload_records(results, output_file)
+
+    workbook = openpyxl.load_workbook(output_file)
+    sheet = workbook.active
+    assert sheet.cell(row=2, column=2).value == "La sombra del viento"
+    assert sheet.cell(row=2, column=4).value == "Carlos Ruiz Zafón"
+    assert sheet.cell(row=2, column=5).value == "Planeta"
+
+
+def test_export_review_neutralizes_excel_formula_injection(tmp_path: Path) -> None:
+    review_file = tmp_path / "review.xlsx"
+    result = ResolutionResult(
+        record=None,
+        candidate_record=BibliographicRecord(
+            isbn="9780306406157",
+            title="=1+1",
+            author="Test Author",
+            editorial="Test Editorial",
+        ),
+        source_record=SourceBookRecord(
+            source_name="google_books",
+            isbn="9780306406157",
+            title="=1+1",
+            author="Test Author",
+            editorial="Test Editorial",
+        ),
+        errors=[],
+        reason_codes=["VALIDATION_REJECTED"],
+        review_details=["note"],
+    )
+
+    export_review_rows([result], review_file)
+
+    workbook = openpyxl.load_workbook(review_file)
+    sheet = workbook.active
+    assert sheet.cell(row=2, column=2).value == "'=1+1"

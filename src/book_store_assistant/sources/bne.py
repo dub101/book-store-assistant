@@ -1,6 +1,6 @@
-import xml.etree.ElementTree as ET
-
 import httpx
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from book_store_assistant.config import AppConfig
 from book_store_assistant.sources.bne_parser import parse_bne_sru_payload
@@ -40,7 +40,7 @@ class BneSruSource:
 
         try:
             record = parse_bne_sru_payload(response.text, isbn)
-        except ET.ParseError:
+        except (ET.ParseError, DefusedXmlException):
             return FetchResult(
                 isbn=isbn,
                 record=None,
