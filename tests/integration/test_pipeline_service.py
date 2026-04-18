@@ -101,6 +101,36 @@ def test_process_isbn_file_runs_llm_enrichment_stage(tmp_path: Path) -> None:
     assert "9780306406157" in enrichment_calls
 
 
+def test_process_isbn_file_collapses_duplicate_isbns_in_output(tmp_path: Path) -> None:
+    input_file = tmp_path / "isbns.csv"
+    input_file.write_text(
+        "9780306406157\n9788408163435\n9780306406157\n9788408163435\n9780306406157\n",
+        encoding="utf-8",
+    )
+
+    with patch(
+        "book_store_assistant.pipeline.service.build_default_record_quality_validator",
+        return_value=AcceptingValidator(),
+    ), patch(
+        "book_store_assistant.pipeline.service.build_default_llm_enricher",
+        return_value=None,
+    ):
+        result = process_isbn_file(input_file, source=DummySource(), config=AppConfig())
+
+    assert result.input_result.duplicate_count == 3
+    assert [item.isbn for item in result.input_result.valid_inputs] == [
+        "9780306406157",
+        "9788408163435",
+    ]
+    fetch_isbns = [item.isbn for item in result.fetch_results]
+    assert fetch_isbns == ["9780306406157", "9788408163435"]
+    resolution_isbns = [
+        item.record.isbn if item.record else item.source_record.isbn
+        for item in result.resolution_results
+    ]
+    assert resolution_isbns == ["9780306406157", "9788408163435"]
+
+
 def test_process_isbn_file_skips_enrichment_when_enricher_is_none(tmp_path: Path) -> None:
     input_file = tmp_path / "isbns.csv"
     input_file.write_text("9780306406157\n", encoding="utf-8")

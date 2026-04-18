@@ -115,6 +115,8 @@ def main(
 
     typer.echo(f"Valid ISBNs: {len(result.input_result.valid_inputs)}")
     typer.echo(f"Invalid rows: {len(result.input_result.invalid_values)}")
+    if result.input_result.duplicate_count:
+        typer.echo(f"Duplicates removed: {result.input_result.duplicate_count}")
 
     if result.input_result.invalid_values:
         typer.echo("Invalid values:")

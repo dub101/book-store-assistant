@@ -21,9 +21,15 @@ def _is_blank_value(value: str) -> bool:
 
 
 def read_isbn_inputs(input_path: Path) -> InputReadResult:
-    """Read ISBN values from a CSV file and split valid rows from invalid ones."""
+    """Read ISBN values from a CSV file and split valid rows from invalid ones.
+
+    Duplicate valid ISBNs are collapsed to a single entry (first occurrence wins)
+    so downstream outputs contain at most one row per book.
+    """
     valid_inputs: list[ISBNInput] = []
     invalid_values: list[str] = []
+    seen_isbns: set[str] = set()
+    duplicate_count = 0
 
     with input_path.open(newline="", encoding="utf-8") as csv_file:
         reader = csv.reader(csv_file)
@@ -40,8 +46,16 @@ def read_isbn_inputs(input_path: Path) -> InputReadResult:
 
             normalized_isbn = normalize_isbn(raw_value)
             if is_valid_isbn(normalized_isbn):
+                if normalized_isbn in seen_isbns:
+                    duplicate_count += 1
+                    continue
+                seen_isbns.add(normalized_isbn)
                 valid_inputs.append(ISBNInput(isbn=normalized_isbn))
             else:
                 invalid_values.append(raw_value)
 
-    return InputReadResult(valid_inputs=valid_inputs, invalid_values=invalid_values)
+    return InputReadResult(
+        valid_inputs=valid_inputs,
+        invalid_values=invalid_values,
+        duplicate_count=duplicate_count,
+    )

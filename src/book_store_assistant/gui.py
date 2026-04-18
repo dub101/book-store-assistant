@@ -59,10 +59,14 @@ class BookStoreAssistantApp:
         self.upload_count_var = tk.StringVar()
         self.review_count_var = tk.StringVar()
         self.total_count_var = tk.StringVar()
+        self.duplicate_count_var = tk.StringVar()
 
         ttk.Label(self.results_frame, textvariable=self.upload_count_var).pack(anchor=tk.W)
         ttk.Label(self.results_frame, textvariable=self.review_count_var).pack(anchor=tk.W)
         ttk.Label(self.results_frame, textvariable=self.total_count_var).pack(anchor=tk.W)
+        self.duplicate_count_label = ttk.Label(
+            self.results_frame, textvariable=self.duplicate_count_var
+        )
 
         # Set a reasonable minimum window size
         self.root.update_idletasks()
@@ -141,6 +145,7 @@ class BookStoreAssistantApp:
             upload_count = sum(1 for r in result.resolution_results if r.record is not None)
             review_count = sum(1 for r in result.resolution_results if r.record is None)
             total = len(result.resolution_results)
+            duplicate_count = result.input_result.duplicate_count
 
             # Schedule completion UI update on main thread
             self.root.after(
@@ -149,6 +154,7 @@ class BookStoreAssistantApp:
                 upload_count,
                 review_count,
                 total,
+                duplicate_count,
                 upload_path,
                 review_path,
                 handoff_path,
@@ -190,6 +196,7 @@ class BookStoreAssistantApp:
         upload_count: int,
         review_count: int,
         total: int,
+        duplicate_count: int,
         upload_path: Path,
         review_path: Path,
         handoff_path: Path,
@@ -202,14 +209,23 @@ class BookStoreAssistantApp:
         self.upload_count_var.set(f"Listos para subir: {upload_count}")
         self.review_count_var.set(f"Para revisar: {review_count}")
         self.total_count_var.set(f"Total procesados: {total}")
+        if duplicate_count > 0:
+            self.duplicate_count_var.set(f"Duplicados eliminados: {duplicate_count}")
+            self.duplicate_count_label.pack(anchor=tk.W)
+        else:
+            self.duplicate_count_label.pack_forget()
         self.results_frame.pack(fill=tk.X, pady=(8, 0))
 
+        duplicate_line = (
+            f"  Duplicados eliminados: {duplicate_count}\n" if duplicate_count > 0 else ""
+        )
         messagebox.showinfo(
             "Proceso completado",
             (
                 f"Se procesaron {total} ISBN(s).\n\n"
                 f"  Listos para subir: {upload_count}\n"
-                f"  Para revisar: {review_count}\n\n"
+                f"  Para revisar: {review_count}\n"
+                f"{duplicate_line}\n"
                 f"Archivos guardados en:\n"
                 f"  {upload_path.name}\n"
                 f"  {review_path.name}\n"
