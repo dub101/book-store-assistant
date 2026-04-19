@@ -212,7 +212,6 @@ def _build_enriched_record(
         cover_url = None
 
     language = existing.language if existing else None
-    language = existing.language if existing else None
     categories = existing.categories if existing else []
 
     return SourceBookRecord(
