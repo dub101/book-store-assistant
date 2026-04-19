@@ -13,6 +13,10 @@ SCALAR_FIELDS = [
     "subject_code",
     "language",
 ]
+# Fields that flow through _merge_scalar_field on every record-pair merge.
+# Order matches SourceBookRecord constructor for readability; not behaviorally
+# significant since each field is merged independently.
+_MERGEABLE_SCALAR_FIELDS = (*SCALAR_FIELDS, "cover_url", "source_url")
 FieldValue = TypeVar("FieldValue")
 
 
@@ -141,96 +145,18 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         source_name = _merge_source_names(merged.source_name, record.source_name)
         raw_source_payload = merged.raw_source_payload or record.raw_source_payload
         categories = _merge_string_lists(merged.categories, record.categories)
-        title = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "title",
-        )
-        subtitle = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "subtitle",
-        )
-        author = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "author",
-        )
-        editorial = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "editorial",
-        )
-        synopsis = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "synopsis",
-        )
-        subject = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "subject",
-        )
-        subject_code = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "subject_code",
-        )
-        language = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "language",
-        )
-        cover_url = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "cover_url",
-        )
-        source_url = _merge_scalar_field(
-            merged,
-            record,
-            field_sources,
-            field_confidence,
-            record_field_sources,
-            record_field_confidence,
-            "source_url",
-        )
+        merged_values = {
+            field_name: _merge_scalar_field(
+                merged,
+                record,
+                field_sources,
+                field_confidence,
+                record_field_sources,
+                record_field_confidence,
+                field_name,
+            )
+            for field_name in _MERGEABLE_SCALAR_FIELDS
+        }
 
         if categories:
             merged_category_source = field_sources.get("categories")
@@ -260,20 +186,11 @@ def merge_source_records(records: list[SourceBookRecord]) -> SourceBookRecord:
         merged = SourceBookRecord(
             source_name=source_name,
             isbn=merged.isbn,
-            source_url=source_url,
             raw_source_payload=raw_source_payload,
-            title=title,
-            subtitle=subtitle,
-            author=author,
-            editorial=editorial,
-            synopsis=synopsis,
-            subject=subject,
-            subject_code=subject_code,
             categories=categories,
-            cover_url=cover_url,
-            language=language,
             field_sources=field_sources,
             field_confidence=field_confidence,
+            **merged_values,
         )
 
     return merged
