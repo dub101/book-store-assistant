@@ -5,10 +5,6 @@
 # openai_api_key = "sk-..."
 # isbndb_api_key = "..."
 
-# --- I/O paths ---
-input_dir = "data/input"
-output_dir = "data/output"
-
 # --- Source cascade toggles ---
 isbndb_lookup_enabled = true
 national_agency_routing_enabled = true

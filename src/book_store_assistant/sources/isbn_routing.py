@@ -34,7 +34,7 @@ def get_national_source(isbn: str, config: AppConfig):
     if country is None:
         return None
     if country == "ES":
-        return BneSruSource(config)
+        return BneSruSource(config) if config.bne_lookup_enabled else None
     source_cls = _NATIONAL_SOURCES.get(country)
     if source_cls is not None:
         return source_cls(config)

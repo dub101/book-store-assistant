@@ -12,8 +12,6 @@ def test_app_config_reads_non_secret_settings_from_config_file(
     config_file.write_text(
         "\n".join(
             [
-                'input_dir = "custom/input"',
-                'output_dir = "custom/output"',
                 "bne_lookup_enabled = false",
                 'bne_sru_base_url = "https://catalogo.bne.test/view/sru/34BNE_INST"',
                 "request_timeout_seconds = 6.0",
@@ -30,8 +28,6 @@ def test_app_config_reads_non_secret_settings_from_config_file(
 
     config = AppConfig()
 
-    assert config.input_dir == Path("custom/input")
-    assert config.output_dir == Path("custom/output")
     assert config.bne_lookup_enabled is False
     assert config.bne_sru_base_url == "https://catalogo.bne.test/view/sru/34BNE_INST"
     assert config.request_timeout_seconds == 6.0
@@ -41,13 +37,11 @@ def test_app_config_reads_non_secret_settings_from_config_file(
     assert config.llm_enrichment_timeout_seconds == 30.0
 
 
-def test_app_config_uses_project_data_directories(monkeypatch) -> None:
+def test_app_config_uses_default_values(monkeypatch) -> None:
     monkeypatch.delenv("BSA_CONFIG_FILE", raising=False)
     config_module._load_config_file.cache_clear()
     config = AppConfig()
 
-    assert config.input_dir == Path("data/input")
-    assert config.output_dir == Path("data/output")
     assert config.google_books_api_base_url == "https://www.googleapis.com/books/v1/volumes"
     assert config.google_books_max_retries == 2
     assert config.google_books_backoff_seconds == 1.0

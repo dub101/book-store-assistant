@@ -151,6 +151,13 @@ def test_get_national_source_es_returns_bne() -> None:
     assert isinstance(source, BneSruSource)
 
 
+def test_get_national_source_es_returns_none_when_bne_lookup_disabled() -> None:
+    config = AppConfig(source_request_pause_seconds=0.0, bne_lookup_enabled=False)
+    source = get_national_source("9788408273691", config)
+
+    assert source is None
+
+
 def test_get_national_source_co_returns_colombia() -> None:
     config = _make_config()
     source = get_national_source("9789581234567", config)

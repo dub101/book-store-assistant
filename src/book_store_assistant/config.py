@@ -112,12 +112,6 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 class AppConfig(BaseModel):
-    input_dir: Path = Field(
-        default_factory=lambda: Path(_configured_str("input_dir", "data/input"))
-    )
-    output_dir: Path = Field(
-        default_factory=lambda: Path(_configured_str("output_dir", "data/output"))
-    )
     source_request_pause_seconds: float = Field(
         default_factory=lambda: _env_float("BSA_SOURCE_REQUEST_PAUSE_SECONDS", 0.5)
     )
