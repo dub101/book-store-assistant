@@ -94,7 +94,7 @@ _EMPTY_HTML = """
 """
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _SAMPLE_HTML
@@ -116,7 +116,7 @@ def test_colombia_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_parses_sello_as_editorial(mock_get: Mock) -> None:
     """The Colombia source falls back to Sello when Editorial is absent."""
     mock_response = Mock()
@@ -133,7 +133,7 @@ def test_colombia_parses_sello_as_editorial(mock_get: Mock) -> None:
     assert result.record.editorial == "Random House"
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_no_match_returns_no_record(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _EMPTY_HTML
@@ -148,7 +148,7 @@ def test_colombia_no_match_returns_no_record(mock_get: Mock) -> None:
     assert result.raw_payload == _EMPTY_HTML
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_404_returns_error(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET", "https://isbn.camlibro.com.co/catalogo.php?mode=detalle&isbn=9789581234567"
@@ -166,7 +166,7 @@ def test_colombia_404_returns_error(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -178,7 +178,7 @@ def test_colombia_network_error_returns_graceful_failure(mock_get: Mock) -> None
     assert "COLOMBIA_ISBN_REQUEST_ERROR" in result.issue_codes
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_timeout_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ReadTimeout("read timeout")
 
@@ -202,7 +202,7 @@ def test_colombia_uses_default_config_when_none() -> None:
     assert isinstance(source.config, AppConfig)
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_raw_payload_stored_in_result(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _SAMPLE_HTML
@@ -215,7 +215,7 @@ def test_colombia_raw_payload_stored_in_result(mock_get: Mock) -> None:
     assert result.raw_payload == _SAMPLE_HTML
 
 
-@patch("book_store_assistant.sources.national.colombia.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_colombia_raw_payload_stored_in_record(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _SAMPLE_HTML
@@ -263,7 +263,7 @@ _MEXICO_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.mexico.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_mexico_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _MEXICO_HTML
@@ -283,7 +283,7 @@ def test_mexico_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.mexico.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_mexico_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET",
@@ -302,7 +302,7 @@ def test_mexico_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.mexico.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_mexico_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -322,7 +322,7 @@ _ARGENTINA_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.argentina.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_argentina_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _ARGENTINA_HTML
@@ -342,7 +342,7 @@ def test_argentina_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.argentina.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_argentina_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET", "https://www.isbn.org.ar/web/buscar-detalle.php?isbn=9789500000000"
@@ -360,7 +360,7 @@ def test_argentina_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.argentina.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_argentina_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -380,7 +380,7 @@ _CHILE_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.chile.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_chile_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _CHILE_HTML
@@ -400,7 +400,7 @@ def test_chile_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.chile.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_chile_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET",
@@ -419,7 +419,7 @@ def test_chile_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.chile.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_chile_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -439,7 +439,7 @@ _PERU_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.peru.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_peru_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _PERU_HTML
@@ -459,7 +459,7 @@ def test_peru_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.peru.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_peru_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET",
@@ -478,7 +478,7 @@ def test_peru_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.peru.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_peru_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -498,7 +498,7 @@ _ECUADOR_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.ecuador.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_ecuador_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _ECUADOR_HTML
@@ -518,7 +518,7 @@ def test_ecuador_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.ecuador.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_ecuador_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET",
@@ -537,7 +537,7 @@ def test_ecuador_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.ecuador.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_ecuador_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 
@@ -557,7 +557,7 @@ _URUGUAY_HTML = _html_page(
 )
 
 
-@patch("book_store_assistant.sources.national.uruguay.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_uruguay_parses_html_fields(mock_get: Mock) -> None:
     mock_response = Mock()
     mock_response.text = _URUGUAY_HTML
@@ -577,7 +577,7 @@ def test_uruguay_parses_html_fields(mock_get: Mock) -> None:
     assert result.issue_codes == []
 
 
-@patch("book_store_assistant.sources.national.uruguay.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_uruguay_404_returns_no_record(mock_get: Mock) -> None:
     request = httpx.Request(
         "GET",
@@ -596,7 +596,7 @@ def test_uruguay_404_returns_no_record(mock_get: Mock) -> None:
     assert len(result.errors) > 0
 
 
-@patch("book_store_assistant.sources.national.uruguay.httpx.get")
+@patch("book_store_assistant.sources.national.cerlalc.httpx.get")
 def test_uruguay_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     mock_get.side_effect = httpx.ConnectError("connection refused")
 

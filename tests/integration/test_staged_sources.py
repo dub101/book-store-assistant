@@ -40,7 +40,7 @@ def _make_national_source_mock(isbn: str, title: str | None = None):
 
 
 def test_fetch_with_stages_queries_sources_for_incomplete_bibliographic_records() -> None:
-    config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10)
+    config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10, isbndb_lookup_enabled=False)
 
     national_source = _make_national_source_mock("9780306406157", title="National Title")
 
@@ -95,6 +95,7 @@ def test_fetch_with_stages_skips_national_routing_when_disabled() -> None:
         source_request_pause_seconds=0.0,
         open_library_batch_size=10,
         national_agency_routing_enabled=False,
+        isbndb_lookup_enabled=False,
     )
 
     with (
@@ -140,7 +141,7 @@ def test_fetch_with_stages_skips_national_routing_when_disabled() -> None:
 
 
 def test_fetch_with_stages_skips_google_once_bibliographic_fields_are_complete() -> None:
-    config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10)
+    config = AppConfig(source_request_pause_seconds=0.0, open_library_batch_size=10, isbndb_lookup_enabled=False)
 
     national_source = _make_national_source_mock("9780306406157", title="Complete Title")
     national_source.fetch.return_value = FetchResult(
@@ -622,6 +623,7 @@ class TestFetchWithStagesCallbacks:
             source_request_pause_seconds=0.0,
             open_library_batch_size=10,
             national_agency_routing_enabled=True,
+            isbndb_lookup_enabled=False,
         )
         stage_updates: list[str] = []
         on_stage_update = MagicMock(side_effect=lambda msg: stage_updates.append(msg))
@@ -682,6 +684,7 @@ class TestFetchWithStagesMultipleISBNs:
             source_request_pause_seconds=0.0,
             open_library_batch_size=10,
             national_agency_routing_enabled=False,
+            isbndb_lookup_enabled=False,
         )
 
         isbn_complete = "9780306406157"
