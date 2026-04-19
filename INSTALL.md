@@ -95,9 +95,9 @@ overwritten, so the key file ships fresh each update.
 - The exe is unsigned. SmartScreen trips once per machine. A code-
   signing cert (~$100/yr) removes the warning; not worth it for one
   machine.
-- Venezuela ISBN agency (prefix 980) is intentionally unrouted — the
-  upstream endpoint offers no HTTPS, so those ISBNs fall through to
-  the no-match path instead of being fetched in cleartext.
+- Venezuela ISBN agency (prefix 980) is unsupported — the upstream
+  endpoint offers no HTTPS, so 980-prefixed ISBNs fall through to the
+  no-match path instead of being fetched in cleartext.
 
 ## Rollback
 

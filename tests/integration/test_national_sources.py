@@ -13,7 +13,6 @@ from book_store_assistant.sources.national.ecuador import EcuadorISBNSource
 from book_store_assistant.sources.national.mexico import MexicoISBNSource
 from book_store_assistant.sources.national.peru import PeruISBNSource
 from book_store_assistant.sources.national.uruguay import UruguayISBNSource
-from book_store_assistant.sources.national.venezuela import VenezuelaISBNSource
 
 
 def _make_config(**overrides) -> AppConfig:
@@ -489,65 +488,6 @@ def test_peru_network_error_returns_graceful_failure(mock_get: Mock) -> None:
     assert result.record is None
     assert len(result.errors) > 0
     assert "PERU_ISBN_REQUEST_ERROR" in result.issue_codes
-
-
-# ---- VenezuelaISBNSource tests ----
-
-
-_VENEZUELA_HTML = _html_page(
-    "Dona Barbara", "Romulo Gallegos", "Monte Avila Editores"
-)
-
-
-@patch("book_store_assistant.sources.national.venezuela.httpx.get")
-def test_venezuela_parses_html_fields(mock_get: Mock) -> None:
-    mock_response = Mock()
-    mock_response.text = _VENEZUELA_HTML
-    mock_response.raise_for_status.return_value = None
-    mock_get.return_value = mock_response
-
-    source = VenezuelaISBNSource(_make_config())
-    result = source.fetch("9789800000000")
-
-    assert result.record is not None
-    assert result.record.title == "Dona Barbara"
-    assert result.record.author == "Romulo Gallegos"
-    assert result.record.editorial == "Monte Avila Editores"
-    assert result.record.isbn == "9789800000000"
-    assert result.record.source_name == "venezuela_isbn"
-    assert result.errors == []
-    assert result.issue_codes == []
-
-
-@patch("book_store_assistant.sources.national.venezuela.httpx.get")
-def test_venezuela_404_returns_no_record(mock_get: Mock) -> None:
-    request = httpx.Request(
-        "GET",
-        "http://isbn.cenal.gob.ve/catalogo.php?mode=detalle&isbn=9789800000000",
-    )
-    response = httpx.Response(404, request=request, text="Not Found")
-    mock_get.side_effect = httpx.HTTPStatusError(
-        "not found", request=request, response=response
-    )
-
-    source = VenezuelaISBNSource(_make_config())
-    result = source.fetch("9789800000000")
-
-    assert result.record is None
-    assert "VENEZUELA_ISBN_HTTP_404" in result.issue_codes
-    assert len(result.errors) > 0
-
-
-@patch("book_store_assistant.sources.national.venezuela.httpx.get")
-def test_venezuela_network_error_returns_graceful_failure(mock_get: Mock) -> None:
-    mock_get.side_effect = httpx.ConnectError("connection refused")
-
-    source = VenezuelaISBNSource(_make_config())
-    result = source.fetch("9789800000000")
-
-    assert result.record is None
-    assert len(result.errors) > 0
-    assert "VENEZUELA_ISBN_REQUEST_ERROR" in result.issue_codes
 
 
 # ---- EcuadorISBNSource tests ----

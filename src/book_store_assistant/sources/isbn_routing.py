@@ -11,11 +11,6 @@ from book_store_assistant.sources.national.mexico import MexicoISBNSource
 from book_store_assistant.sources.national.peru import PeruISBNSource
 from book_store_assistant.sources.national.uruguay import UruguayISBNSource
 
-# Note: VenezuelaISBNSource is intentionally NOT registered. Its upstream
-# endpoint (isbn.cenal.gob.ve) does not offer HTTPS, and the returned HTML
-# flows directly into the upload workbook — a MITM attacker on the path could
-# silently alter book metadata. Venezuela ISBNs (prefix 980) fall through to
-# StubNationalSource instead.
 _NATIONAL_SOURCES: dict[str, type] = {
     "CO": ColombiaISBNSource,
     "MX": MexicoISBNSource,
@@ -27,8 +22,10 @@ _NATIONAL_SOURCES: dict[str, type] = {
     "BR": BrazilISBNSource,
 }
 
-# Countries with known ISBN agencies but no accessible public endpoint yet.
-_STUB_COUNTRIES = {"BO", "GT", "CR", "PA"}
+# Countries with known ISBN agencies but no usable public endpoint.
+# VE (Venezuela) is here because its agency at isbn.cenal.gob.ve only
+# serves over plaintext HTTP; do not add a source for it without HTTPS.
+_STUB_COUNTRIES = {"BO", "GT", "CR", "PA", "VE"}
 
 
 def get_national_source(isbn: str, config: AppConfig):

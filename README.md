@@ -44,7 +44,6 @@ The ISBN registration group (digits after the 978/979 prefix) maps to national a
 | 956 | Chile | Stub |
 | 85, 65 | Brazil | Stub |
 | 612, 9972 | Peru | Stub |
-| 980 | Venezuela | Stub |
 | 9974 | Uruguay | Stub |
 | 9978 | Ecuador | Stub |
 
